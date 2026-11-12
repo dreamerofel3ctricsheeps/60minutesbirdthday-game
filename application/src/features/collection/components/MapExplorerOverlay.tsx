@@ -116,7 +116,7 @@ export const MapExplorerOverlay: React.FC<MapExplorerOverlayProps> = ({
       {nearbyItemPrompt && (
         <div className="self-center bg-slate-900/90 border border-sky-500/80 rounded-xl px-5 py-2.5 backdrop-blur-md shadow-2xl flex items-center gap-2 text-sky-300 text-xs font-bold animate-pulse">
           <Sparkles className="w-4 h-4 text-sky-400" />
-          <span>Presiona [ESPACIO] para interactuar con {nearbyItemPrompt}</span>
+          <span>{nearbyItemPrompt}</span>
         </div>
       )}
 

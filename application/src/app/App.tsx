@@ -38,7 +38,7 @@ export const App: React.FC = () => {
             }}
             onNearbyPrompt={setNearbyPrompt}
           />
-          <CollectionOverlay />
+          <CollectionOverlay nearbyPrompt={nearbyPrompt} />
         </div>
       )}
 

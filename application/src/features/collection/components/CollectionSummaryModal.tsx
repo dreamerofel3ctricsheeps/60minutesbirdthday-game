@@ -1,14 +1,23 @@
 import React from 'react';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { useGameStore } from '@/stores/game.store';
+import { useRunStore } from '@/stores/run.store';
 import { ITEMS_DATA } from '@/data/items/items.data';
-import { ShieldCheck, ArrowRight, PackageX } from 'lucide-react';
+import { CHARACTERS_DATA } from '@/data/characters/characters.data';
+import { MAX_COLLECTED_ROOMIES } from '@/game/core/balance';
+import { ShieldCheck, ArrowRight, PackageX, Users } from 'lucide-react';
 
 export const CollectionSummaryModal: React.FC = () => {
   const depositedItemIds = useInventoryStore((s) => s.depositedItemIds);
+  const collectedRoomieIds = useInventoryStore((s) => s.collectedRoomieIds);
+  const selectedCharacterId = useGameStore((s) => s.selectedCharacterId);
   const setPhase = useGameStore((s) => s.setPhase);
+  const applyCollectionParty = useRunStore((s) => s.applyCollectionParty);
 
   const handleStartManagement = () => {
+    // Fase 2: en gestión solo quedan disponibles el protagonista y los
+    // roomies que sí fueron recolectados en los 60 segundos.
+    applyCollectionParty(selectedCharacterId, collectedRoomieIds);
     setPhase('MANAGEMENT');
   };
 
@@ -56,6 +65,33 @@ export const CollectionSummaryModal: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Roomies recolectados (Fase 2) */}
+        <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Users className="w-4 h-4 text-purple-300" />
+            <span className="text-sm font-semibold text-slate-200">
+              Roomies recolectados: {collectedRoomieIds.length}/{MAX_COLLECTED_ROOMIES}
+            </span>
+          </div>
+          {collectedRoomieIds.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              No cargaste a ningún roomie a la zona segura. Jugarás la gestión solo con{' '}
+              {CHARACTERS_DATA[selectedCharacterId]?.name ?? 'tu protagonista'}.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {collectedRoomieIds.map((id) => (
+                <span
+                  key={id}
+                  className="text-xs font-semibold text-purple-200 bg-purple-950/60 border border-purple-700/60 px-2.5 py-1 rounded-full"
+                >
+                  {CHARACTERS_DATA[id]?.name ?? id} · {CHARACTERS_DATA[id]?.role ?? ''}
+                </span>
+              ))}
             </div>
           )}
         </div>
