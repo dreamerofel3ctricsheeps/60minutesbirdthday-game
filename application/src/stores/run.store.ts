@@ -3,6 +3,8 @@ import { GameRun, GameResources, GameMeters, CharacterRunState } from '@/types/g
 import { CHARACTERS_DATA } from '@/data/characters/characters.data';
 import { CARRY_CAPACITY, MANAGEMENT_START_HOUR, INITIAL_DESPERTAR } from '@/game/core/balance';
 import { tickHour, assignTask, HourTickResult } from '@/game/systems/managementSystem';
+import { MinigameOutcome } from '@/game/systems/minigames';
+import { resolveHour, HourResolutionResult } from '@/game/systems/hourResolution';
 
 interface RunState {
   currentRun: GameRun | null;
@@ -11,6 +13,8 @@ interface RunState {
   advanceHour: () => HourTickResult | null;
   /** Fase 3: asigna una tarea de gestión a un roomie libre. Devuelve si se pudo. */
   assignManagementTask: (characterId: string, taskId: string) => boolean;
+  /** Fase 4: resuelve la hora completa (tick + minijuego + villanos). Devuelve el resultado o null si no hay run. */
+  applyHourResolution: (outcome: MinigameOutcome) => HourResolutionResult | null;
   modifyResource: (resource: keyof GameResources, delta: number) => void;
   modifyMeter: (meter: keyof GameMeters, delta: number) => void;
   setCharacterAvailability: (characterId: string, available: boolean, busyUntil?: number) => void;
@@ -66,6 +70,7 @@ export const useRunStore = create<RunState>((set, get) => ({
       characters,
       activeChains: [],
       completedEvents: [],
+      villains: { joseZone: 0, gatoZone: 0 },
     };
 
     set({ currentRun: newRun });
@@ -88,6 +93,15 @@ export const useRunStore = create<RunState>((set, get) => ({
     if (!next) return false;
     set({ currentRun: next });
     return true;
+  },
+
+  applyHourResolution: (outcome) => {
+    const { currentRun } = get();
+    if (!currentRun) return null;
+
+    const result = resolveHour(currentRun, outcome);
+    set({ currentRun: result.run });
+    return result;
   },
 
   modifyResource: (resource, delta) => {

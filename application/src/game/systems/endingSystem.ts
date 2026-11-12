@@ -15,6 +15,12 @@ import {
  */
 export class EndingSystem {
   static evaluateEnding(run: GameRun): EndingDefinition | null {
+    // Fase 4: si Jose ganó su showdown y entró, el final es el rival,
+    // antes que cualquier otro chequeo (incluso Despertar/Moral).
+    if (run.rivalBreach) {
+      return ENDINGS_DATA.RIVAL_PARTY_DEFEAT;
+    }
+
     if (run.meters.despertar >= 100) {
       return ENDINGS_DATA.WAKE_DEFEAT;
     }

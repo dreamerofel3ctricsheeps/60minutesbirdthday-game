@@ -35,6 +35,22 @@ export interface CollectionRunState {
   maxCarryingSlots: number;
 }
 
+// ---------------------------------------------------------------------------
+// Fase 4: villanos rivales (Jose y su gato calicó)
+// ---------------------------------------------------------------------------
+
+/** Villano rival que quiere despertar a Ximena para llevarla a su fiesta. */
+export type VillainId = 'jose' | 'gato';
+
+/**
+ * Posición de cada villano en el sistema de zonas de villainSystem:
+ * índices sobre VILLAIN_ZONES (0 = exterior … 4 = cuarto de Ximena).
+ */
+export interface VillainRunState {
+  joseZone: number;
+  gatoZone: number;
+}
+
 export interface GameRun {
   id: string;
   seed: number;
@@ -42,6 +58,10 @@ export interface GameRun {
   day: number;
   /** Fase 3: reloj de la gestión, de 7 a 24 (24 = 00:00, empieza el cumple). */
   hour: number;
+  /** Fase 4 (OPCIONAL a propósito): zonas de los villanos. Los runs viejos/tests sin este campo se leen con INITIAL_VILLAINS. */
+  villains?: VillainRunState;
+  /** Fase 4 (OPCIONAL): true si Jose ganó su showdown y entró a despertar a Ximena (final rival). */
+  rivalBreach?: boolean;
   collection: CollectionRunState;
   resources: GameResources;
   meters: GameMeters;

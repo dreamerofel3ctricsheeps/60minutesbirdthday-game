@@ -2,6 +2,14 @@ import { EndingDefinition } from '@/types/game.types';
 
 export const ENDINGS_DATA: Record<string, EndingDefinition> = {
   // Derrotas
+  RIVAL_PARTY_DEFEAT: {
+    id: 'RIVAL_PARTY_DEFEAT',
+    title: 'El Cumpleaños Rival',
+    description:
+      'Jose entró al cuarto, despertó a Ximena con una sonrisa de villano triunfal y se la llevó a SU fiesta sorpresa, con el gato de cómplice abriendo camino. La sorpresa de los roomies quedó en sala de espera: el cumpleaños fue increíble… pero fue el de Jose.',
+    priority: 110,
+    isVictory: false,
+  },
   WAKE_DEFEAT: {
     id: 'WAKE_DEFEAT',
     title: '¡Se despertó!',

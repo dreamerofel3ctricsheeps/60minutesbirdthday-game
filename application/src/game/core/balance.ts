@@ -68,6 +68,33 @@ export const QTE_STEALTH_MS_PER_POINT = 70;
 export const QTE_NO_INTERCEPTOR_MS_PER_KEY = 800;
 export const QTE_NO_INTERCEPTOR_EXTRA_KEYS = 1;
 
+// ---------------------------------------------------------------------------
+// Fase 4: villanos (Jose y su gato calicó) y minijuego por hora
+// Los villanos avanzan por zonas hacia el cuarto de Ximena para despertarla
+// y llevarla a SU fiesta rival. El vigía puede retrasar a uno por hora.
+// ---------------------------------------------------------------------------
+
+/** Hora en que el GATO hace su primera aparición (entra en zona exterior). */
+export const VILLAIN_CAT_INTRO_HOUR = 13;
+
+/** Hora en que JOSE hace su primera aparición (entra en zona exterior). */
+export const VILLAIN_JOSE_INTRO_HOUR = 15;
+
+/** Despertar que suma cada avance del gato. */
+export const CAT_ADVANCE_DESPERTAR = 4;
+
+/** Despertar que suma cada avance de Jose. */
+export const JOSE_ADVANCE_DESPERTAR = 6;
+
+/** Despertar que suma el gato si PIERDE su showdown y entra al cuarto. */
+export const CAT_BREACH_DESPERTAR = 25;
+
+/** Largo de la secuencia de "Ritmo de globos" (Simon en la sala). */
+export const BALLOON_SEQUENCE_LENGTH = 5;
+
+/** Buenos que hay que atrapar en "Atrapa la cena" para un resultado sólido. */
+export const CATCH_GOOD_TARGET = 8;
+
 // --- Minijuego TIMING "Sin hacer ruido" ---
 /** Intentos del minijuego de timing. */
 export const TIMING_ATTEMPTS = 3;
