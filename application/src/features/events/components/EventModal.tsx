@@ -35,7 +35,7 @@ export const EventModal: React.FC<EventModalProps> = ({ event, onResolved }) => 
       if (checkResult.outcome === 'FAILURE') {
         // Failed check: penalty
         EventSystem.applyConsequences([
-          { type: 'MODIFY_METER', meter: 'suspicion', value: 15 },
+          { type: 'MODIFY_METER', meter: 'despertar', value: 15 },
           { type: 'MODIFY_METER', meter: 'morale', value: -10 },
         ]);
         setResolutionText(

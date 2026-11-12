@@ -1,34 +1,32 @@
 import { GameRun, EndingDefinition } from '@/types/game.types';
 import { ENDINGS_DATA } from '@/data/endings/endings.data';
+import {
+  MANAGEMENT_END_HOUR,
+  VICTORY_PREPARATION_THRESHOLD,
+} from '@/game/core/balance';
 
+/**
+ * Evaluación de finales de la gestión por horas (Fase 3).
+ * Solo final estándar en esta fase (sin cadenas atípicas):
+ * 1. Despertar = 100 en cualquier momento → se despertó (derrota).
+ * 2. Moral = 0 → el grupo abandona (derrota).
+ * 3. Al llegar a las 24:00 → victoria si Preparación >= umbral;
+ *    si no, la fiesta floja (final parcial / derrota suave).
+ */
 export class EndingSystem {
   static evaluateEnding(run: GameRun): EndingDefinition | null {
-    // 1. Prioridad: Derrotas absolutas por medidores
-    if (run.meters.suspicion >= 100) {
-      return ENDINGS_DATA.SUSPICION_DEFEAT;
+    if (run.meters.despertar >= 100) {
+      return ENDINGS_DATA.WAKE_DEFEAT;
     }
 
     if (run.meters.morale <= 0) {
       return ENDINGS_DATA.MORALE_DEFEAT;
     }
 
-    if (run.meters.noise >= 100) {
-      return ENDINGS_DATA.POLICE_RAID;
-    }
-
-    if (run.resources.food <= 0 && run.resources.water <= 0) {
-      return ENDINGS_DATA.STARVATION_DEFEAT;
-    }
-
-    // 2. Cadenas especiales (WASP-103b)
-    const spaceChain = run.activeChains.find((c) => c.id === 'chain_space');
-    if (spaceChain && spaceChain.status === 'COMPLETED') {
-      return ENDINGS_DATA.SPACE_VICTORY;
-    }
-
-    // 3. Si sobrevivieron hasta el día final (Día 5 o 7 de fiesta)
-    if (run.day >= 5) {
-      return ENDINGS_DATA.STANDARD_VICTORY;
+    if (run.hour >= MANAGEMENT_END_HOUR) {
+      return run.meters.preparacion >= VICTORY_PREPARATION_THRESHOLD
+        ? ENDINGS_DATA.STANDARD_VICTORY
+        : ENDINGS_DATA.WEAK_PARTY_ENDING;
     }
 
     return null;

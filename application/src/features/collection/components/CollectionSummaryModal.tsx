@@ -100,7 +100,7 @@ export const CollectionSummaryModal: React.FC = () => {
           onClick={handleStartManagement}
           className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-950/50"
         >
-          <span>Iniciar Fase de Gestión (Día 1)</span>
+          <span>Iniciar Fase de Gestión (7:00 AM)</span>
           <ArrowRight className="w-5 h-5" />
         </button>
       </div>

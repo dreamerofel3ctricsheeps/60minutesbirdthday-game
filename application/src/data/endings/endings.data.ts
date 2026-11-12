@@ -2,6 +2,22 @@ import { EndingDefinition } from '@/types/game.types';
 
 export const ENDINGS_DATA: Record<string, EndingDefinition> = {
   // Derrotas
+  WAKE_DEFEAT: {
+    id: 'WAKE_DEFEAT',
+    title: '¡Se despertó!',
+    description:
+      'Un ruido de más y Ximena abrió los ojos a mitad de la tarde, con media fiesta a medio armar frente a ella. No hubo sorpresa: solo roomies congelados con un globo en la mano.',
+    priority: 100,
+    isVictory: false,
+  },
+  WEAK_PARTY_ENDING: {
+    id: 'WEAK_PARTY_ENDING',
+    title: 'La Fiesta Floja',
+    description:
+      'Llegó la medianoche y la despertaron con todo el cariño del mundo... pero la fiesta quedó a medias: faltó comida, faltó decoración y sobró silencio incómodo. Cumpleaños celebrado, sorpresa a mitad de precio.',
+    priority: 40,
+    isVictory: false,
+  },
   SUSPICION_DEFEAT: {
     id: 'SUSPICION_DEFEAT',
     title: 'La Ruina Total',
@@ -12,9 +28,9 @@ export const ENDINGS_DATA: Record<string, EndingDefinition> = {
   },
   MORALE_DEFEAT: {
     id: 'MORALE_DEFEAT',
-    title: 'El Abandono Frío',
+    title: 'El Abandono',
     description:
-      'La moral cayó por el suelo. Ximena se sintió olvidada y prefirió pasar su cumpleaños sola fuera de la ciudad.',
+      'La moral del grupo cayó a cero entre tanto sigilo y cansancio acumulado. Uno a uno, los roomies se fueron a dormir a sus cuartos y la fiesta sorpresa quedó abandonada antes de medianoche.',
     priority: 95,
     isVictory: false,
   },
@@ -39,7 +55,7 @@ export const ENDINGS_DATA: Record<string, EndingDefinition> = {
     id: 'STANDARD_VICTORY',
     title: '¡Sorpresa Inolvidable!',
     description:
-      '¡Ximena abrió la puerta y todos gritaron ¡SORPRESA! La fiesta de sus 60 cumpleaños fue todo un éxito y la alegría inundó el lugar.',
+      '00:00 en punto. La despertaron cantando, con la sala decorada, la comida lista y el regalo envuelto: Ximena pasó de un turno de guardia eterno al mejor cumpleaños de su vida, sin haber sospechado nada entre sueños.',
     priority: 50,
     isVictory: true,
   },

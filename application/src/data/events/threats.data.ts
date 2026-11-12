@@ -15,7 +15,7 @@ export const THREAT_EVENTS: Record<string, EventDefinition> = {
         description: 'Requiere chequeo de Lógica o Carisma (Itzel / Alan).',
         skillCheck: { attribute: 'charisma', difficulty: 5 },
         consequences: [
-          { type: 'MODIFY_METER', meter: 'suspicion', value: -15 },
+          { type: 'MODIFY_METER', meter: 'despertar', value: -15 },
         ],
       },
       {
@@ -23,7 +23,7 @@ export const THREAT_EVENTS: Record<string, EventDefinition> = {
         label: 'Responder con evasivas apresuradas',
         description: 'Sin chequeo, pero genera dudas inmediatas.',
         consequences: [
-          { type: 'MODIFY_METER', meter: 'suspicion', value: 15 },
+          { type: 'MODIFY_METER', meter: 'despertar', value: 15 },
           { type: 'MODIFY_METER', meter: 'morale', value: -5 },
         ],
       },
@@ -43,7 +43,7 @@ export const THREAT_EVENTS: Record<string, EventDefinition> = {
         description: 'Chequeo de Sigilo (Majo / Itzel).',
         skillCheck: { attribute: 'stealth', difficulty: 6 },
         consequences: [
-          { type: 'MODIFY_METER', meter: 'suspicion', value: 5 },
+          { type: 'MODIFY_METER', meter: 'despertar', value: 5 },
         ],
       },
       {
@@ -52,7 +52,7 @@ export const THREAT_EVENTS: Record<string, EventDefinition> = {
         description: 'Consume energía del equipo.',
         consequences: [
           { type: 'ADD_RESOURCE', resource: 'energy', value: -1 },
-          { type: 'MODIFY_METER', meter: 'suspicion', value: -10 },
+          { type: 'MODIFY_METER', meter: 'despertar', value: -10 },
         ],
       },
     ],

@@ -55,12 +55,12 @@ export const EndingScreen: React.FC = () => {
         {currentRun && (
           <div className="grid grid-cols-3 gap-3 w-full bg-slate-950/40 p-4 rounded-xl border border-slate-800">
             <div className="flex flex-col">
-              <span className="text-[11px] text-slate-500 uppercase">Día Alcanzado</span>
-              <span className="text-lg font-bold font-mono text-slate-200">{currentRun.day}</span>
+              <span className="text-[11px] text-slate-500 uppercase">Hora Alcanzada</span>
+              <span className="text-lg font-bold font-mono text-slate-200">{`${(currentRun.hour % 24).toString().padStart(2, '0')}:00`}</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-[11px] text-slate-500 uppercase">Sospecha Final</span>
-              <span className="text-lg font-bold font-mono text-amber-400">{Math.round(currentRun.meters.suspicion)}%</span>
+              <span className="text-[11px] text-slate-500 uppercase">Preparación Final</span>
+              <span className="text-lg font-bold font-mono text-amber-400">{Math.round(currentRun.meters.preparacion)}%</span>
             </div>
             <div className="flex flex-col">
               <span className="text-[11px] text-slate-500 uppercase">Moral Final</span>

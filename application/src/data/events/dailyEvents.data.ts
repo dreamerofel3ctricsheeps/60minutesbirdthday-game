@@ -44,7 +44,7 @@ export const DAILY_EVENTS: Record<string, EventDefinition> = {
         description: 'Gasta 1 de comida.',
         consequences: [
           { type: 'ADD_RESOURCE', resource: 'food', value: -1 },
-          { type: 'MODIFY_METER', meter: 'suspicion', value: -10 },
+          { type: 'MODIFY_METER', meter: 'despertar', value: -10 },
           { type: 'MODIFY_METER', meter: 'noise', value: -20 },
         ],
       },

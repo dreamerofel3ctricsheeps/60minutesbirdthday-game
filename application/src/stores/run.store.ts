@@ -1,12 +1,16 @@
 import { create } from 'zustand';
 import { GameRun, GameResources, GameMeters, CharacterRunState } from '@/types/game.types';
 import { CHARACTERS_DATA } from '@/data/characters/characters.data';
-import { CARRY_CAPACITY } from '@/game/core/balance';
+import { CARRY_CAPACITY, MANAGEMENT_START_HOUR, INITIAL_DESPERTAR } from '@/game/core/balance';
+import { tickHour, assignTask, HourTickResult } from '@/game/systems/managementSystem';
 
 interface RunState {
   currentRun: GameRun | null;
   startNewRun: (seed?: number) => void;
-  advanceDay: () => void;
+  /** Fase 3: avanza el reloj de gestión una hora. Devuelve las tareas completadas en ese tick. */
+  advanceHour: () => HourTickResult | null;
+  /** Fase 3: asigna una tarea de gestión a un roomie libre. Devuelve si se pudo. */
+  assignManagementTask: (characterId: string, taskId: string) => boolean;
   modifyResource: (resource: keyof GameResources, delta: number) => void;
   modifyMeter: (meter: keyof GameMeters, delta: number) => void;
   setCharacterAvailability: (characterId: string, available: boolean, busyUntil?: number) => void;
@@ -26,7 +30,8 @@ const INITIAL_RESOURCES: GameResources = {
 };
 
 const INITIAL_METERS: GameMeters = {
-  suspicion: 10,
+  despertar: INITIAL_DESPERTAR,
+  preparacion: 0,
   morale: 80,
   noise: 0,
 };
@@ -48,6 +53,7 @@ export const useRunStore = create<RunState>((set, get) => ({
       seed,
       phase: 'PREPARATION',
       day: 1,
+      hour: MANAGEMENT_START_HOUR,
       collection: {
         remainingTime: 60,
         collectedItems: [],
@@ -65,30 +71,23 @@ export const useRunStore = create<RunState>((set, get) => ({
     set({ currentRun: newRun });
   },
 
-  advanceDay: () => {
+  advanceHour: () => {
     const { currentRun } = get();
-    if (!currentRun) return;
+    if (!currentRun) return null;
 
-    // Decay noise and natural consumption per day
-    const nextFood = Math.max(0, currentRun.resources.food - 1);
-    const nextSuspicion = Math.min(100, currentRun.meters.suspicion + 5);
-    const nextNoise = Math.max(0, currentRun.meters.noise - 20);
+    const result = tickHour(currentRun);
+    set({ currentRun: result.run });
+    return result;
+  },
 
-    set({
-      currentRun: {
-        ...currentRun,
-        day: currentRun.day + 1,
-        resources: {
-          ...currentRun.resources,
-          food: nextFood,
-        },
-        meters: {
-          ...currentRun.meters,
-          suspicion: nextSuspicion,
-          noise: nextNoise,
-        },
-      },
-    });
+  assignManagementTask: (characterId, taskId) => {
+    const { currentRun } = get();
+    if (!currentRun) return false;
+
+    const next = assignTask(currentRun, characterId, taskId);
+    if (!next) return false;
+    set({ currentRun: next });
+    return true;
   },
 
   modifyResource: (resource, delta) => {

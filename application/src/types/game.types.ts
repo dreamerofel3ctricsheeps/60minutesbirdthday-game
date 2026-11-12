@@ -16,9 +16,16 @@ export interface GameResources {
 }
 
 export interface GameMeters {
-  suspicion: number; // 0 - 100
-  morale: number;    // 0 - 100
-  noise: number;     // 0 - 100
+  /**
+   * Fase 3: la sospecha se REDEFINE como DESPERTAR. Ximena está dormida en
+   * su cuarto durante toda la gestión; el ruido la acerca a despertarse.
+   * Si llega a 100, se despierta y la sorpresa se arruina.
+   */
+  despertar: number;    // 0 - 100
+  /** Qué tan lista está la fiesta (decoración, comida, regalo, música). */
+  preparacion: number;  // 0 - 100
+  morale: number;       // 0 - 100
+  noise: number;        // 0 - 100 (se sigue usando en la recolección)
 }
 
 export interface CollectionRunState {
@@ -33,6 +40,8 @@ export interface GameRun {
   seed: number;
   phase: GamePhase;
   day: number;
+  /** Fase 3: reloj de la gestión, de 7 a 24 (24 = 00:00, empieza el cumple). */
+  hour: number;
   collection: CollectionRunState;
   resources: GameResources;
   meters: GameMeters;
@@ -77,7 +86,12 @@ export interface TemporaryEffect {
 export interface CharacterRunState {
   characterId: string;
   available: boolean;
+  /** @deprecated El modelo por días fue reemplazado por horas (Fase 3). */
   busyUntilDay?: number;
+  /** Fase 3 (gestión por horas): tarea actual y hora en que se libera. */
+  currentTaskId?: string;
+  taskStartedHour?: number;
+  busyUntilHour?: number;
   morale: number;
   conditions: string[];
   temporaryEffects: TemporaryEffect[];
@@ -183,6 +197,62 @@ export interface ActiveChain {
   id: string;
   currentStep: number;
   status: 'LOCKED' | 'ACTIVE' | 'COMPLETED' | 'FAILED';
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3: gestión por horas, eventos con minijuegos y beats de historia
+// ---------------------------------------------------------------------------
+
+/** Zona de la escena 2D donde se ejecuta (y se ve) una tarea. */
+export type TaskZone = 'sala' | 'cocina' | 'puerta';
+
+export interface TaskDefinition {
+  id: string;
+  name: string;
+  zone: TaskZone;
+  /** Duración en horas completas (1-3). */
+  durationHours: number;
+  /**
+   * Ruido: cuánto suma a DESPERTAR cuando la tarea se COMPLETA
+   * (el golpe de ruido ocurre al terminar: martillazo final, globos, etc.).
+   * Con personaje afín el ruido baja 2 puntos (trabaja con más cuidado).
+   */
+  noise: number;
+  /** Preparación que suma al completarse (con afín: +50%, redondeado). */
+  preparationGain: number;
+  /** Delta de Moral al completarse (Descansar lo usa en positivo). */
+  moraleDelta?: number;
+  /** Delta extra de Despertar al completarse (negativo = calmar/ocultar). */
+  despertarDelta?: number;
+  attribute: AttributeType;
+  /** Personajes afines: bonus de preparación y menos ruido. */
+  affinityCharacterIds?: string[];
+  description: string;
+  icon: string;
+}
+
+export type ManagementEventKind = 'choice' | 'minigame-qte' | 'minigame-timing';
+
+export interface ManagementEventDefinition {
+  id: string;
+  title: string;
+  description: string;
+  kind: ManagementEventKind;
+  /** Solo para kind='choice'. */
+  choices?: EventChoice[];
+  /** Texto corto de qué hay que hacer en el minijuego. */
+  minigameHint?: string;
+}
+
+export interface StoryBeat {
+  id: string;
+  /** Hora a la que se dispara (al LLEGAR a esa hora). */
+  hour: number;
+  title: string;
+  /** Líneas de diálogo/narración que se muestran en orden. */
+  lines: string[];
+  /** Evento que se lanza al cerrar el beat (p. ej. el tutorial del gato). */
+  eventId?: string;
 }
 
 export interface EndingDefinition {

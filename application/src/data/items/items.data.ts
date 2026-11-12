@@ -26,7 +26,7 @@ export const ITEMS_DATA: Record<string, ItemDefinition> = {
     description: 'Permite responder mensajes de WhatsApp, coordinar invitados y desviar sospechas.',
     tags: ['electronics', 'communication'],
     effects: [
-      { type: 'MODIFY_METER', meter: 'suspicion', value: -15 },
+      { type: 'MODIFY_METER', meter: 'despertar', value: -15 },
       { type: 'ADD_RESOURCE', resource: 'energy', value: -1 },
     ],
     sprite: { sheet: 'items', frame: 1 },
@@ -59,7 +59,7 @@ export const ITEMS_DATA: Record<string, ItemDefinition> = {
     tags: ['electronics', 'noise_danger', 'neighbor'],
     effects: [
       { type: 'MODIFY_METER', meter: 'morale', value: 30 },
-      { type: 'MODIFY_METER', meter: 'suspicion', value: 20 },
+      { type: 'MODIFY_METER', meter: 'despertar', value: 20 },
       { type: 'MODIFY_METER', meter: 'noise', value: 35 },
     ],
     sprite: { sheet: 'items', frame: 3 },
@@ -120,7 +120,7 @@ export const ITEMS_DATA: Record<string, ItemDefinition> = {
     description: 'Copia olvidada de las llaves del vecino. Permite entrar con cautela sin levantar sospechas.',
     tags: ['stealth', 'key', 'neighbor'],
     effects: [
-      { type: 'MODIFY_METER', meter: 'suspicion', value: -10 },
+      { type: 'MODIFY_METER', meter: 'despertar', value: -10 },
     ],
     sprite: { sheet: 'items', frame: 7 },
     spawn: { roomIds: ['bedroom'], weight: 85 },
