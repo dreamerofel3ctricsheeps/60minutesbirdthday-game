@@ -7,11 +7,15 @@ import {
   scoreQte,
   MinigameOutcome,
 } from '@/game/systems/minigames';
+import { getDefinedSpriteBundle } from '@/data/characters/definedSprites.data';
+import { DefinedSprite2D } from '@/components/common/DefinedSprite2D';
 
 interface QteMinigameProps {
   /** Sigilo de quien intercepta; null = nadie puede interceptar (modo duro). */
   interceptorStealth: number | null;
   interceptorName?: string;
+  /** Id del interceptor: se le muestra en pose 'action' de su bundle definido. */
+  interceptorId?: string;
   /** Se llama en cada fallo: Ximena se revuelve en la escena 2D. */
   onStir?: () => void;
   onFinish: (outcome: MinigameOutcome) => void;
@@ -25,6 +29,7 @@ interface QteMinigameProps {
 export const QteMinigame: React.FC<QteMinigameProps> = ({
   interceptorStealth,
   interceptorName,
+  interceptorId,
   onStir,
   onFinish,
 }) => {
@@ -97,6 +102,15 @@ export const QteMinigame: React.FC<QteMinigameProps> = ({
 
   return (
     <div className="flex flex-col items-center gap-4">
+      {/* El interceptor, en su pose 'action' del diseño definido */}
+      {interceptorId && (
+        <DefinedSprite2D
+          anim={getDefinedSpriteBundle(interceptorId).action}
+          height={92}
+          cycleMs={380}
+          title={interceptorName}
+        />
+      )}
       <div className="text-xs text-slate-400 text-center">
         {interceptorName
           ? `${interceptorName} intercepta el disturbio. `

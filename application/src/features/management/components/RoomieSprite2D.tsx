@@ -1,47 +1,44 @@
 import React from 'react';
-import {
-  getRoomieSpriteData,
-  ROOMIE_FRAME_SIZE,
-  ROOMIE_SHEET_WIDTH,
-  ROOMIE_SHEET_HEIGHT,
-} from '@/data/characters/roomieSprites.data';
+import { getDefinedSpriteBundle } from '@/data/characters/definedSprites.data';
+import { DefinedSprite2D } from '@/components/common/DefinedSprite2D';
 
 interface RoomieSprite2DProps {
   characterId: string;
-  /** Tamaño en pantalla del frame (el frame nativo es 64x64). */
+  /** Alto en pantalla del sprite en px (el ancho sale del aspect). */
   size?: number;
   bob?: boolean;
+  /** Ocupado en una tarea: pose 'action' animada; libre: idle frontal real. */
+  busy?: boolean;
   title?: string;
 }
 
 /**
- * Roomie en la escena 2D de gestión (Fase 3): reutiliza la MISMA hoja
- * placeholder 64x64 de la recolección 3D (Fase 1), mostrando el frame
- * idle frontal (fila 0, columna 0 del grid) con background-position.
+ * Roomie en la escena 2D de gestión: sprite de DISEÑO DEFINIDO
+ * (corrección de arte). Libre → el idle frontal extraído de su draft
+ * v1.2; ocupado en una tarea → su animación 'action' ciclando, para que
+ * se le vea TRABAJANDO en la escena.
  */
 export const RoomieSprite2D: React.FC<RoomieSprite2DProps> = ({
   characterId,
   size = 72,
   bob = true,
+  busy = false,
   title,
 }) => {
-  const data = getRoomieSpriteData(characterId);
-  const scale = size / ROOMIE_FRAME_SIZE;
+  const bundle = getDefinedSpriteBundle(characterId);
+
+  if (busy) {
+    return (
+      <DefinedSprite2D anim={bundle.action} height={size} cycleMs={450} title={title} />
+    );
+  }
 
   return (
-    <div
-      title={title}
+    <DefinedSprite2D
+      anim={bundle.idle_front}
+      height={size}
       className={bob ? 'sprite-bob' : undefined}
-      style={{
-        width: size,
-        height: size,
-        backgroundImage: `url(${data.sheet})`,
-        backgroundSize: `${ROOMIE_SHEET_WIDTH * scale}px ${ROOMIE_SHEET_HEIGHT * scale}px`,
-        // Frame idle frontal: x=0, y=0 del grid.
-        backgroundPosition: '0px 0px',
-        backgroundRepeat: 'no-repeat',
-        imageRendering: 'pixelated',
-      }}
+      title={title}
     />
   );
 };

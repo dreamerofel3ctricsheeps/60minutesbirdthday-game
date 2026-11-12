@@ -1,58 +1,96 @@
 import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Direction, MovementState } from '@/types/sprite.types';
+import { DefinedAnimationKey, Direction, MovementState } from '@/types/sprite.types';
 import {
-  getRoomieSpriteData,
-  resolveRoomieAnimation,
-} from '@/data/characters/roomieSprites.data';
+  getDefinedSpriteBundle,
+  resolveDefinedAnimation,
+} from '@/data/characters/definedSprites.data';
 
 interface CharacterSpriteProps {
-  /** Roomie jugable a renderizar (placeholders genéricos 64x64, Fase 1). */
+  /** Roomie a renderizar con su bundle de sprites de DISEÑO DEFINIDO. */
   characterId: string;
   /** Dirección de animación ya expresada en ESPACIO DE CÁMARA. */
   direction: Direction;
   state: MovementState;
+  /**
+   * Animación forzada que ignora estado/dirección (p. ej. 'carried' para
+   * el roomie cargado al hombro). Sin ella se resuelve por locomoción.
+   */
+  animOverride?: DefinedAnimationKey;
+  /** Alto del plano en unidades de mundo (el ancho sale del aspect del frame). */
+  planeHeight?: number;
 }
 
-/** Cache de texturas por hoja (una por roomie), compartida entre montajes. */
+/** Cache de texturas por imagen (una por strip de animación), compartida. */
 const textureCache = new Map<string, THREE.Texture>();
 
-function loadSheetTexture(sheetUrl: string): THREE.Texture {
-  const cached = textureCache.get(sheetUrl);
+function loadStripTexture(imageUrl: string): THREE.Texture {
+  const cached = textureCache.get(imageUrl);
   if (cached) return cached;
-  const tex = new THREE.TextureLoader().load(sheetUrl);
-  // Pixel art puro: sin suavizado ni mipmaps
+  const tex = new THREE.TextureLoader().load(imageUrl);
+  // Pixel art: sin suavizado ni mipmaps
   tex.generateMipmaps = false;
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
-  textureCache.set(sheetUrl, tex);
+  textureCache.set(imageUrl, tex);
   return tex;
 }
 
+/**
+ * Sprite 3D de un roomie con el set de DISEÑO DEFINIDO (corrección de
+ * arte): una textura por animación (como el set histórico de Ximena) en
+ * vez de la hoja placeholder en grid de la Fase 1.
+ *
+ * Se mantiene intacta la lógica de la Fase 1: billboard cilíndrico
+ * (rotación Y hacia la cámara), dirección en espacio de cámara, bob con
+ * peso al caminar/correr y ticker de frames con delta clamp.
+ * Diferencia clave: el plano RESPETA el aspect del frame activo (los
+ * frames definidos son irregulares, no celdas de 64x64).
+ */
 export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
   characterId,
   direction,
   state,
+  animOverride,
+  planeHeight = 1.8,
 }) => {
   const groupRef = useRef<THREE.Group>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
   const geoRef = useRef<THREE.PlaneGeometry>(null);
+  const matRef = useRef<THREE.MeshStandardMaterial>(null);
   const animTimeRef = useRef<number>(0);
   const currentFrameRef = useRef<number>(0);
   const bobTimeRef = useRef<number>(0);
   const worldPosRef = useRef(new THREE.Vector3());
 
-  const spriteData = useMemo(() => getRoomieSpriteData(characterId), [characterId]);
-  const texture = useMemo(() => loadSheetTexture(spriteData.sheet), [spriteData]);
+  const bundle = useMemo(() => getDefinedSpriteBundle(characterId), [characterId]);
 
-  const { animKey, flipH } = resolveRoomieAnimation(state, direction);
-  const manifestEntry = spriteData.manifest[animKey];
+  const { animKey, flipH } = animOverride
+    ? { animKey: animOverride, flipH: false }
+    : resolveDefinedAnimation(state, direction);
+  const anim = bundle[animKey];
+  const manifestEntry = anim.entry;
   const numFrames = manifestEntry.frames.length;
 
-  // Frame rate config (seconds per frame)
-  const frameDuration = state === 'run' ? 0.12 : state === 'walk' ? 0.16 : 0.28;
+  const texture = useMemo(() => loadStripTexture(anim.image), [anim.image]);
+  useEffect(() => {
+    if (matRef.current) {
+      matRef.current.map = texture;
+      matRef.current.needsUpdate = true;
+    }
+  }, [texture]);
 
-  // Update UV coordinates of the plane geometry (recorte del grid 64x64)
+  // Frame rate config (seconds per frame)
+  const frameDuration = animOverride
+    ? 0.24
+    : state === 'run'
+      ? 0.12
+      : state === 'walk'
+        ? 0.16
+        : 0.28;
+
+  // UVs del frame activo + escala del plano según su aspect (sin deformar)
   const updateUVs = (frameIdx: number, flip: boolean) => {
     if (!geoRef.current) return;
 
@@ -60,7 +98,6 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
     const sheetW = manifestEntry.width;
     const sheetH = manifestEntry.height;
 
-    // UV coordinates (Three.js origin is bottom-left (0,0))
     const u0 = frame.x / sheetW;
     const u1 = (frame.x + frame.width) / sheetW;
     const v0 = 1.0 - (frame.y + frame.height) / sheetH; // bottom
@@ -69,11 +106,6 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
     const uLeft = flip ? u1 : u0;
     const uRight = flip ? u0 : u1;
 
-    // PlaneGeometry vertices:
-    // 0: top-left (-x, +y)
-    // 1: top-right (+x, +y)
-    // 2: bottom-left (-x, -y)
-    // 3: bottom-right (+x, -y)
     const uvAttr = geoRef.current.attributes.uv;
     if (uvAttr) {
       uvAttr.setXY(0, uLeft, v1);
@@ -81,6 +113,11 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
       uvAttr.setXY(2, uLeft, v0);
       uvAttr.setXY(3, uRight, v0);
       uvAttr.needsUpdate = true;
+    }
+
+    if (meshRef.current) {
+      const aspect = frame.width / frame.height;
+      meshRef.current.scale.set(planeHeight * aspect, planeHeight, 1);
     }
   };
 
@@ -93,7 +130,6 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
   }, [animKey, flipH, characterId]);
 
   // Reset animation accumulators on window blur / focus / tab switch
-  // to avoid fast-forward frame catch-up when returning to the game window
   useEffect(() => {
     const resetTime = () => {
       animTimeRef.current = 0;
@@ -123,7 +159,7 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
     group.rotation.y = Math.atan2(dx, dz);
 
     // --- Peso: bob sutil según estado (la sombra blob queda en el suelo) ---
-    if (state === 'idle') {
+    if (state === 'idle' && !animOverride) {
       group.position.y = 0.9;
       bobTimeRef.current = 0;
     } else {
@@ -146,10 +182,11 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
 
   return (
     <group ref={groupRef} position={[0, 0.9, 0]}>
-      {/* Sprite Billboard Plane */}
-      <mesh castShadow>
-        <planeGeometry ref={geoRef} args={[1.5, 1.8]} />
+      {/* Sprite Billboard Plane (1x1; la escala por frame la pone updateUVs) */}
+      <mesh ref={meshRef} castShadow>
+        <planeGeometry ref={geoRef} args={[1, 1]} />
         <meshStandardMaterial
+          ref={matRef}
           map={texture}
           transparent
           alphaTest={0.05}

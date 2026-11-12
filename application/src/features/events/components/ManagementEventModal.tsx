@@ -153,6 +153,7 @@ export const ManagementEventModal: React.FC<ManagementEventModalProps> = ({
             <QteMinigame
               interceptorStealth={interceptor ? interceptor.character.attributes.stealth : null}
               interceptorName={interceptor?.character.name}
+              interceptorId={interceptor?.character.id}
               onStir={onStir}
               onFinish={handleMinigameFinish}
             />

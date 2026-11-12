@@ -222,7 +222,7 @@ export const ManagementView: React.FC = () => {
         } ${selectedRoomieId === c.characterId ? 'bg-sky-500/20 ring-2 ring-sky-400' : ''}`}
         title={free ? `Asignar tarea a ${def?.name}` : `${def?.name} está ocupado`}
       >
-        <RoomieSprite2D characterId={c.characterId} size={62} bob={!task} title={def?.name} />
+        <RoomieSprite2D characterId={c.characterId} size={62} bob={!task} busy={!!task} title={def?.name} />
         <span className="text-[11px] font-bold text-slate-100 leading-none">{def?.name}</span>
         {task ? (
           <span className="flex flex-col items-center gap-0.5">
