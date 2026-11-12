@@ -2,7 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { XIMENA_MANIFEST, XIMENA_SHEET_PATHS } from '@/data/characters/ximenaSprites.data';
 import { AnimationKey } from '@/types/sprite.types';
 
-describe('Ximena Sprite Sheet & Animation Integration Verification', () => {
+/**
+ * Ximena es NPC/amenaza y su set ilustrado queda INTACTO como material
+ * histórico (Fase 1 no lo usa en la escena: el jugador ahora usa el
+ * sistema genérico de roomies, cubierto en cameraMath.test.ts).
+ * Estos tests conservan la verificación de integridad de su data.
+ * Los antiguos tests que REPLICABAN a mano el mapeo de CharacterSprite
+ * se retiraron: el mapeo real ahora vive en resolveRoomieAnimation()
+ * y se prueba directamente en cameraMath.test.ts.
+ */
+describe('Ximena Sprite Sheet (NPC, data histórica intacta)', () => {
   const expectedAnimations: AnimationKey[] = [
     'idle_front',
     'idle_3_4',
@@ -37,50 +46,8 @@ describe('Ximena Sprite Sheet & Animation Integration Verification', () => {
     });
   });
 
-  it('maps movement directions and states correctly to sprite sheets and horizontal flip', () => {
-    // Helper replicating the direction mapping logic from CharacterSprite.tsx
-    const resolveAnim = (state: 'idle' | 'walk' | 'run', dir: 'up' | 'down' | 'left' | 'right') => {
-      if (state === 'idle') {
-        if (dir === 'left') return { animKey: 'idle_3_4', flipH: true };
-        if (dir === 'right') return { animKey: 'idle_3_4', flipH: false };
-        if (dir === 'up') return { animKey: 'idle_back', flipH: false };
-        return { animKey: 'idle_front', flipH: false };
-      }
-      if (state === 'run') {
-        if (dir === 'up') return { animKey: 'run_back', flipH: false };
-        if (dir === 'left') return { animKey: 'run_right', flipH: true };
-        if (dir === 'right') return { animKey: 'run_right', flipH: false };
-        return { animKey: 'walk_front', flipH: false };
-      }
-      if (dir === 'up') return { animKey: 'walk_back', flipH: false };
-      if (dir === 'left') return { animKey: 'walk_right', flipH: true };
-      if (dir === 'right') return { animKey: 'walk_right', flipH: false };
-      return { animKey: 'walk_front', flipH: false };
-    };
-
-    expect(resolveAnim('idle', 'down')).toEqual({ animKey: 'idle_front', flipH: false });
-    expect(resolveAnim('idle', 'right')).toEqual({ animKey: 'idle_3_4', flipH: false });
-    expect(resolveAnim('idle', 'left')).toEqual({ animKey: 'idle_3_4', flipH: true });
-    expect(resolveAnim('idle', 'up')).toEqual({ animKey: 'idle_back', flipH: false });
-    expect(resolveAnim('walk', 'right')).toEqual({ animKey: 'walk_right', flipH: false });
-    expect(resolveAnim('walk', 'left')).toEqual({ animKey: 'walk_right', flipH: true });
-    expect(resolveAnim('walk', 'up')).toEqual({ animKey: 'walk_back', flipH: false });
-    expect(resolveAnim('run', 'right')).toEqual({ animKey: 'run_right', flipH: false });
-    expect(resolveAnim('run', 'left')).toEqual({ animKey: 'run_right', flipH: true });
-    expect(resolveAnim('run', 'up')).toEqual({ animKey: 'run_back', flipH: false });
-  });
-
-  it('guarantees releasing up direction switches from walk_back to static idle_back', () => {
-    // When walking up:
-    const walkingUp = { state: 'walk' as const, dir: 'up' as const };
-    const walkAnim = walkingUp.state === 'walk' && walkingUp.dir === 'up' ? 'walk_back' : 'idle_back';
-    expect(walkAnim).toBe('walk_back');
-
-    // When releasing the up key:
-    const releasedUp = { state: 'idle' as const, dir: 'up' as const };
-    const idleAnim = releasedUp.state === 'idle' && releasedUp.dir === 'up' ? 'idle_back' : 'walk_back';
-    expect(idleAnim).toBe('idle_back');
-    expect(XIMENA_MANIFEST[idleAnim].frames.length).toBe(1); // 1 single static frame, no walking loop
+  it('idle_back de Ximena sigue siendo 1 frame estático (sin ciclo de caminata)', () => {
+    expect(XIMENA_MANIFEST.idle_back.frames.length).toBe(1);
   });
 
   it('prevents animation fast-forward replay spike on tab switch (delta clamping simulation)', () => {
