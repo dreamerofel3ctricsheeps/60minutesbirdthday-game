@@ -77,6 +77,7 @@ export const CollectionOverlay: React.FC = () => {
           </div>
           <div><kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">W</kbd> <kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">A</kbd> <kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">S</kbd> <kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">D</kbd> Moverse</div>
           <div><kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">ESPACIO</kbd> Recoger objeto cercano</div>
+          <div><kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">Q</kbd> <kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">E</kbd> Rotar cámara 90°</div>
         </div>
 
         {/* Inventory Box */}

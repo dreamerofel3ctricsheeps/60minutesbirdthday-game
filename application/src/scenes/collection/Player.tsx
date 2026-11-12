@@ -3,6 +3,9 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { useRunStore } from '@/stores/run.store';
+import { useGameStore } from '@/stores/game.store';
+import { useCameraStore } from '@/stores/camera.store';
+import { cameraRelativeMove, directionInCameraSpace } from '@/game/systems/cameraMath';
 import { APARTMENT_MAP } from '@/data/maps/apartment.data';
 import { audio } from '@/services/audio.service';
 import { Direction, MovementState } from '@/types/sprite.types';
@@ -33,7 +36,15 @@ export const Player: React.FC<PlayerProps> = ({
   const dropInSafetyZone = useInventoryStore((s) => s.dropInSafetyZone);
   const launchThrows = useThrowStore((s) => s.launchThrows);
   const modifyMeter = useRunStore((s) => s.modifyMeter);
+  const selectedCharacterId = useGameStore((s) => s.selectedCharacterId);
+  // El movimiento se orienta con el yaw OBJETIVO: responde al instante
+  // aunque el giro visual de la cámara todavía esté animándose.
+  const targetYaw = useCameraStore((s) => s.targetYaw);
   const lastRoomRef = useRef<string>('');
+  const spriteStateRef = useRef<{ direction: Direction; state: MovementState }>({
+    direction: 'down',
+    state: 'idle',
+  });
 
   // Sprite animation states
   const [spriteDirection, setSpriteDirection] = useState<Direction>('down');
@@ -156,29 +167,37 @@ export const Player: React.FC<PlayerProps> = ({
     const clampedDelta = Math.min(delta, 0.1);
 
     // Movement calculation: Shift key runs!
+    // TODOS los roomies se mueven a la misma velocidad (decisión de diseño):
+    // el atributo speed del personaje NO afecta el movimiento.
     const isRunning = keysPressed.current['shift'] || keysPressed.current['shiftleft'] || keysPressed.current['shiftright'];
     const baseSpeed = isRunning ? 9.2 : 6.2;
 
-    let moveX = 0;
-    let moveZ = 0;
+    // Input en espacio de pantalla → mundo, rotado por el yaw de la cámara:
+    // W siempre aleja al personaje de la cámara, sea cual sea la rotación.
+    let inputRight = 0;
+    let inputForward = 0;
 
-    if (keysPressed.current['w'] || keysPressed.current['arrowup']) moveZ -= 1;
-    if (keysPressed.current['s'] || keysPressed.current['arrowdown']) moveZ += 1;
-    if (keysPressed.current['a'] || keysPressed.current['arrowleft']) moveX -= 1;
-    if (keysPressed.current['d'] || keysPressed.current['arrowright']) moveX += 1;
+    if (keysPressed.current['w'] || keysPressed.current['arrowup']) inputForward += 1;
+    if (keysPressed.current['s'] || keysPressed.current['arrowdown']) inputForward -= 1;
+    if (keysPressed.current['a'] || keysPressed.current['arrowleft']) inputRight -= 1;
+    if (keysPressed.current['d'] || keysPressed.current['arrowright']) inputRight += 1;
+
+    const move = cameraRelativeMove({ right: inputRight, forward: inputForward }, targetYaw);
+    const moveX = move.x;
+    const moveZ = move.z;
 
     const isMoving = moveX !== 0 || moveZ !== 0;
 
-    // Determine direction for 2.5D sprite
-    if (isMoving) {
-      if (Math.abs(moveX) > Math.abs(moveZ)) {
-        setSpriteDirection(moveX > 0 ? 'right' : 'left');
-      } else {
-        setSpriteDirection(moveZ > 0 ? 'down' : 'up');
-      }
-      setMovementState(isRunning ? 'run' : 'walk');
-    } else {
-      setMovementState('idle');
+    // Dirección de animación en espacio de cámara (pantalla-arriba = espaldas)
+    const nextDirection: Direction = isMoving ? directionInCameraSpace(move, targetYaw) : spriteDirection;
+    const nextState: MovementState = isMoving ? (isRunning ? 'run' : 'walk') : 'idle';
+    if (
+      spriteStateRef.current.direction !== nextDirection ||
+      spriteStateRef.current.state !== nextState
+    ) {
+      spriteStateRef.current = { direction: nextDirection, state: nextState };
+      setSpriteDirection(nextDirection);
+      setMovementState(nextState);
     }
 
     const currentX = meshRef.current.position.x;
@@ -267,8 +286,12 @@ export const Player: React.FC<PlayerProps> = ({
         APARTMENT_MAP.playerSpawn[2],
       ]}
     >
-      {/* 2.5D Animated Pixel Character Sprite */}
-      <CharacterSprite direction={spriteDirection} state={movementState} />
+      {/* 2.5D Animated Pixel Character Sprite (roomie seleccionado) */}
+      <CharacterSprite
+        characterId={selectedCharacterId}
+        direction={spriteDirection}
+        state={movementState}
+      />
 
       {/* Carried items visual representation */}
       <CarriedItems

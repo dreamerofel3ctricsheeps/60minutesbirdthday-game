@@ -1,69 +1,60 @@
 import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Direction, MovementState, AnimationKey } from '@/types/sprite.types';
-import { XIMENA_MANIFEST, XIMENA_SHEET_PATHS } from '@/data/characters/ximenaSprites.data';
+import { Direction, MovementState } from '@/types/sprite.types';
+import {
+  getRoomieSpriteData,
+  resolveRoomieAnimation,
+} from '@/data/characters/roomieSprites.data';
 
 interface CharacterSpriteProps {
+  /** Roomie jugable a renderizar (placeholders genéricos 64x64, Fase 1). */
+  characterId: string;
+  /** Dirección de animación ya expresada en ESPACIO DE CÁMARA. */
   direction: Direction;
   state: MovementState;
 }
 
-export const CharacterSprite: React.FC<CharacterSpriteProps> = ({ direction, state }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
+/** Cache de texturas por hoja (una por roomie), compartida entre montajes. */
+const textureCache = new Map<string, THREE.Texture>();
+
+function loadSheetTexture(sheetUrl: string): THREE.Texture {
+  const cached = textureCache.get(sheetUrl);
+  if (cached) return cached;
+  const tex = new THREE.TextureLoader().load(sheetUrl);
+  // Pixel art puro: sin suavizado ni mipmaps
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  textureCache.set(sheetUrl, tex);
+  return tex;
+}
+
+export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
+  characterId,
+  direction,
+  state,
+}) => {
+  const groupRef = useRef<THREE.Group>(null);
   const geoRef = useRef<THREE.PlaneGeometry>(null);
   const animTimeRef = useRef<number>(0);
   const currentFrameRef = useRef<number>(0);
+  const bobTimeRef = useRef<number>(0);
+  const worldPosRef = useRef(new THREE.Vector3());
 
-  // Determine current active animation key and horizontal flip
-  const { animKey, flipH } = useMemo<{ animKey: AnimationKey; flipH: boolean }>(() => {
-    if (state === 'idle') {
-      if (direction === 'left') return { animKey: 'idle_3_4', flipH: true };
-      if (direction === 'right') return { animKey: 'idle_3_4', flipH: false };
-      if (direction === 'up') return { animKey: 'idle_back', flipH: false };
-      return { animKey: 'idle_front', flipH: false };
-    }
+  const spriteData = useMemo(() => getRoomieSpriteData(characterId), [characterId]);
+  const texture = useMemo(() => loadSheetTexture(spriteData.sheet), [spriteData]);
 
-    if (state === 'run') {
-      if (direction === 'up') return { animKey: 'run_back', flipH: false };
-      if (direction === 'left') return { animKey: 'run_right', flipH: true };
-      if (direction === 'right') return { animKey: 'run_right', flipH: false };
-      return { animKey: 'walk_front', flipH: false };
-    }
-
-    // walk state
-    if (direction === 'up') return { animKey: 'walk_back', flipH: false };
-    if (direction === 'left') return { animKey: 'walk_right', flipH: true };
-    if (direction === 'right') return { animKey: 'walk_right', flipH: false };
-    return { animKey: 'walk_front', flipH: false };
-  }, [state, direction]);
-
-  // Load and cache textures with NearestFilter for crisp pixel art
-  const textures = useMemo(() => {
-    const loader = new THREE.TextureLoader();
-    const map = new Map<AnimationKey, THREE.Texture>();
-
-    (Object.keys(XIMENA_SHEET_PATHS) as AnimationKey[]).forEach((key) => {
-      const tex = loader.load(XIMENA_SHEET_PATHS[key]);
-      tex.generateMipmaps = false;
-      tex.minFilter = THREE.NearestFilter;
-      tex.magFilter = THREE.NearestFilter;
-      map.set(key, tex);
-    });
-
-    return map;
-  }, []);
-
-  const activeTexture = textures.get(animKey);
-  const manifestEntry = XIMENA_MANIFEST[animKey];
-  const numFrames = manifestEntry ? manifestEntry.frames.length : 1;
+  const { animKey, flipH } = resolveRoomieAnimation(state, direction);
+  const manifestEntry = spriteData.manifest[animKey];
+  const numFrames = manifestEntry.frames.length;
 
   // Frame rate config (seconds per frame)
   const frameDuration = state === 'run' ? 0.12 : state === 'walk' ? 0.16 : 0.28;
 
-  // Update UV coordinates of the plane geometry
+  // Update UV coordinates of the plane geometry (recorte del grid 64x64)
   const updateUVs = (frameIdx: number, flip: boolean) => {
-    if (!geoRef.current || !manifestEntry) return;
+    if (!geoRef.current) return;
 
     const frame = manifestEntry.frames[frameIdx % manifestEntry.frames.length];
     const sheetW = manifestEntry.width;
@@ -93,12 +84,13 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({ direction, sta
     }
   };
 
-  // Reset animation when animation changes
+  // Reset animation when animation or character changes
   useEffect(() => {
     animTimeRef.current = 0;
     currentFrameRef.current = 0;
     updateUVs(0, flipH);
-  }, [animKey, flipH]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animKey, flipH, characterId]);
 
   // Reset animation accumulators on window blur / focus / tab switch
   // to avoid fast-forward frame catch-up when returning to the game window
@@ -118,13 +110,31 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({ direction, sta
     };
   }, []);
 
-  // Frame ticker with delta clamping and overflow prevention
-  useFrame((_, delta) => {
-    // Single-frame static animations (like idle_back) stay on frame 0
-    if (numFrames <= 1) return;
+  useFrame(({ camera }, delta) => {
+    const group = groupRef.current;
+    if (!group) return;
 
-    // Clamp delta to prevent animation burst/replay when returning from background tab
     const clampedDelta = Math.min(delta, 0.1);
+
+    // --- Billboard cilíndrico: rotar SOLO en Y para enfrentar a la cámara ---
+    group.getWorldPosition(worldPosRef.current);
+    const dx = camera.position.x - worldPosRef.current.x;
+    const dz = camera.position.z - worldPosRef.current.z;
+    group.rotation.y = Math.atan2(dx, dz);
+
+    // --- Peso: bob sutil según estado (la sombra blob queda en el suelo) ---
+    if (state === 'idle') {
+      group.position.y = 0.9;
+      bobTimeRef.current = 0;
+    } else {
+      bobTimeRef.current += clampedDelta;
+      const freq = state === 'run' ? 13 : 9;
+      const amp = state === 'run' ? 0.06 : 0.035;
+      group.position.y = 0.9 + Math.abs(Math.sin(bobTimeRef.current * freq)) * amp;
+    }
+
+    // --- Ticker de frames (con delta clamp, sin ráfaga al volver de fondo) ---
+    if (numFrames <= 1) return;
     animTimeRef.current += clampedDelta;
 
     if (animTimeRef.current >= frameDuration) {
@@ -135,20 +145,18 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({ direction, sta
   });
 
   return (
-    <group position={[0, 0.9, 0]}>
+    <group ref={groupRef} position={[0, 0.9, 0]}>
       {/* Sprite Billboard Plane */}
-      <mesh ref={meshRef} castShadow>
+      <mesh castShadow>
         <planeGeometry ref={geoRef} args={[1.5, 1.8]} />
-        {activeTexture && (
-          <meshStandardMaterial
-            map={activeTexture}
-            transparent
-            alphaTest={0.05}
-            roughness={0.7}
-            metalness={0.0}
-            side={THREE.DoubleSide}
-          />
-        )}
+        <meshStandardMaterial
+          map={texture}
+          transparent
+          alphaTest={0.05}
+          roughness={0.7}
+          metalness={0.0}
+          side={THREE.DoubleSide}
+        />
       </mesh>
     </group>
   );
