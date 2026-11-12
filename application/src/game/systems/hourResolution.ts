@@ -29,8 +29,9 @@ import {
  *     depende de las zonas al INICIO de la hora).
  *  b. El vigía que cuenta es el que está de guardia DURANTE esta hora.
  *  c. tickHour avanza el reloj y completa las tareas que terminan.
- *  d. Si NO es showdown, el resultado del minijuego aplica su tabla de
- *     efectos (HOUR_MINIGAME_EFFECTS) a Preparación/Despertar.
+ *  d. Si NO es showdown, el resultado del DUELO de la hora (convertido
+ *     a outcome con duelResultToOutcome: win=perfect, draw=partial,
+ *     loss=fail) aplica su tabla de efectos (HOUR_MINIGAME_EFFECTS).
  *  e. Los villanos se mueven (showdown, bloqueo del vigía y avances).
  */
 
@@ -64,7 +65,7 @@ const advanceDespertar = (id: VillainId) =>
 export function resolveHour(run: GameRun, outcome: MinigameOutcome): HourResolutionResult {
   // a. Plan PRE-tick.
   const plan = getHourMinigame(run);
-  const isShowdown = plan.kind === 'showdown';
+  const isShowdown = plan.showdown;
 
   // b. Vigía durante ESTA hora (antes del tick que podría liberarlo).
   const guardianActive = isGuardianActive(run);

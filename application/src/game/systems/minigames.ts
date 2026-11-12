@@ -8,14 +8,18 @@ import {
   TIMING_GREEN_MAX,
   TIMING_YELLOW_MIN,
   TIMING_YELLOW_MAX,
-  BALLOON_SEQUENCE_LENGTH,
-  CATCH_GOOD_TARGET,
 } from '@/game/core/balance';
 
 /**
- * Lógica PURA de los minijuegos de disturbio (Fase 3).
- * Los componentes solo capturan la entrada; toda la puntuación vive aquí
- * y está cubierta por tests.
+ * Lógica PURA de mecánicas base de minijuego (Fase 3), reutilizadas
+ * por los DUELOS en escena de la mejora de la Fase 4:
+ * - El QTE de direcciones aporta el mapeo de teclas (keyToDirection) y
+ *   la generación de secuencias a la "Carrera al timbre".
+ * - El timing aporta zonas y precisión (timingZoneAt/timingPrecision)
+ *   a la "Ducha silenciosa" contra el gato.
+ * La puntuación de los duelos vive en game/systems/duelSystem.ts.
+ * Los componentes solo capturan la entrada; los números viven aquí y
+ * en duelSystem, cubiertos por tests.
  */
 
 // ---------------------------------------------------------------------------
@@ -130,40 +134,3 @@ export const TIMING_DESPERTAR_DELTAS: Record<MinigameOutcome, number> = {
   partial: 6,
   fail: 16,
 };
-
-// ---------------------------------------------------------------------------
-// Fase 4: minijuegos por hora — "Atrapa la cena" (cocina)
-// ---------------------------------------------------------------------------
-
-/**
- * Resultado de "Atrapa la cena" según ingredientes buenos y malos atrapados.
- * Perfecto: al menos 10 buenos y casi ningún malo (máx. 1).
- * Parcial: cerca de la meta (CATCH_GOOD_TARGET - 2 = 6 buenos o más).
- */
-export function scoreCatch(caughtGood: number, caughtBad: number): MinigameOutcome {
-  if (caughtGood >= 10 && caughtBad <= 1) return 'perfect';
-  if (caughtGood >= CATCH_GOOD_TARGET - 2) return 'partial';
-  return 'fail';
-}
-
-// ---------------------------------------------------------------------------
-// Fase 4: minijuegos por hora — "Ritmo de globos" (sala, tipo Simon)
-// ---------------------------------------------------------------------------
-
-/** Genera la secuencia de globos a repetir, con un RNG inyectado (testeable). */
-export function generateBalloonSequence(
-  rng: () => number,
-  length: number = BALLOON_SEQUENCE_LENGTH
-): QteDirection[] {
-  return Array.from(
-    { length },
-    () => QTE_DIRECTIONS[Math.floor(rng() * QTE_DIRECTIONS.length) % QTE_DIRECTIONS.length]
-  );
-}
-
-/** Resultado de "Ritmo de globos" según pasos fallados al repetir la secuencia. */
-export function scoreBalloon(failedSteps: number): MinigameOutcome {
-  if (failedSteps <= 0) return 'perfect';
-  if (failedSteps === 1) return 'partial';
-  return 'fail';
-}

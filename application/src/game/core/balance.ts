@@ -74,11 +74,16 @@ export const QTE_NO_INTERCEPTOR_EXTRA_KEYS = 1;
 // y llevarla a SU fiesta rival. El vigía puede retrasar a uno por hora.
 // ---------------------------------------------------------------------------
 
-/** Hora en que el GATO hace su primera aparición (entra en zona exterior). */
-export const VILLAIN_CAT_INTRO_HOUR = 13;
-
-/** Hora en que JOSE hace su primera aparición (entra en zona exterior). */
-export const VILLAIN_JOSE_INTRO_HOUR = 15;
+/**
+ * MEJORA Fase 4 (playtest de Jose): los villanos son una amenaza DESDE
+ * EL INICIO. Ambos están activos desde las 7:00, partiendo de la zona
+ * exterior; ya no hay "apariciones" a mitad de partida.
+ * Las horas 13 y 15 quedan como ESCALADAS narrativas y de IA:
+ * - 13:00 — el gato se pone atrevido: en los duelos se equivoca menos.
+ * - 15:00 — Jose redobla su plan: en los duelos corre/atrapa más rápido.
+ */
+export const CAT_ESCALATION_HOUR = 13;
+export const JOSE_ESCALATION_HOUR = 15;
 
 /** Despertar que suma cada avance del gato. */
 export const CAT_ADVANCE_DESPERTAR = 4;
@@ -89,11 +94,35 @@ export const JOSE_ADVANCE_DESPERTAR = 6;
 /** Despertar que suma el gato si PIERDE su showdown y entra al cuarto. */
 export const CAT_BREACH_DESPERTAR = 25;
 
-/** Largo de la secuencia de "Ritmo de globos" (Simon en la sala). */
-export const BALLOON_SEQUENCE_LENGTH = 5;
-
 /** Buenos que hay que atrapar en "Atrapa la cena" para un resultado sólido. */
 export const CATCH_GOOD_TARGET = 8;
+
+// ---------------------------------------------------------------------------
+// MEJORA Fase 4: DUELOS en escena contra los villanos (inspiración
+// Mario Party investigada — ver game/systems/duelSystem.ts y
+// game/systems/hourMinigames.ts para el mapeo inspiración → duelo).
+// Cada duelo dura ~25–45 s o se estructura en rondas (mejor de 5).
+// ---------------------------------------------------------------------------
+
+/** Ítems que caen en el "Duelo de la cena" (cocina vs Jose), ~30 s. */
+export const CATCH_DUEL_TOTAL_ITEMS = 30;
+/** Intervalo entre ítems que caen en el duelo de la cena (ms). */
+export const CATCH_DUEL_SPAWN_MS = 780;
+/** Rondas del duelo de alfombras (sala vs gato): gana quien llegue a 3. */
+export const CARPETS_DUEL_MAX_ROUNDS = 5;
+export const CARPETS_DUEL_ROUNDS_TO_WIN = 3;
+/** Pasos de pasillo por manga en la "Carrera al timbre" (puerta/showdown). */
+export const RACE_DUEL_TARGET_STEPS = 10;
+/** La carrera se corre en mangas: gana quien se lleve 2 de hasta 3 mangas. */
+export const RACE_DUEL_MAX_HEATS = 3;
+export const RACE_DUEL_HEATS_TO_WIN = 2;
+/** Ventaja inicial de Jose en su showdown de la puerta (pasos). */
+export const RACE_DUEL_SHOWDOWN_JOSE_HEAD_START = 4;
+/** Ventaja inicial del gato en su showdown de la puerta (pasos). */
+export const RACE_DUEL_SHOWDOWN_CAT_HEAD_START = 3;
+/** Rondas de la "Ducha silenciosa" (baño vs gato): gana quien llegue a 3. */
+export const SHOWER_DUEL_ROUNDS = 5;
+export const SHOWER_DUEL_ROUNDS_TO_WIN = 3;
 
 // --- Minijuego TIMING "Sin hacer ruido" ---
 /** Intentos del minijuego de timing. */
