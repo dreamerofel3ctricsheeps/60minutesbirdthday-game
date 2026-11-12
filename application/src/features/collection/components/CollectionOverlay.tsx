@@ -1,0 +1,123 @@
+import React, { useEffect, useState } from 'react';
+import { useInventoryStore } from '@/stores/inventory.store';
+import { useGameStore } from '@/stores/game.store';
+import { useRunStore } from '@/stores/run.store';
+import { ITEMS_DATA } from '@/data/items/items.data';
+import { Timer, Package, Navigation, AlertTriangle } from 'lucide-react';
+
+export const CollectionOverlay: React.FC = () => {
+  const [timeLeft, setTimeLeft] = useState(60);
+  const setPhase = useGameStore((s) => s.setPhase);
+  const updateCollectionTime = useRunStore((s) => s.updateCollectionTime);
+  const finalizeCollectionToShelter = useInventoryStore((s) => s.finalizeCollectionToShelter);
+
+  const heldItemIds = useInventoryStore((s) => s.heldItemIds);
+  const depositedItemIds = useInventoryStore((s) => s.depositedItemIds);
+  const maxCarrySlots = useInventoryStore((s) => s.maxCarrySlots);
+
+  // 60-second countdown loop
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          // 60 seconds finished!
+          finalizeCollectionToShelter();
+          updateCollectionTime(0);
+          setPhase('COLLECTION_RESULT');
+          return 0;
+        }
+        updateCollectionTime(prev - 1);
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [setPhase, updateCollectionTime, finalizeCollectionToShelter]);
+
+  const isUrgent = timeLeft <= 15;
+
+  return (
+    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6">
+      {/* Top Bar: Timer & Drop zone status */}
+      <div className="flex justify-between items-start">
+        {/* Timer Box */}
+        <div
+          className={`flex items-center gap-3 px-5 py-3 rounded-xl border backdrop-blur-md shadow-2xl transition-all ${
+            isUrgent
+              ? 'bg-red-950/80 border-red-500 animate-pulse text-red-300'
+              : 'bg-slate-900/80 border-slate-700 text-amber-400'
+          }`}
+        >
+          <Timer className="w-8 h-8" />
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Tiempo Restante
+            </span>
+            <span className="text-3xl font-black font-mono">
+              {String(timeLeft).padStart(2, '0')}s
+            </span>
+          </div>
+        </div>
+
+        {/* Drop Zone Navigator Prompt */}
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-emerald-950/70 border border-emerald-600/60 text-emerald-300 text-xs font-medium backdrop-blur-md">
+          <Navigation className="w-4 h-4 text-emerald-400 animate-bounce" />
+          <span>Lleva los objetos al <strong>Ascensor Verde</strong> (Abajo a la Izquierda)</span>
+        </div>
+      </div>
+
+      {/* Bottom Bar: Carrying inventory & Controls */}
+      <div className="flex justify-between items-end">
+        {/* Controls helper */}
+        <div className="bg-slate-900/80 border border-slate-700 rounded-lg p-3 text-xs text-slate-300 backdrop-blur-md space-y-1">
+          <div className="font-semibold text-slate-100 flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+            Controles de Recolección
+          </div>
+          <div><kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">W</kbd> <kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">A</kbd> <kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">S</kbd> <kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">D</kbd> Moverse</div>
+          <div><kbd className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600">ESPACIO</kbd> Recoger objeto cercano</div>
+        </div>
+
+        {/* Inventory Box */}
+        <div className="bg-slate-900/90 border border-slate-700 rounded-xl p-4 backdrop-blur-md min-w-[280px]">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Package className="w-4 h-4 text-sky-400" />
+              Mochila ({heldItemIds.length}/{maxCarrySlots})
+            </span>
+            <span className="text-xs text-emerald-400 font-medium">
+              Resguardo: {depositedItemIds.length} ítems
+            </span>
+          </div>
+
+          <div className="flex gap-2">
+            {Array.from({ length: maxCarrySlots }).map((_, idx) => {
+              const itemId = heldItemIds[idx];
+              const itemDef = itemId ? ITEMS_DATA[itemId] : null;
+
+              return (
+                <div
+                  key={idx}
+                  className={`w-14 h-14 rounded-lg border flex flex-col items-center justify-center p-1 text-center transition-all ${
+                    itemDef
+                      ? 'bg-slate-800 border-sky-500 shadow-md'
+                      : 'bg-slate-950/50 border-dashed border-slate-700 text-slate-600'
+                  }`}
+                >
+                  {itemDef ? (
+                    <span className="text-[10px] font-bold leading-tight line-clamp-2 text-slate-200">
+                      {itemDef.name}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-600">Vacío</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
