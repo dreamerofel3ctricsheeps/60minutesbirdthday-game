@@ -28,8 +28,10 @@ export type SpritesManifest = Record<AnimationKey, SheetManifestEntry>;
 
 /**
  * Animaciones del sistema GENÉRICO de roomies (Fase 1): una sola hoja en
- * grid regular de 64x64 por personaje (ver roomieSprites.data.ts).
- * Incluye run_front e idle_right, que el set histórico de Ximena no tenía.
+ * grid regular de 64x64 por personaje. RETIRADO en la corrección de arte:
+ * los placeholders de rectángulos perdían la identidad de los diseños.
+ * Se conserva el tipo porque el mapeo estado+dirección lo reutiliza el
+ * sistema de bundles definidos (definedSprites.data.ts).
  */
 export type RoomieAnimationKey =
   | 'idle_front'
@@ -43,3 +45,23 @@ export type RoomieAnimationKey =
   | 'run_right';
 
 export type RoomieSpritesManifest = Record<RoomieAnimationKey, SheetManifestEntry>;
+
+/**
+ * Animaciones del sistema de sprites con DISEÑO DEFINIDO (corrección de
+ * arte): un strip por animación generado desde los drafts v1.2 de Jose,
+ * en el mismo formato imagen+manifest que el set histórico de Ximena.
+ * Incluye carried (siendo cargado) y action (tareas de gestión / QTE),
+ * que el grid de placeholders no tenía.
+ */
+export type DefinedAnimationKey =
+  | RoomieAnimationKey
+  | 'carried'
+  | 'action';
+
+/** Una animación de un bundle definido: imagen propia + manifest de frames. */
+export interface DefinedSpriteAnim {
+  image: string;
+  entry: SheetManifestEntry;
+}
+
+export type DefinedSpriteBundle = Record<DefinedAnimationKey, DefinedSpriteAnim>;
