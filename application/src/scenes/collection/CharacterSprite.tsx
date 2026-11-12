@@ -18,6 +18,13 @@ interface CharacterSpriteProps {
    * el roomie cargado al hombro). Sin ella se resuelve por locomoción.
    */
   animOverride?: DefinedAnimationKey;
+  /**
+   * El personaje lleva a un roomie al hombro (solo el jugador): usa la
+   * familia carrywalk_* (brazos arriba sujetando) en vez de caminar
+   * "normal" con los brazos abajo. En idle cargando se congela el
+   * frame 0 de la pose de carga.
+   */
+  carrying?: boolean;
   /** Alto del plano en unidades de mundo (el ancho sale del aspect del frame). */
   planeHeight?: number;
 }
@@ -53,6 +60,7 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
   direction,
   state,
   animOverride,
+  carrying = false,
   planeHeight = 1.8,
 }) => {
   const groupRef = useRef<THREE.Group>(null);
@@ -68,7 +76,9 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
 
   const { animKey, flipH } = animOverride
     ? { animKey: animOverride, flipH: false }
-    : resolveDefinedAnimation(state, direction);
+    : resolveDefinedAnimation(state, direction, carrying);
+  /** Idle cargando: la pose de carga queda congelada en su frame 0. */
+  const freezeFrame = carrying && state === 'idle' && !animOverride ? 0 : undefined;
   const anim = bundle[animKey];
   const manifestEntry = anim.entry;
   const numFrames = manifestEntry.frames.length;
@@ -82,13 +92,18 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
   }, [texture]);
 
   // Frame rate config (seconds per frame)
+  // - idle: 0.9s por frame — el idle definido tiene 2 frames pensados
+  //   como respiración/gesto en bucle lento (no pose T estática).
+  // - run: 0.085s ≈ 11.8 fps — subido en la 2ª corrección de arte para
+  //   que el ciclo de zancada (4 frames reales con alternancia de
+  //   piernas) acompañe la velocidad de desplazamiento y no se deslice.
   const frameDuration = animOverride
     ? 0.24
     : state === 'run'
-      ? 0.12
+      ? 0.085
       : state === 'walk'
         ? 0.16
-        : 0.28;
+        : 0.9;
 
   // UVs del frame activo + escala del plano según su aspect (sin deformar)
   const updateUVs = (frameIdx: number, flip: boolean) => {
@@ -164,13 +179,15 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
       bobTimeRef.current = 0;
     } else {
       bobTimeRef.current += clampedDelta;
-      const freq = state === 'run' ? 13 : 9;
-      const amp = state === 'run' ? 0.06 : 0.035;
+      // Carrera: bob más marcado (amp 0.075, freq 15) para que el cuerpo
+      // acompañe el ciclo de zancada de 11.8 fps y no "patine".
+      const freq = state === 'run' ? 15 : 9;
+      const amp = state === 'run' ? 0.075 : 0.035;
       group.position.y = 0.9 + Math.abs(Math.sin(bobTimeRef.current * freq)) * amp;
     }
 
     // --- Ticker de frames (con delta clamp, sin ráfaga al volver de fondo) ---
-    if (numFrames <= 1) return;
+    if (numFrames <= 1 || freezeFrame !== undefined) return;
     animTimeRef.current += clampedDelta;
 
     if (animTimeRef.current >= frameDuration) {

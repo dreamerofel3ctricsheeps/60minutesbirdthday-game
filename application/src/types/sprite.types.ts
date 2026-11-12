@@ -56,7 +56,13 @@ export type RoomieSpritesManifest = Record<RoomieAnimationKey, SheetManifestEntr
 export type DefinedAnimationKey =
   | RoomieAnimationKey
   | 'carried'
-  | 'action';
+  | 'action'
+  // Segunda corrección de arte: caminar CARGANDO a otro al hombro
+  // (brazos arriba sujetando), para que el portador no camine "normal"
+  // con los brazos abajo mientras lleva a un roomie encima.
+  | 'carrywalk_front'
+  | 'carrywalk_back'
+  | 'carrywalk_right';
 
 /** Una animación de un bundle definido: imagen propia + manifest de frames. */
 export interface DefinedSpriteAnim {

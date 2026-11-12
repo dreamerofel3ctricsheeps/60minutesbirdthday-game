@@ -21,12 +21,20 @@ export { XIMENA_SLEEP };
  * ver scripts/process_defined_sprites.py y los manifest.json junto a los
  * PNG en src/assets/sprites/characters/defined/<id>/.
  *
- * Derivaciones (documentadas en el procesador):
- *   run_front = frames de walk_front (el estado run acelera el ciclo y el bob)
- *   run_back  = frames de walk_back (idem)
+ * Segunda corrección de arte (playtest):
+ *   idle_front = strip `idle` PROPIO de 2 frames: de pie relajado con un
+ *     gesto de su personalidad (NADA de pose T; el idle anterior era el
+ *     draft extraído, que es pose T por ser hoja de diseño).
+ *   run_front / run_back = strips REALES de carrera (4 frames con
+ *     alternancia de piernas); se acabó la derivación run=walk que hacía
+ *     que al correr los pies no se intercambiaran y el personaje se
+ *     deslizara. run_right también se regeneró con alternancia clara.
+ *   carrywalk_front/back/right = caminar cargando a otro al hombro
+ *     (ambos brazos arriba sujetando): el portador ya no camina con los
+ *     brazos abajo como si no llevara nada.
+ * Derivaciones que quedan:
  *   idle_back = frame 0 de walk_back · idle_right = frame 0 de walk_right
  *   izquierda = espejo horizontal de la animación derecha (flipH)
- *   idle_front = diseño base EXTRAÍDO del draft v1.2 (sin damero)
  */
 export const DEFINED_ANIMATION_KEYS: DefinedAnimationKey[] = [
   'idle_front',
@@ -40,6 +48,9 @@ export const DEFINED_ANIMATION_KEYS: DefinedAnimationKey[] = [
   'run_right',
   'carried',
   'action',
+  'carrywalk_front',
+  'carrywalk_back',
+  'carrywalk_right',
 ];
 
 export const getDefinedSpriteBundle = (characterId: string): DefinedSpriteBundle =>
@@ -53,10 +64,20 @@ export const getDefinedSpriteBundle = (characterId: string): DefinedSpriteBundle
  */
 export function resolveDefinedAnimation(
   state: MovementState,
-  direction: Direction
+  direction: Direction,
+  carrying = false
 ): { animKey: DefinedAnimationKey; flipH: boolean } {
   const flipH = direction === 'left';
   const side: Direction = flipH ? 'right' : direction;
+
+  // Cargando a un roomie al hombro: familia carrywalk_* (brazos arriba
+  // sujetando). En idle cargando se resuelve igual y CharacterSprite
+  // congela el frame 0: la pose por sí sola ya comunica la carga.
+  if (carrying) {
+    if (side === 'up') return { animKey: 'carrywalk_back', flipH: false };
+    if (side === 'right') return { animKey: 'carrywalk_right', flipH };
+    return { animKey: 'carrywalk_front', flipH: false };
+  }
 
   if (state === 'idle') {
     if (side === 'up') return { animKey: 'idle_back', flipH: false };

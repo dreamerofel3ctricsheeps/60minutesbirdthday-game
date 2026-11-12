@@ -7,16 +7,20 @@ interface RoomieSprite2DProps {
   /** Alto en pantalla del sprite en px (el ancho sale del aspect). */
   size?: number;
   bob?: boolean;
-  /** Ocupado en una tarea: pose 'action' animada; libre: idle frontal real. */
+  /** Ocupado en una tarea: pose 'action' animada; libre: idle con gesto propio. */
   busy?: boolean;
   title?: string;
 }
 
 /**
  * Roomie en la escena 2D de gestión: sprite de DISEÑO DEFINIDO
- * (corrección de arte). Libre → el idle frontal extraído de su draft
- * v1.2; ocupado en una tarea → su animación 'action' ciclando, para que
- * se le vea TRABAJANDO en la escena.
+ * (corrección de arte). Ocupado en una tarea → su animación 'action'
+ * ciclando, para que se le vea TRABAJANDO en la escena.
+ *
+ * Segunda corrección: libre → idle ANIMADO ciclando sus 2 frames a
+ * ~0.9s (respiración/gesto propio de cada personaje: Natalia con sus
+ * audífonos, Samantha con el celular, Majo escribiendo…). Antes el
+ * libre era el draft extraído en pose T, estático.
  */
 export const RoomieSprite2D: React.FC<RoomieSprite2DProps> = ({
   characterId,
@@ -37,6 +41,7 @@ export const RoomieSprite2D: React.FC<RoomieSprite2DProps> = ({
     <DefinedSprite2D
       anim={bundle.idle_front}
       height={size}
+      cycleMs={900}
       className={bob ? 'sprite-bob' : undefined}
       title={title}
     />

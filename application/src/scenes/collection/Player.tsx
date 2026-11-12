@@ -16,6 +16,20 @@ import { useThrowStore } from '@/stores/throw.store';
 import { ITEMS_DATA } from '@/data/items/items.data';
 import { CHARACTERS_DATA } from '@/data/characters/characters.data';
 import { canThrowLoad } from '@/game/systems/carryLogic';
+import {
+  createSpring,
+  stepSpring,
+  carrySwayTarget,
+  carrySwayFrequency,
+  type SpringState,
+} from '@/game/systems/spring';
+
+/** Balanceo con física secundaria de la carga (lo comparte el roomie al
+ * hombro y los ítems en sus manos para que se muevan EN FASE). */
+export interface CarrySway {
+  y: number;
+  rotZ: number;
+}
 
 export interface RoomieNpcData {
   characterId: string;
@@ -64,6 +78,15 @@ export const Player: React.FC<PlayerProps> = ({
     direction: 'down',
     state: 'idle',
   });
+
+  // Física secundaria de la carga (2ª corrección de arte): dos resortes
+  // (altura y balanceo lateral) persiguen la señal del paso con DESFASE
+  // respecto al bob del portador; lo cargado rebota con retardo en vez
+  // de ir pegado, y al detenerse los resortes lo asientan a reposo.
+  const swayYSpring = useRef<SpringState>(createSpring(0));
+  const swayRotSpring = useRef<SpringState>(createSpring(0));
+  const swayPhaseRef = useRef(0);
+  const carrySwayRef = useRef<CarrySway>({ y: 0, rotZ: 0 });
 
   // Sprite animation states
   const [spriteDirection, setSpriteDirection] = useState<Direction>('down');
@@ -309,6 +332,20 @@ export const Player: React.FC<PlayerProps> = ({
       }
     }
 
+    // --- Física secundaria: avanzar los resortes del balanceo de carga ---
+    const swayState = spriteStateRef.current.state;
+    swayPhaseRef.current += clampedDelta * carrySwayFrequency(swayState);
+    const swayGoal = carrySwayTarget(swayState, swayPhaseRef.current);
+    stepSpring(swayYSpring.current, swayGoal.y, 90, 7, clampedDelta);
+    stepSpring(swayRotSpring.current, swayGoal.rotZ, 70, 6, clampedDelta);
+    carrySwayRef.current = {
+      y: swayYSpring.current.value,
+      rotZ: swayRotSpring.current.value,
+    };
+    // El grupo de las manos queda FIJO en Player a propósito: el
+    // balanceo lo aplica CarriedItems por dentro con el mismo swayRef
+    // que usa CarriedRoomie, y así roomie e ítems se mueven en fase.
+
     positionRef.current.copy(meshRef.current.position);
     clockTimeRef.current = _.clock.getElapsedTime();
 
@@ -366,31 +403,37 @@ export const Player: React.FC<PlayerProps> = ({
         APARTMENT_MAP.playerSpawn[2],
       ]}
     >
-      {/* 2.5D Animated Pixel Character Sprite (roomie seleccionado) */}
+      {/* 2.5D Animated Pixel Character Sprite (roomie seleccionado).
+          Con roomie al hombro, el portador usa las poses carrywalk_*
+          (brazos arriba sujetando) en vez de caminar con brazos abajo. */}
       <CharacterSprite
         characterId={selectedCharacterId}
         direction={spriteDirection}
         state={movementState}
+        carrying={!!carriedRoomieId}
       />
 
-      {/* Roomie cargado al hombro (Fase 2) */}
+      {/* Roomie cargado al hombro (Fase 2), con el balanceo por resortes
+          compartido para que no vaya rígido/pegado al portador. */}
       {carriedRoomieId && (
         <CarriedRoomie
           characterId={carriedRoomieId}
           direction={spriteDirection}
           movementState={movementState}
+          swayRef={carrySwayRef}
         />
       )}
 
       {/* Ítems cargados: si hay roomie al hombro, los lleva ÉL en las
-          manos (se montan en su posición); si no, los lleva el
-          protagonista como siempre. */}
+          manos (el grupo sigue el MISMO balanceo que el roomie); si no,
+          los lleva el protagonista con su propio resorte interno. */}
       {carriedRoomieId ? (
         <group position={CARRIED_ROOMIE_HANDS_OFFSET}>
           <CarriedItems
             heldItemIds={heldItemIds}
             direction={spriteDirection}
             movementState={movementState}
+            swayRef={carrySwayRef}
           />
         </group>
       ) : (
@@ -398,6 +441,7 @@ export const Player: React.FC<PlayerProps> = ({
           heldItemIds={heldItemIds}
           direction={spriteDirection}
           movementState={movementState}
+          swayRef={carrySwayRef}
         />
       )}
 

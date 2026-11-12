@@ -3,19 +3,30 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Direction, MovementState } from '@/types/sprite.types';
 import { getItemSpriteUrl, getItemScale } from '@/data/items/itemSprites.data';
+import type { CarrySway } from './Player';
 
 interface CarriedItemsProps {
   heldItemIds: string[];
   direction: Direction;
   movementState: MovementState;
+  /**
+   * Balanceo con física secundaria de Player (resortes): los ítems lo
+   * aplican en un grupo interno (rebote vertical + balanceo lateral)
+   * para no ir "pegados" al portador ni en sincronía rígida con su bob.
+   * Es el MISMO swayRef que recibe el roomie cargado: si los ítems van
+   * en las manos del roomie, se mueven en fase con él.
+   */
+  swayRef?: React.MutableRefObject<CarrySway>;
 }
 
 export const CarriedItems: React.FC<CarriedItemsProps> = ({
   heldItemIds,
   direction,
   movementState,
+  swayRef,
 }) => {
   const containerRef = useRef<THREE.Group>(null);
+  const swayGroupRef = useRef<THREE.Group>(null);
 
   // Pre-load and cache textures with NearestFilter for crisp pixel art
   const textures = useMemo(() => {
@@ -40,14 +51,16 @@ export const CarriedItems: React.FC<CarriedItemsProps> = ({
     // Face the isometric camera perfectly
     containerRef.current.quaternion.copy(camera.quaternion);
 
-    // Dynamic bobbing matching Ximena's footsteps
+    // Con swayRef, el rebote lo da el resorte (con retardo y
+    // asentamiento); sin él, se conserva el bob senoidal histórico.
     const time = clock.getElapsedTime();
-    const bob =
-      movementState === 'run'
+    const bob = swayRef
+      ? 0
+      : movementState === 'run'
         ? Math.sin(time * 14) * 0.06
         : movementState === 'walk'
-        ? Math.sin(time * 9) * 0.035
-        : Math.sin(time * 3) * 0.015;
+          ? Math.sin(time * 9) * 0.035
+          : Math.sin(time * 3) * 0.015;
 
     // Adjust position relative to player group based on facing direction
     let offsetX = 0;
@@ -79,47 +92,61 @@ export const CarriedItems: React.FC<CarriedItemsProps> = ({
     }
 
     containerRef.current.position.set(offsetX, offsetY, offsetZ);
+
+    // Física secundaria: el grupo interno hereda el balanceo del
+    // resorte (altura + inclinación lateral desfasadas del portador).
+    if (swayGroupRef.current) {
+      if (swayRef) {
+        swayGroupRef.current.position.y = swayRef.current.y;
+        swayGroupRef.current.rotation.z = swayRef.current.rotZ;
+      } else {
+        swayGroupRef.current.position.y = 0;
+        swayGroupRef.current.rotation.z = 0;
+      }
+    }
   });
 
   if (heldItemIds.length === 0) return null;
 
   return (
     <group ref={containerRef}>
-      {heldItemIds.map((itemId, idx) => {
-        const tex = textures.get(itemId);
-        if (!tex) return null;
+      <group ref={swayGroupRef}>
+        {heldItemIds.map((itemId, idx) => {
+          const tex = textures.get(itemId);
+          if (!tex) return null;
 
-        const baseScale = getItemScale(itemId);
-        // Slightly scale down carried item to fit neatly in hands
-        const scale: [number, number] = [baseScale[0] * 0.72, baseScale[1] * 0.72];
+          const baseScale = getItemScale(itemId);
+          // Slightly scale down carried item to fit neatly in hands
+          const scale: [number, number] = [baseScale[0] * 0.72, baseScale[1] * 0.72];
 
-        // If carrying 2 items, stack them neatly
-        const stackY = idx * 0.38;
-        const stackZ = idx * 0.04;
+          // If carrying 2 items, stack them neatly
+          const stackY = idx * 0.38;
+          const stackZ = idx * 0.04;
 
-        return (
-          <group key={`${itemId}-${idx}`} position={[0, stackY, stackZ]}>
-            <mesh castShadow>
-              <planeGeometry args={[scale[0], scale[1]]} />
-              <meshStandardMaterial
-                map={tex}
-                transparent
-                alphaTest={0.05}
-                roughness={0.6}
-                metalness={0.0}
-                side={THREE.DoubleSide}
-              />
-            </mesh>
-            {/* Small shadow beneath upper carried items in the stack */}
-            {idx > 0 && (
-              <mesh position={[0, -0.18, -0.01]}>
-                <planeGeometry args={[scale[0] * 0.6, 0.08]} />
-                <meshBasicMaterial color="#000000" transparent opacity={0.25} />
+          return (
+            <group key={`${itemId}-${idx}`} position={[0, stackY, stackZ]}>
+              <mesh castShadow>
+                <planeGeometry args={[scale[0], scale[1]]} />
+                <meshStandardMaterial
+                  map={tex}
+                  transparent
+                  alphaTest={0.05}
+                  roughness={0.6}
+                  metalness={0.0}
+                  side={THREE.DoubleSide}
+                />
               </mesh>
-            )}
-          </group>
-        );
-      })}
+              {/* Small shadow beneath upper carried items in the stack */}
+              {idx > 0 && (
+                <mesh position={[0, -0.18, -0.01]}>
+                  <planeGeometry args={[scale[0] * 0.6, 0.08]} />
+                  <meshBasicMaterial color="#000000" transparent opacity={0.25} />
+                </mesh>
+              )}
+            </group>
+          );
+        })}
+      </group>
     </group>
   );
 };
