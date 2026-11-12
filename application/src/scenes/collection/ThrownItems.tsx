@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { useThrowStore, ThrownItemData, LandedItem } from '@/stores/throw.store';
 import { getItemSpriteUrl, getItemScale } from '@/data/items/itemSprites.data';
 import { audio } from '@/services/audio.service';
+import { CharacterSprite } from './CharacterSprite';
 
 interface ImpactRing {
   id: string;
@@ -22,8 +23,12 @@ export const ThrownItems: React.FC = () => {
   // Unique item textures loaded with NearestFilter
   const allItemIds = useMemo(() => {
     const ids = new Set<string>();
-    activeThrows.forEach((t) => ids.add(t.itemId));
-    landedItems.forEach((l) => ids.add(l.itemId));
+    activeThrows.forEach((t) => {
+      if (t.kind === 'item') ids.add(t.itemId);
+    });
+    landedItems.forEach((l) => {
+      if (l.kind === 'item') ids.add(l.itemId);
+    });
     return Array.from(ids);
   }, [activeThrows, landedItems]);
 
@@ -44,7 +49,26 @@ export const ThrownItems: React.FC = () => {
   return (
     <group>
       {/* 1. Active flying projectiles in parabolic arc */}
-      {activeThrows.map((itemThrow) => (
+      {activeThrows.map((itemThrow) =>
+        itemThrow.kind === 'roomie' && itemThrow.characterId ? (
+          <FlyingRoomieProjectile
+            key={itemThrow.id}
+            data={itemThrow}
+            onHitFloor={() => {
+              onLanded(itemThrow.id);
+              audio.play('ITEM_DEPOSIT');
+              setImpactRings((prev) => [
+                ...prev,
+                {
+                  id: `ring_${itemThrow.id}_${Date.now()}`,
+                  x: itemThrow.targetX,
+                  z: itemThrow.targetZ,
+                  startTime: performance.now() / 1000,
+                },
+              ]);
+            }}
+          />
+        ) : (
         <FlyingProjectile
           key={itemThrow.id}
           data={itemThrow}
@@ -63,16 +87,21 @@ export const ThrownItems: React.FC = () => {
             ]);
           }}
         />
-      ))}
+        )
+      )}
 
-      {/* 2. Resting deposited items inside the elevator */}
-      {landedItems.map((landed) => (
-        <LandedItemMesh
-          key={landed.id}
-          data={landed}
-          texture={textures.get(landed.itemId)}
-        />
-      ))}
+      {/* 2. Resting deposited items inside the elevator + roomies entregados */}
+      {landedItems.map((landed) =>
+        landed.kind === 'roomie' && landed.characterId ? (
+          <LandedRoomieMesh key={landed.id} data={landed} />
+        ) : (
+          <LandedItemMesh
+            key={landed.id}
+            data={landed}
+            texture={textures.get(landed.itemId)}
+          />
+        )
+      )}
 
       {/* 3. Expanding landing impact rings */}
       <ImpactRings rings={impactRings} onRemoveRing={(id) => {
@@ -261,5 +290,94 @@ const SingleRing: React.FC<{ ring: ImpactRing; onDone: () => void }> = ({
       <ringGeometry args={[0.15, 0.3, 24]} />
       <meshBasicMaterial color="#38bdf8" transparent opacity={0.7} side={THREE.DoubleSide} />
     </mesh>
+  );
+};
+
+// -------------------------------------------------------------
+// Flying ROOMIE projectile (Fase 2): sale volando girando leve,
+// abrazando los ítems extra que llevaba en las manos.
+// -------------------------------------------------------------
+const FlyingRoomieProjectile: React.FC<{
+  data: ThrownItemData;
+  onHitFloor: () => void;
+}> = ({ data, onHitFloor }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const spinRef = useRef<THREE.Group>(null);
+  const shadowRef = useRef<THREE.Mesh>(null);
+  const hasHit = useRef(false);
+
+  useFrame(({ clock }) => {
+    if (!groupRef.current || hasHit.current) return;
+
+    const now = clock.getElapsedTime();
+    if (now < data.startTime) return;
+
+    const elapsed = now - data.startTime;
+    const t = Math.min(1.0, elapsed / data.duration);
+
+    const currentX = THREE.MathUtils.lerp(data.startX, data.targetX, t);
+    const currentZ = THREE.MathUtils.lerp(data.startZ, data.targetZ, t);
+    const linearY = THREE.MathUtils.lerp(data.startY, data.targetY, t);
+    const arcY = linearY + 4 * data.apexHeight * t * (1 - t);
+
+    groupRef.current.position.set(currentX, arcY, currentZ);
+
+    // Giro leve de voltereta (el sprite billboardea en Y por dentro)
+    if (spinRef.current) {
+      spinRef.current.rotation.z = t * Math.PI * 1.5;
+    }
+
+    if (shadowRef.current) {
+      shadowRef.current.position.set(currentX, 0.03, currentZ);
+      const heightAboveFloor = Math.max(0, arcY - 0.05);
+      const shadowFactor = Math.max(0.2, 1.0 - heightAboveFloor / 2.5);
+      shadowRef.current.scale.set(shadowFactor, shadowFactor, shadowFactor);
+      (shadowRef.current.material as THREE.MeshBasicMaterial).opacity = 0.45 * shadowFactor;
+    }
+
+    if (t >= 1.0 && !hasHit.current) {
+      hasHit.current = true;
+      onHitFloor();
+    }
+  });
+
+  if (!data.characterId) return null;
+
+  return (
+    <>
+      <group ref={groupRef}>
+        <group ref={spinRef}>
+          {/* Centrado en el cuerpo para que la voltereta se vea bien */}
+          <group position={[0, -0.9, 0]}>
+            <CharacterSprite
+              characterId={data.characterId}
+              direction="down"
+              state="run"
+            />
+          </group>
+        </group>
+      </group>
+
+      <mesh ref={shadowRef} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.3, 16]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.4} />
+      </mesh>
+    </>
+  );
+};
+
+// -------------------------------------------------------------
+// Roomie ya entregado, de pie en la zona segura (Fase 2)
+// -------------------------------------------------------------
+const LandedRoomieMesh: React.FC<{ data: LandedItem }> = ({ data }) => {
+  if (!data.characterId) return null;
+  return (
+    <group position={data.position}>
+      <CharacterSprite characterId={data.characterId} direction="down" state="idle" />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <circleGeometry args={[0.4, 16]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.35} />
+      </mesh>
+    </group>
   );
 };

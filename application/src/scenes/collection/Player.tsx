@@ -11,21 +11,36 @@ import { audio } from '@/services/audio.service';
 import { Direction, MovementState } from '@/types/sprite.types';
 import { CharacterSprite } from './CharacterSprite';
 import { CarriedItems } from './CarriedItems';
+import { CarriedRoomie, CARRIED_ROOMIE_HANDS_OFFSET } from './CarriedRoomie';
 import { useThrowStore } from '@/stores/throw.store';
+import { ITEMS_DATA } from '@/data/items/items.data';
+import { CHARACTERS_DATA } from '@/data/characters/characters.data';
+import { canThrowLoad } from '@/game/systems/carryLogic';
+
+export interface RoomieNpcData {
+  characterId: string;
+  position: [number, number, number];
+}
 
 interface PlayerProps {
   positionRef: React.MutableRefObject<THREE.Vector3>;
   spawnItems: { id: string; itemId: string; position: [number, number, number] }[];
-  onPickupItem: (spawnId: string, itemId: string) => void;
+  onPickupItem: (spawnId: string, itemId: string) => boolean;
+  roomieNpcs: RoomieNpcData[];
+  onPickupRoomie: (characterId: string) => boolean;
   onRoomChange?: (roomName: string, isRisk: boolean) => void;
-  onNearbyPrompt?: (itemName: string | null) => void;
+  onNearbyPrompt?: (prompt: string | null) => void;
   teleportTarget?: [number, number] | null;
 }
+
+const PICKUP_RADIUS = 1.8;
 
 export const Player: React.FC<PlayerProps> = ({
   positionRef,
   spawnItems,
   onPickupItem,
+  roomieNpcs,
+  onPickupRoomie,
   onRoomChange,
   onNearbyPrompt,
   teleportTarget,
@@ -33,9 +48,13 @@ export const Player: React.FC<PlayerProps> = ({
   const meshRef = useRef<THREE.Group>(null);
   const keysPressed = useRef<{ [key: string]: boolean }>({});
   const heldItemIds = useInventoryStore((s) => s.heldItemIds);
-  const dropInSafetyZone = useInventoryStore((s) => s.dropInSafetyZone);
+  const carriedRoomieId = useInventoryStore((s) => s.carriedRoomieId);
   const launchThrows = useThrowStore((s) => s.launchThrows);
+  const launchRoomieThrow = useThrowStore((s) => s.launchRoomieThrow);
   const modifyMeter = useRunStore((s) => s.modifyMeter);
+  /** Último tiempo del reloj 3D, para lanzar arrojos desde el teclado. */
+  const clockTimeRef = useRef(0);
+  const lastPromptRef = useRef<string | null>(null);
   const selectedCharacterId = useGameStore((s) => s.selectedCharacterId);
   // El movimiento se orienta con el yaw OBJETIVO: responde al instante
   // aunque el giro visual de la cámara todavía esté animándose.
@@ -119,13 +138,59 @@ export const Player: React.FC<PlayerProps> = ({
 
       if (e.code === 'Space') {
         const pPos = positionRef.current;
+
+        // La entidad recogible MÁS CERCANA gana: ítem o roomie.
+        let nearestItem: { id: string; itemId: string } | null = null;
+        let nearestItemDist = PICKUP_RADIUS;
         for (const item of spawnItems) {
           const dist = Math.hypot(item.position[0] - pPos.x, item.position[2] - pPos.z);
-          if (dist < 1.8) {
-            onPickupItem(item.id, item.itemId);
-            audio.play('ITEM_PICKUP');
-            break;
+          if (dist < nearestItemDist) {
+            nearestItemDist = dist;
+            nearestItem = item;
           }
+        }
+
+        let nearestRoomieId: string | null = null;
+        let nearestRoomieDist = PICKUP_RADIUS;
+        for (const npc of roomieNpcs) {
+          const dist = Math.hypot(npc.position[0] - pPos.x, npc.position[2] - pPos.z);
+          if (dist < nearestRoomieDist) {
+            nearestRoomieDist = dist;
+            nearestRoomieId = npc.characterId;
+          }
+        }
+
+        if (nearestRoomieId && (!nearestItem || nearestRoomieDist <= nearestItemDist)) {
+          if (onPickupRoomie(nearestRoomieId)) audio.play('ITEM_PICKUP');
+        } else if (nearestItem) {
+          if (onPickupItem(nearestItem.id, nearestItem.itemId)) audio.play('ITEM_PICKUP');
+        }
+      }
+
+      // Botón de ARROJAR (Fase 2): solo dentro de la zona segura.
+      if (e.code === 'KeyF') {
+        const pPos = positionRef.current;
+        const dz = APARTMENT_MAP.dropZone;
+        const distToDrop = Math.hypot(pPos.x - dz.center[0], pPos.z - dz.center[1]);
+        const thrown = useInventoryStore.getState().attemptThrow(distToDrop <= dz.radius);
+        if (thrown) {
+          if (thrown.roomieId) {
+            launchRoomieThrow(
+              thrown.roomieId,
+              [pPos.x, 0, pPos.z],
+              dz.center,
+              clockTimeRef.current
+            );
+          }
+          if (thrown.items.length > 0) {
+            launchThrows(
+              thrown.items,
+              [pPos.x, 0, pPos.z],
+              dz.center,
+              clockTimeRef.current + (thrown.roomieId ? 0.15 : 0)
+            );
+          }
+          if (thrown.roomieId || thrown.items.length > 0) audio.play('ITEM_THROW');
         }
       }
     };
@@ -158,7 +223,7 @@ export const Player: React.FC<PlayerProps> = ({
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [spawnItems, onPickupItem, positionRef]);
+  }, [spawnItems, onPickupItem, roomieNpcs, onPickupRoomie, launchThrows, launchRoomieThrow, positionRef]);
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
@@ -245,35 +310,50 @@ export const Player: React.FC<PlayerProps> = ({
     }
 
     positionRef.current.copy(meshRef.current.position);
+    clockTimeRef.current = _.clock.getElapsedTime();
 
-    // Nearby item prompt check
-    let closestItem: string | null = null;
-    let minDistance = 1.8;
-    for (const item of spawnItems) {
-      const dist = Math.hypot(item.position[0] - currentX, item.position[2] - currentZ);
-      if (dist < minDistance) {
-        minDistance = dist;
-        closestItem = item.itemId;
-      }
-    }
-    onNearbyPrompt?.(closestItem);
-
-    // Drop Zone deposit
+    // Prompt contextual (Fase 2): SIN depósito automático. Prioridad:
+    // 1) En la zona segura con carga → "F Arrojar"
+    // 2) Roomie cercano → "ESPACIO Cargar a {nombre}"
+    // 3) Ítem cercano → "ESPACIO Recoger {ítem}"
+    const inv = useInventoryStore.getState();
     const dz = APARTMENT_MAP.dropZone;
     const distToDrop = Math.hypot(currentX - dz.center[0], currentZ - dz.center[1]);
-    if (distToDrop <= dz.radius) {
-      if (heldItemIds.length > 0) {
-        const deposited = dropInSafetyZone();
-        if (deposited.length > 0) {
-          launchThrows(
-            deposited,
-            [currentX, 0, currentZ],
-            dz.center,
-            _.clock.getElapsedTime()
-          );
-          audio.play('ITEM_THROW');
+    const inDropZone = distToDrop <= dz.radius;
+
+    let prompt: string | null = null;
+    if (canThrowLoad(inv, inDropZone)) {
+      prompt = inv.carriedRoomieId
+        ? `F Arrojar a ${CHARACTERS_DATA[inv.carriedRoomieId]?.name ?? 'roomie'} y la carga`
+        : 'F Arrojar la carga';
+    } else {
+      let nearestRoomie: { name: string; dist: number } | null = null;
+      for (const npc of roomieNpcs) {
+        const dist = Math.hypot(npc.position[0] - currentX, npc.position[2] - currentZ);
+        if (dist < PICKUP_RADIUS && (!nearestRoomie || dist < nearestRoomie.dist)) {
+          nearestRoomie = {
+            name: CHARACTERS_DATA[npc.characterId]?.name ?? npc.characterId,
+            dist,
+          };
         }
       }
+      let nearestItem: { name: string; dist: number } | null = null;
+      for (const item of spawnItems) {
+        const dist = Math.hypot(item.position[0] - currentX, item.position[2] - currentZ);
+        if (dist < PICKUP_RADIUS && (!nearestItem || dist < nearestItem.dist)) {
+          nearestItem = { name: ITEMS_DATA[item.itemId]?.name ?? item.itemId, dist };
+        }
+      }
+      if (nearestRoomie && (!nearestItem || nearestRoomie.dist <= nearestItem.dist)) {
+        prompt = `ESPACIO Cargar a ${nearestRoomie.name}`;
+      } else if (nearestItem) {
+        prompt = `ESPACIO Recoger ${nearestItem.name}`;
+      }
+    }
+
+    if (prompt !== lastPromptRef.current) {
+      lastPromptRef.current = prompt;
+      onNearbyPrompt?.(prompt);
     }
   });
 
@@ -293,12 +373,33 @@ export const Player: React.FC<PlayerProps> = ({
         state={movementState}
       />
 
-      {/* Carried items visual representation */}
-      <CarriedItems
-        heldItemIds={heldItemIds}
-        direction={spriteDirection}
-        movementState={movementState}
-      />
+      {/* Roomie cargado al hombro (Fase 2) */}
+      {carriedRoomieId && (
+        <CarriedRoomie
+          characterId={carriedRoomieId}
+          direction={spriteDirection}
+          movementState={movementState}
+        />
+      )}
+
+      {/* Ítems cargados: si hay roomie al hombro, los lleva ÉL en las
+          manos (se montan en su posición); si no, los lleva el
+          protagonista como siempre. */}
+      {carriedRoomieId ? (
+        <group position={CARRIED_ROOMIE_HANDS_OFFSET}>
+          <CarriedItems
+            heldItemIds={heldItemIds}
+            direction={spriteDirection}
+            movementState={movementState}
+          />
+        </group>
+      ) : (
+        <CarriedItems
+          heldItemIds={heldItemIds}
+          direction={spriteDirection}
+          movementState={movementState}
+        />
+      )}
 
       {/* Floor Shadow */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
