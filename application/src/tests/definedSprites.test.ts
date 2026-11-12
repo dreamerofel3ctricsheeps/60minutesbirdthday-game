@@ -8,36 +8,44 @@ import { DEFINED_BUNDLES } from '@/data/characters/definedSprites.generated';
 import type { DefinedAnimationKey } from '@/types/sprite.types';
 
 /**
- * Integridad de los bundles de sprites con DISEÑO DEFINIDO (corrección
- * de arte): reemplaza a las suites del grid de placeholders 64x64.
- * Cada roomie debe traer las 11 animaciones, con los conteos de poses
- * que se generaron desde los drafts v1.2 y todos los frames dentro de
- * los límites de su imagen.
+ * Integridad de los bundles de sprites con DISEÑO DEFINIDO (correcciones
+ * de arte 1 y 2): reemplaza a las suites del grid de placeholders 64x64.
+ * Cada roomie debe traer las 14 animaciones, con los conteos de poses
+ * generados desde los drafts v1.2 y todos los frames dentro de los
+ * límites de su imagen.
+ *
+ * Segunda corrección: idle propio de 2 frames (relajado, con gesto de
+ * su personalidad — no pose T), carrera REAL front/back (4 frames con
+ * alternancia de piernas, ya no derivada de walk) y carrywalk_*
+ * (caminar cargando a otro al hombro, brazos arriba).
  */
 const ROOMIE_IDS = ['natalia', 'saulo', 'itzel', 'fatima', 'samantha', 'majo', 'alan'];
 
 const EXPECTED_FRAMES: Partial<Record<DefinedAnimationKey, number>> = {
-  idle_front: 1,
-  idle_back: 1,
-  idle_right: 1,
+  idle_front: 2, // strip idle propio (2ª corrección): relajado, NO pose T
+  idle_back: 1, // derivado de walk_back[0]
+  idle_right: 1, // derivado de walk_right[0]
   walk_front: 4,
   walk_back: 3,
   walk_right: 3,
-  run_front: 4, // derivado de walk_front
-  run_back: 3, // derivado de walk_back
-  run_right: 4,
+  run_front: 4, // strip REAL de carrera (2ª corrección, ya no deriva de walk)
+  run_back: 4, // strip REAL de carrera (2ª corrección, ya no deriva de walk)
+  run_right: 4, // regenerado con alternancia de piernas clara
   carried: 2,
   action: 2,
+  carrywalk_front: 4,
+  carrywalk_back: 3,
+  carrywalk_right: 3,
 };
 
-describe('Bundles de sprites definidos (corrección de arte)', () => {
+describe('Bundles de sprites definidos (correcciones de arte)', () => {
   it('hay bundle para los 7 roomies', () => {
     ROOMIE_IDS.forEach((id) => {
       expect(DEFINED_BUNDLES[id], id).toBeDefined();
     });
   });
 
-  it('cada roomie tiene las 11 animaciones requeridas con imagen y frames', () => {
+  it('cada roomie tiene las 14 animaciones requeridas con imagen y frames', () => {
     ROOMIE_IDS.forEach((id) => {
       const bundle = getDefinedSpriteBundle(id);
       DEFINED_ANIMATION_KEYS.forEach((key) => {
@@ -80,13 +88,17 @@ describe('Bundles de sprites definidos (corrección de arte)', () => {
     });
   });
 
-  it('las derivaciones comparten imagen con su animación origen', () => {
+  it('idle y carrera tienen imagen PROPIA (ya no derivan del draft en T ni de walk)', () => {
     ROOMIE_IDS.forEach((id) => {
       const bundle = getDefinedSpriteBundle(id);
-      expect(bundle.run_front.image).toBe(bundle.walk_front.image);
-      expect(bundle.run_back.image).toBe(bundle.walk_back.image);
-      expect(bundle.idle_back.image).toBe(bundle.walk_back.image);
-      expect(bundle.idle_right.image).toBe(bundle.walk_right.image);
+      // 2ª corrección: se acabaron las derivaciones run=walk (deslizamiento)
+      // y el idle en pose T extraído de la hoja de diseño.
+      expect(bundle.run_front.image, `${id}.run_front`).not.toBe(bundle.walk_front.image);
+      expect(bundle.run_back.image, `${id}.run_back`).not.toBe(bundle.walk_back.image);
+      expect(bundle.idle_front.image, `${id}.idle_front`).not.toBe(bundle.walk_front.image);
+      // Las derivaciones laterales de idle sí se mantienen.
+      expect(bundle.idle_back.image, `${id}.idle_back`).toBe(bundle.walk_back.image);
+      expect(bundle.idle_right.image, `${id}.idle_right`).toBe(bundle.walk_right.image);
     });
   });
 

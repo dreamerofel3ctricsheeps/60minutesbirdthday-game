@@ -103,11 +103,26 @@ describe('Mapeo dirección+estado → animación (bundles definidos)', () => {
     expect(resolveDefinedAnimation('idle', 'left')).toEqual({ animKey: 'idle_right', flipH: true });
     expect(resolveDefinedAnimation('walk', 'left')).toEqual({ animKey: 'walk_right', flipH: true });
     expect(resolveDefinedAnimation('walk', 'up')).toEqual({ animKey: 'walk_back', flipH: false });
-    // Correr hacia la cámara NO reutiliza el set de Ximena: run_front
-    // deriva de walk_front (ver definedSprites.data.ts).
+    // Correr usa los strips REALES de carrera (2ª corrección de arte):
+    // run_front/run_back ya NO derivan de walk (eso deslizaba los pies).
     expect(resolveDefinedAnimation('run', 'down')).toEqual({ animKey: 'run_front', flipH: false });
     expect(resolveDefinedAnimation('run', 'right')).toEqual({ animKey: 'run_right', flipH: false });
     expect(resolveDefinedAnimation('run', 'left')).toEqual({ animKey: 'run_right', flipH: true });
     expect(resolveDefinedAnimation('run', 'up')).toEqual({ animKey: 'run_back', flipH: false });
+  });
+
+  it('cargando a un roomie: familia carrywalk_* (brazos arriba) en todo estado', () => {
+    // El portador no camina "normal": idle/walk/run cargando resuelven a
+    // las poses de carga según dirección (izquierda espeja la derecha).
+    expect(resolveDefinedAnimation('idle', 'down', true)).toEqual({ animKey: 'carrywalk_front', flipH: false });
+    expect(resolveDefinedAnimation('idle', 'up', true)).toEqual({ animKey: 'carrywalk_back', flipH: false });
+    expect(resolveDefinedAnimation('walk', 'down', true)).toEqual({ animKey: 'carrywalk_front', flipH: false });
+    expect(resolveDefinedAnimation('walk', 'up', true)).toEqual({ animKey: 'carrywalk_back', flipH: false });
+    expect(resolveDefinedAnimation('walk', 'right', true)).toEqual({ animKey: 'carrywalk_right', flipH: false });
+    expect(resolveDefinedAnimation('walk', 'left', true)).toEqual({ animKey: 'carrywalk_right', flipH: true });
+    expect(resolveDefinedAnimation('run', 'down', true)).toEqual({ animKey: 'carrywalk_front', flipH: false });
+    expect(resolveDefinedAnimation('run', 'left', true)).toEqual({ animKey: 'carrywalk_right', flipH: true });
+    // Sin carga (default), el mapeo de locomoción no cambia.
+    expect(resolveDefinedAnimation('walk', 'down')).toEqual({ animKey: 'walk_front', flipH: false });
   });
 });
