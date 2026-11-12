@@ -1,8 +1,14 @@
 import { create } from 'zustand';
 
+export type ThrownKind = 'item' | 'roomie';
+
 export interface ThrownItemData {
   id: string;
+  /** Para kind='item' es el itemId; para kind='roomie' es el characterId. */
   itemId: string;
+  kind: ThrownKind;
+  /** Solo cuando kind='roomie': el characterId del roomie arrojado. */
+  characterId?: string;
   startX: number;
   startY: number;
   startZ: number;
@@ -17,6 +23,8 @@ export interface ThrownItemData {
 export interface LandedItem {
   id: string;
   itemId: string;
+  kind: ThrownKind;
+  characterId?: string;
   position: [number, number, number];
 }
 
@@ -25,6 +33,13 @@ interface ThrowState {
   landedItems: LandedItem[];
   launchThrows: (
     items: string[],
+    playerPos: [number, number, number],
+    dropCenter: [number, number],
+    timeNow: number
+  ) => void;
+  /** Arrojo del roomie cargado (Fase 2): vuela abrazando sus ítems. */
+  launchRoomieThrow: (
+    characterId: string,
     playerPos: [number, number, number],
     dropCenter: [number, number],
     timeNow: number
@@ -55,6 +70,7 @@ export const useThrowStore = create<ThrowState>((set, get) => ({
       return {
         id: `throw_${throwSeq}_${itemId}`,
         itemId,
+        kind: 'item' as const,
         startX: playerPos[0],
         startY: playerPos[1] + 0.85,
         startZ: playerPos[2],
@@ -70,6 +86,27 @@ export const useThrowStore = create<ThrowState>((set, get) => ({
     set({ activeThrows: [...get().activeThrows, ...newThrows] });
   },
 
+  launchRoomieThrow: (characterId, playerPos, dropCenter, timeNow) => {
+    throwSeq += 1;
+    // El roomie aterriza cerca del centro de la zona segura, de pie.
+    const roomieThrow: ThrownItemData = {
+      id: `throw_${throwSeq}_roomie_${characterId}`,
+      itemId: characterId,
+      kind: 'roomie',
+      characterId,
+      startX: playerPos[0],
+      startY: playerPos[1] + 1.1,
+      startZ: playerPos[2],
+      targetX: dropCenter[0] + 0.3,
+      targetY: 0,
+      targetZ: dropCenter[1] + 0.2,
+      startTime: timeNow,
+      duration: 0.85,
+      apexHeight: 1.9,
+    };
+    set({ activeThrows: [...get().activeThrows, roomieThrow] });
+  },
+
   onLanded: (throwId) => {
     const { activeThrows, landedItems } = get();
     const landing = activeThrows.find((t) => t.id === throwId);
@@ -78,6 +115,8 @@ export const useThrowStore = create<ThrowState>((set, get) => ({
     const newLanded: LandedItem = {
       id: `landed_${landing.id}`,
       itemId: landing.itemId,
+      kind: landing.kind,
+      characterId: landing.characterId,
       position: [landing.targetX, landing.targetY, landing.targetZ],
     };
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { GameRun, GameResources, GameMeters, CharacterRunState } from '@/types/game.types';
 import { CHARACTERS_DATA } from '@/data/characters/characters.data';
+import { CARRY_CAPACITY } from '@/game/core/balance';
 
 interface RunState {
   currentRun: GameRun | null;
@@ -11,6 +12,11 @@ interface RunState {
   setCharacterAvailability: (characterId: string, available: boolean, busyUntil?: number) => void;
   updateCollectionTime: (remainingSeconds: number) => void;
   setEnding: (endingId: string) => void;
+  /**
+   * Al pasar a gestión (Fase 2): quedan disponibles SOLO el protagonista
+   * seleccionado y los roomies recolectados en la recolección.
+   */
+  applyCollectionParty: (protagonistId: string, collectedRoomieIds: string[]) => void;
 }
 
 const INITIAL_RESOURCES: GameResources = {
@@ -46,7 +52,7 @@ export const useRunStore = create<RunState>((set, get) => ({
         remainingTime: 60,
         collectedItems: [],
         heldItems: [],
-        maxCarryingSlots: 2, // 2 items standard capacity
+        maxCarryingSlots: CARRY_CAPACITY, // 5 espacios (balance Fase 2)
       },
       resources: { ...INITIAL_RESOURCES },
       meters: { ...INITIAL_METERS },
@@ -165,5 +171,18 @@ export const useRunStore = create<RunState>((set, get) => ({
         ending: endingId,
       },
     });
+  },
+
+  applyCollectionParty: (protagonistId, collectedRoomieIds) => {
+    const { currentRun } = get();
+    if (!currentRun) return;
+
+    const party = new Set([protagonistId, ...collectedRoomieIds]);
+    const characters = currentRun.characters.map((c) => ({
+      ...c,
+      available: party.has(c.characterId),
+    }));
+
+    set({ currentRun: { ...currentRun, characters } });
   },
 }));
