@@ -55,3 +55,27 @@ body {
 .pulse-soft {
   animation: pulse-soft 1.1s ease-in-out infinite;
 }
+
+/* --- Fase 4: historia POR ACCIONES en la escena 2D --- */
+
+/* El gato de Jose cruza la escena agazapado, de izquierda a derecha. */
+@keyframes cat-prowl-cross {
+  0% { left: -8%; opacity: 0; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { left: 96%; opacity: 0; }
+}
+.scene-cat-prowl {
+  animation: cat-prowl-cross 3.4s linear forwards;
+}
+
+/* Jose asoma agazapado en la puerta/ventana, espía y se retira. */
+@keyframes jose-peek-in {
+  0% { transform: translateY(46%); opacity: 0; }
+  18% { transform: translateY(0); opacity: 1; }
+  78% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(46%); opacity: 0; }
+}
+.scene-jose-peek {
+  animation: jose-peek-in 3.4s ease-in-out forwards;
+}

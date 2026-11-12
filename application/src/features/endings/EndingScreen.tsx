@@ -3,6 +3,9 @@ import { useRunStore } from '@/stores/run.store';
 import { useGameStore } from '@/stores/game.store';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { ENDINGS_DATA } from '@/data/endings/endings.data';
+import { JOSE_SPRITES } from '@/data/characters/villainSprites.data';
+import { XIMENA_SLEEP } from '@/data/characters/definedSprites.data';
+import { DefinedSprite2D } from '@/components/common/DefinedSprite2D';
 import { Trophy, Skull, RotateCcw } from 'lucide-react';
 
 export const EndingScreen: React.FC = () => {
@@ -47,6 +50,19 @@ export const EndingScreen: React.FC = () => {
             {ending.title}
           </h1>
         </div>
+
+        {endingId === 'RIVAL_PARTY_DEFEAT' && (
+          <div className="flex items-end justify-center gap-6">
+            <div className="flex flex-col items-center gap-1">
+              <DefinedSprite2D anim={JOSE_SPRITES.celebrate} height={120} cycleMs={430} />
+              <span className="text-[11px] font-bold text-red-300">Jose, triunfal 😼</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <DefinedSprite2D anim={XIMENA_SLEEP} height={96} frameIndex={2} />
+              <span className="text-[11px] font-bold text-violet-300">Ximena, recién despertada</span>
+            </div>
+          </div>
+        )}
 
         <p className="text-sm text-slate-300 leading-relaxed bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
           {ending.description}

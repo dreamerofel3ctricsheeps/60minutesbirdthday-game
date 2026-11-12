@@ -6,6 +6,11 @@ import { StoryBeat } from '@/types/game.types';
  * a dormir y hay que tener la fiesta lista a las 00:00 sin despertarla.
  * Los beats se disparan al LLEGAR a su hora; `eventId` referencia un
  * evento de managementEvents.data que se lanza al cerrar el diálogo.
+ *
+ * FASE 4 — LEGADO: la historia ya NO se muestra con estos beats ni con
+ * un modal narrativo: vive en el grupo de WhatsApp (whatsapp.data.ts) y
+ * en las acciones de la escena 2D. Este archivo queda como referencia
+ * de contenido y por compatibilidad con tests de la Fase 3.
  */
 export const STORY_BEATS: StoryBeat[] = [
   {

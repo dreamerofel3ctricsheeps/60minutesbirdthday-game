@@ -9,6 +9,14 @@ import { ManagementEventDefinition } from '@/types/game.types';
  * Contexto: Ximena está DORMIDA. Nada de WhatsApp ni visitas: los
  * disturbios son físicos (gato, paloma, alarma, timbre) y el daño
  * siempre se mide en el medidor DESPERTAR.
+ *
+ * FASE 4: el pool aleatorio (RANDOM_EVENT_POOL) ya NO se sortea: cada
+ * hora trae su minijuego por rotación/showdown (hourMinigames.ts) y los
+ * eventos 'choice' de aquí (timbre, vecino, apagón, sonámbula) se
+ * resuelven como RESPUESTAS en el grupo de WhatsApp (whatsapp.data.ts
+ * los referencia por id). Los eventos minigame-qte/timing de disturbio
+ * quedaron absorbidos por la rotación; sus definiciones quedan como
+ * referencia de contenido.
  */
 export const MANAGEMENT_EVENTS: Record<string, ManagementEventDefinition> = {
   disturbio_gato: {
