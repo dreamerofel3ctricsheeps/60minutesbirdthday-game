@@ -77,12 +77,16 @@ describe('Item Sprites and Carrying/Throwing System Tests', () => {
     inv.pickupItem('smartphone');
     expect(useInventoryStore.getState().heldItemIds).toEqual(['smartphone']);
 
-    // Pick up second 1-slot item: neighbor_key
+    // Pick up second 1-slot item: neighbor_key (2 espacios usados)
     inv.pickupItem('neighbor_key');
     expect(useInventoryStore.getState().heldItemIds).toEqual(['smartphone', 'neighbor_key']);
 
-    // Capacity reached (2 slots) -> cannot pick up third
-    const full = inv.pickupItem('fast_food_box');
+    // Capacidad Fase 2 = 5 espacios: fast food (1) y torta (2) completan los 5
+    expect(inv.pickupItem('fast_food_box')).toBe(true);
+    expect(inv.pickupItem('birthday_cake')).toBe(true);
+
+    // Capacity reached (5 slots) -> cannot pick up anything else
+    const full = inv.pickupItem('tape_roll');
     expect(full).toBe(false);
   });
 });

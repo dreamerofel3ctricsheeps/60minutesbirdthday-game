@@ -14,19 +14,26 @@ describe('Base Architecture Systems Test', () => {
   it('correctly tracks items picked up and respects carry capacity', () => {
     const inv = useInventoryStore.getState();
 
+    // Capacidad Fase 2: 5 espacios en total.
     // Smartphone takes 1 slot
     const pickedPhone = inv.pickupItem('smartphone');
     expect(pickedPhone).toBe(true);
 
-    // Birthday cake takes 2 slots -> should exceed standard 2 slots
+    // Birthday cake takes 2 slots -> 1 + 2 = 3 of 5, fits
     const pickedCake = inv.pickupItem('birthday_cake');
-    expect(pickedCake).toBe(false);
+    expect(pickedCake).toBe(true);
+
+    // Toolbox takes 2 more -> exactly 5 of 5, fits
+    expect(inv.pickupItem('toolbox')).toBe(true);
+
+    // Box of beers (2 slots) would exceed the 5-space capacity
+    expect(inv.pickupItem('box_of_beers')).toBe(false);
 
     // Drop to safety zone
     const deposited = inv.dropInSafetyZone();
     expect(deposited).toContain('smartphone');
     expect(useInventoryStore.getState().heldItemIds.length).toBe(0);
-    expect(useInventoryStore.getState().depositedItemIds.length).toBe(1);
+    expect(useInventoryStore.getState().depositedItemIds.length).toBe(3);
   });
 
   it('correctly resolves skill checks based on character attributes', () => {
