@@ -43,6 +43,7 @@ export const WHATSAPP_THREADS: WhatsappThread[] = [
   {
     id: 'whatsapp_intro_7',
     hour: 7,
+    sceneAction: 'jose-peek',
     messages: [
       {
         fromId: 'protagonist',
@@ -58,8 +59,20 @@ export const WHATSAPP_THREADS: WhatsappThread[] = [
         text: 'Operación sorpresa ACTIVADA 🎂 Yo documento todo (en silencio)',
       },
       {
+        fromId: 'samantha',
+        text: 'PERO OJO 📱 Acabo de ver a JOSE en la tienda comprando globos y una torta… a las 7 AM. SOSPECHOSAMENTE temprano',
+      },
+      {
+        fromId: 'majo',
+        text: '¿¿Jose?? ¿El vecino Jose? Ese no madruga ni por su propio cumpleaños',
+      },
+      {
         fromId: 'protagonist',
-        text: 'Meta clara: Preparación 70 antes de medianoche y el Despertar LEJOS de 100. Si se despierta, se acabó la sorpresa',
+        text: 'Trama algo. Y su gato está en nuestro balcón desde temprano, mirando fijo hacia el cuarto de Xime… ese gato es su ESPÍA 🐱',
+      },
+      {
+        fromId: 'protagonist',
+        text: 'Plan: Preparación 70 antes de medianoche, Despertar LEJOS de 100… y Jose y su gato NO llegan al cuarto. Cada hora habrá que ganarles en su propio juego 🤫',
       },
     ],
   },
@@ -117,17 +130,17 @@ export const WHATSAPP_THREADS: WhatsappThread[] = [
     ],
   },
   {
-    id: 'whatsapp_gato_jose_13',
+    id: 'whatsapp_gato_escala_13',
     hour: 13,
     sceneAction: 'cat-prowl',
     messages: [
       {
         fromId: 'protagonist',
-        text: 'Hay un GATO en la cocina 🐱 Entró por la ventana y va directo al cuarto de Xime',
+        text: 'El gato de Jose OTRA VEZ en la cocina 🐱 Pero ahora viene distinto…',
       },
       {
         fromId: 'majo',
-        text: 'Esperen. Ese no es un gato cualquiera: es EL GATO DE JOSE, ¡lo conozco!',
+        text: 'Se puso ATREVIDO: ya no espía desde el balcón, está cruzando la casa como si fuera suya',
       },
       {
         fromId: 'amigo',
@@ -135,30 +148,30 @@ export const WHATSAPP_THREADS: WhatsappThread[] = [
       },
       {
         fromId: 'protagonist',
-        text: 'Si salta sobre Xime, la despierta. Esto no es casualidad…',
+        text: 'Escaló el plan: el gato ahora se equivoca menos y va más decidido al cuarto. Si salta sobre Xime, la despierta',
       },
     ],
   },
   {
-    id: 'whatsapp_jose_revela_15',
+    id: 'whatsapp_jose_escala_15',
     hour: 15,
     sceneAction: 'jose-peek',
     messages: [
       {
         fromId: 'amigo',
-        text: 'Chicos… acabo de ver a JOSE espiando desde el balcón de enfrente',
+        text: 'Chicos… Jose ya ni se esconde: está en el balcón de enfrente con binoculares y una corneta',
       },
       {
         fromId: 'natalia',
-        text: 'Confirmo: binoculares, una corneta y cara de villano de película 📡',
+        text: 'Confirmo: y tiene SU torta, SUS globos y una lista que dice "EL MEJOR CUMPLEAÑOS" 📡',
       },
       {
         fromId: 'saulo',
-        text: '¡TIENE UN PLAN RIVAL! Quiere despertarla y llevarla a SU cumpleaños sorpresa',
+        text: '¡REDOBLÓ SU PLAN RIVAL! Desde ahora corre y atrapa más rápido: quiere despertarla y llevarla a SU cumpleaños sorpresa',
       },
       {
         fromId: 'protagonist',
-        text: 'Y el gato era su avanzada. No nos va a robar el cumpleaños de Xime 😤',
+        text: 'Pues que venga. No nos va a robar el cumpleaños de Xime 😤',
       },
     ],
   },

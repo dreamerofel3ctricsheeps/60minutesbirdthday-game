@@ -25,6 +25,7 @@ import {
 } from '@/game/systems/managementSystem';
 import { getHourMinigame, HOUR_MINIGAME_EFFECTS } from '@/game/systems/hourMinigames';
 import { MinigameOutcome } from '@/game/systems/minigames';
+import { DuelResult, duelResultToOutcome } from '@/game/systems/duelSystem';
 import {
   getVillains,
   isVillainActive,
@@ -32,10 +33,12 @@ import {
 } from '@/game/systems/villainSystem';
 import { EventSystem } from '@/game/systems/eventSystem';
 import { EndingSystem } from '@/game/systems/endingSystem';
-import {
-  HourMinigameModal,
-  MinigameParticipant,
-} from '@/features/events/components/HourMinigameModal';
+import { CatchDuel } from './duels/CatchDuel';
+import { CarpetsDuel } from './duels/CarpetsDuel';
+import { RaceDuel } from './duels/RaceDuel';
+import { ShowerDuel } from './duels/ShowerDuel';
+import { DUEL_RESULT_LABEL } from './duels/duelShared';
+import { getDefinedSpriteBundle } from '@/data/characters/definedSprites.data';
 import { WhatsappPanel, ChatDisplayMessage } from './WhatsappPanel';
 import { RoomieSprite2D } from './RoomieSprite2D';
 import { XimenaBed } from './XimenaBed';
@@ -58,16 +61,18 @@ import {
 } from 'lucide-react';
 
 /**
- * Fase de gestión (Fase 4): juego de gestión en la ESCENA 2D con tres
- * capas vivas:
+ * Fase de gestión (Fase 4 + mejora): juego de gestión en la ESCENA 2D
+ * con tres capas vivas:
  *  - HISTORIA POR WHATSAPP: los beats llegan como mensajes al grupo de
  *    los amigos (WhatsappPanel) y las decisiones se responden ahí.
- *  - MINIJUEGO POR HORA: "Resolver hora" abre el minijuego de la hora
- *    (rotación Mario Party por zonas; showdown si un villano espera en
- *    la puerta) y su resultado resuelve la hora (hourResolution).
- *  - VILLANOS EN ESCENA: Jose y su gato avanzan por las zonas del mapa
- *    hacia el cuarto de Ximena; se les ve en su zona y el vigía (tarea
- *    'vigia') puede retrasarlos.
+ *  - DUELO POR HORA: "Resolver hora" convierte la zona que toca en la
+ *    ARENA de un duelo estilo Mario Party contra Jose o su gato,
+ *    jugado DENTRO de la escena (nada de modal): cocina, sala, puerta
+ *    o baño según la rotación; showdown si un villano espera en la
+ *    puerta. El resultado resuelve la hora (hourResolution).
+ *  - VILLANOS EN ESCENA: Jose y su gato, activos desde las 7:00,
+ *    avanzan por las zonas del mapa hacia el cuarto de Ximena; se les
+ *    ve en su zona y el vigía (tarea 'vigia') puede retrasarlos.
  */
 export const ManagementView: React.FC = () => {
   const currentRun = useRunStore((s) => s.currentRun);
@@ -86,8 +91,14 @@ export const ManagementView: React.FC = () => {
     eventId: string;
     choices: EventChoice[];
   } | null>(null);
-  const [activeMinigame, setActiveMinigame] = useState<ReturnType<typeof getHourMinigame> | null>(null);
-  const [minigameInterceptor, setMinigameInterceptor] = useState<MinigameParticipant | null>(null);
+  const [activeDuel, setActiveDuel] = useState<ReturnType<typeof getHourMinigame> | null>(null);
+  const [duelPlayer, setDuelPlayer] = useState<{ id: string; name: string } | null>(null);
+  const [duelBanner, setDuelBanner] = useState<{
+    result: DuelResult;
+    lines: string[];
+    villain: VillainId;
+    playerId: string;
+  } | null>(null);
   const [sceneAction, setSceneAction] = useState<{ kind: SceneAction; nonce: number } | null>(null);
   const [stirSignal, setStirSignal] = useState(0);
   const [log, setLog] = useState<string[]>([
@@ -137,7 +148,7 @@ export const ManagementView: React.FC = () => {
   // Entrega de hilos, uno a uno: si un hilo trae decisión, se espera la
   // respuesta del jugador antes de entregar el siguiente.
   useEffect(() => {
-    if (pendingChoice || activeMinigame || pendingThreads.length === 0) return;
+    if (pendingChoice || activeDuel || duelBanner || pendingThreads.length === 0) return;
     const [thread, ...rest] = pendingThreads;
     setPendingThreads(rest);
     setChatMessages((msgs) => [
@@ -156,14 +167,14 @@ export const ManagementView: React.FC = () => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingThreads, pendingChoice, activeMinigame]);
+  }, [pendingThreads, pendingChoice, activeDuel, duelBanner]);
 
   if (!currentRun) return null;
   const run = currentRun;
   const party = run.characters.filter((c) => c.available);
   const partyIds = party.map((c) => c.characterId);
   const protagonist = CHARACTERS_DATA[protagonistId] ?? CHARACTERS_DATA.natalia;
-  const flowBusy = !!pendingChoice || !!activeMinigame || pendingThreads.length > 0;
+  const flowBusy = !!pendingChoice || !!activeDuel || !!duelBanner || pendingThreads.length > 0;
   const nextPlan = getHourMinigame(run);
 
   const villains = getVillains(run);
@@ -244,17 +255,41 @@ export const ManagementView: React.FC = () => {
     checkEnding();
   };
 
-  // --- Resolver la hora: se juega el minijuego de la hora ---
+  // --- Resolver la hora: se juega el DUELO de la hora EN LA ESCENA ---
   const handleResolveHour = () => {
     if (flowBusy || run.hour >= MANAGEMENT_END_HOUR) return;
     setSelectedRoomieId(null);
     const picked = pickInterceptor(run, stealthMap);
-    setMinigameInterceptor(
-      picked
-        ? { character: CHARACTERS_DATA[picked.characterId], isGuardian: picked.isGuardian }
-        : null
-    );
-    setActiveMinigame(getHourMinigame(run));
+    const plan = getHourMinigame(run);
+    // Quién compite por el jugador: en la puerta y el baño defiende el
+    // interceptor (vigía o el libre más sigiloso); en cocina y sala, el
+    // protagonista anfitrión. Sin interceptor, juega el protagonista.
+    const defender =
+      (plan.zone === 'puerta' || plan.zone === 'bano') && picked
+        ? CHARACTERS_DATA[picked.characterId]
+        : protagonist;
+    setDuelPlayer({ id: defender.id, name: defender.name });
+    setActiveDuel(plan);
+  };
+
+  /** Fin del duelo: se convierte a outcome, se resuelve la hora y se
+   *  muestra el cartel de resultado DENTRO de la escena. */
+  const handleDuelFinish = (result: DuelResult) => {
+    const outcome = duelResultToOutcome(result);
+    const lines = handleMinigameOutcome(outcome);
+    setDuelBanner({
+      result,
+      lines,
+      villain: activeDuel?.villain ?? 'jose',
+      playerId: duelPlayer?.id ?? protagonist.id,
+    });
+    setActiveDuel(null);
+    if (result === 'loss') stir();
+  };
+
+  const handleDuelBannerClose = () => {
+    setDuelBanner(null);
+    checkEnding();
   };
 
   const handleMinigameOutcome = (outcome: MinigameOutcome): string[] => {
@@ -273,11 +308,11 @@ export const ManagementView: React.FC = () => {
       pushLog(line);
     });
 
-    if (result.plan.kind !== 'showdown') {
+    if (!result.plan.showdown) {
       const fx = HOUR_MINIGAME_EFFECTS[outcome];
       if (fx.preparacion !== 0 || fx.despertar !== 0) {
         lines.push(
-          `🎲 Minijuego de la hora: ${fx.preparacion !== 0 ? `+${fx.preparacion} Preparación` : ''}${
+          `🎲 Duelo de la hora: ${fx.preparacion !== 0 ? `+${fx.preparacion} Preparación` : ''}${
             fx.preparacion !== 0 && fx.despertar !== 0 ? ' · ' : ''
           }${fx.despertar !== 0 ? `${fx.despertar > 0 ? '+' : ''}${fx.despertar} Despertar` : ''}.`
         );
@@ -290,11 +325,6 @@ export const ManagementView: React.FC = () => {
 
     if (result.catBreach || outcome === 'fail') stir();
     return lines;
-  };
-
-  const handleMinigameClose = () => {
-    setActiveMinigame(null);
-    checkEnding();
   };
 
   const handleAssign = (taskId: string) => {
@@ -406,8 +436,8 @@ export const ManagementView: React.FC = () => {
   };
 
   const highlightFor = (section: 'cocina' | 'sala' | 'cuarto'): string => {
-    if (!activeMinigame) return '';
-    const z = activeMinigame.zone;
+    if (!activeDuel) return '';
+    const z = activeDuel.zone;
     const hit =
       (section === 'cocina' && z === 'cocina') ||
       (section === 'sala' && z === 'sala') ||
@@ -580,6 +610,133 @@ export const ManagementView: React.FC = () => {
                 <DefinedSprite2D anim={JOSE_SPRITES.sneak} height={78} />
               </div>
             )}
+
+            {/* ═══ CAPA DE DUELO: el minijuego de la hora se juega AQUÍ,
+                dentro de la escena, sobre la zona que toca ═══ */}
+            {activeDuel && duelPlayer && (
+              <>
+                {/* Cartel breve de "¡A jugar!" */}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+                  <div
+                    className={`px-4 py-1.5 rounded-2xl border-2 font-black text-sm sm:text-base text-center shadow-2xl ${
+                      activeDuel.showdown
+                        ? 'bg-red-950/95 border-red-400 text-red-100'
+                        : 'bg-slate-900/95 border-amber-400 text-amber-100'
+                    }`}
+                  >
+                    {activeDuel.showdown ? '⚔️ ¡SHOWDOWN! ' : '🎲 ¡A jugar! '}
+                    {activeDuel.title}
+                    <span className="block text-[10px] font-bold text-slate-300">
+                      {duelPlayer.name} vs {activeDuel.villain === 'jose' ? '😼 Jose' : '🐱 el gato de Jose'}
+                      {' · '}inspirado en {activeDuel.inspiration}
+                    </span>
+                  </div>
+                </div>
+
+                {activeDuel.kind === 'catch' && (
+                  <div className="absolute left-0 top-0 bottom-0 z-40 bg-gradient-to-b from-orange-950/95 via-[#2a1810]/95 to-[#1a110b]/95 border-r-4 border-amber-500/70" style={{ width: '25%' }}>
+                    <CatchDuel
+                      playerId={duelPlayer.id}
+                      playerName={duelPlayer.name}
+                      villain="jose"
+                      hour={run.hour}
+                      onStir={stir}
+                      onFinish={handleDuelFinish}
+                    />
+                  </div>
+                )}
+                {activeDuel.kind === 'carpets' && (
+                  <div className="absolute top-0 bottom-0 z-40 bg-gradient-to-b from-indigo-950/95 via-[#1a1e38]/95 to-[#12142a]/95 border-x-4 border-indigo-400/60" style={{ left: '25%', width: '41.6667%' }}>
+                    <CarpetsDuel
+                      playerId={duelPlayer.id}
+                      playerName={duelPlayer.name}
+                      villain="gato"
+                      hour={run.hour}
+                      onStir={stir}
+                      onFinish={handleDuelFinish}
+                    />
+                  </div>
+                )}
+                {activeDuel.kind === 'race' && (
+                  <div className="absolute bottom-0 z-40 bg-gradient-to-b from-slate-900/95 via-[#241a2e]/95 to-[#170f1f]/95 border-t-4 border-red-400/60" style={{ left: '25%', width: '75%', height: '47%' }}>
+                    <RaceDuel
+                      playerId={duelPlayer.id}
+                      playerName={duelPlayer.name}
+                      villain={activeDuel.villain}
+                      hour={run.hour}
+                      showdown={activeDuel.showdown}
+                      onStir={stir}
+                      onFinish={handleDuelFinish}
+                    />
+                  </div>
+                )}
+                {activeDuel.kind === 'shower' && (
+                  <div className="absolute right-0 top-0 z-40 bg-gradient-to-b from-cyan-950/95 via-[#14232e]/95 to-[#0e1a20]/95 border-l-4 border-cyan-400/60" style={{ width: '33.3333%', height: '62%' }}>
+                    <ShowerDuel
+                      playerId={duelPlayer.id}
+                      playerName={duelPlayer.name}
+                      villain="gato"
+                      hour={run.hour}
+                      onStir={stir}
+                      onFinish={handleDuelFinish}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Cartel de resultado del duelo, DENTRO de la escena: el
+                ganador celebra en sprite antes de seguir. */}
+            {duelBanner && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+                <div className="pointer-events-auto bg-slate-900/95 border-2 border-amber-400/70 rounded-2xl px-5 py-4 shadow-2xl flex flex-col items-center gap-2 max-w-md mx-3 animate-in fade-in zoom-in-95">
+                  <div className="flex items-end gap-3">
+                    {duelBanner.result === 'win' && (
+                      <DefinedSprite2D
+                        anim={getDefinedSpriteBundle(duelBanner.playerId).action}
+                        height={64}
+                        cycleMs={320}
+                      />
+                    )}
+                    {duelBanner.result === 'loss' &&
+                      (duelBanner.villain === 'jose' ? (
+                        <DefinedSprite2D anim={JOSE_SPRITES.celebrate} height={68} cycleMs={400} />
+                      ) : (
+                        <DefinedSprite2D anim={CAT_SPRITES.pounce} height={50} cycleMs={300} />
+                      ))}
+                    <div
+                      className={`text-xl font-black ${
+                        duelBanner.result === 'win'
+                          ? 'text-emerald-300'
+                          : duelBanner.result === 'draw'
+                            ? 'text-amber-300'
+                            : 'text-red-300'
+                      }`}
+                    >
+                      {DUEL_RESULT_LABEL[duelBanner.result]}
+                    </div>
+                    {duelBanner.result === 'win' && (
+                      <DefinedSprite2D
+                        anim={getDefinedSpriteBundle(duelBanner.playerId).action}
+                        height={64}
+                        cycleMs={320}
+                      />
+                    )}
+                  </div>
+                  <div className="text-sm text-slate-200 flex flex-col gap-1 w-full">
+                    {duelBanner.lines.map((line, i) => (
+                      <span key={i}>{line}</span>
+                    ))}
+                  </div>
+                  <button
+                    onClick={handleDuelBannerClose}
+                    className="mt-1 px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-xl"
+                  >
+                    Continuar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Panel de asignación de tareas */}
@@ -657,17 +814,6 @@ export const ManagementView: React.FC = () => {
         </div>
       </div>
 
-      {/* Minijuego de la hora (o showdown) */}
-      {activeMinigame && (
-        <HourMinigameModal
-          plan={activeMinigame}
-          interceptor={minigameInterceptor}
-          protagonist={protagonist}
-          onStir={stir}
-          onOutcome={handleMinigameOutcome}
-          onClose={handleMinigameClose}
-        />
-      )}
     </div>
   );
 };
