@@ -43,16 +43,17 @@ describe('Base Architecture Systems Test', () => {
     expect(check.outcome).toBe('CRITICAL_SUCCESS');
   });
 
-  it('evaluates ending defeat conditions when suspicion reaches 100', () => {
+  it('evaluates ending defeat conditions when despertar reaches 100', () => {
+    // Fase 3: la sospecha se redefinió como DESPERTAR (Ximena dormida).
     const runStore = useRunStore.getState();
-    runStore.modifyMeter('suspicion', 100);
+    runStore.modifyMeter('despertar', 100);
 
     const currentRun = useRunStore.getState().currentRun;
     expect(currentRun).toBeDefined();
     if (currentRun) {
       const ending = EndingSystem.evaluateEnding(currentRun);
       expect(ending).toBeDefined();
-      expect(ending?.id).toBe('SUSPICION_DEFEAT');
+      expect(ending?.id).toBe('WAKE_DEFEAT');
     }
   });
 });
