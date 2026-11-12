@@ -16,6 +16,10 @@ interface QteMinigameProps {
   interceptorName?: string;
   /** Id del interceptor: se le muestra en pose 'action' de su bundle definido. */
   interceptorId?: string;
+  /** Fase 4 (showdown): largo de la secuencia; por defecto el estándar. */
+  sequenceLength?: number;
+  /** Fase 4 (showdown): multiplicador del tiempo por tecla (<1 = más exigente). */
+  timePerKeyScale?: number;
   /** Se llama en cada fallo: Ximena se revuelve en la escena 2D. */
   onStir?: () => void;
   onFinish: (outcome: MinigameOutcome) => void;
@@ -30,14 +34,17 @@ export const QteMinigame: React.FC<QteMinigameProps> = ({
   interceptorStealth,
   interceptorName,
   interceptorId,
+  sequenceLength,
+  timePerKeyScale = 1,
   onStir,
   onFinish,
 }) => {
   const sequence = useMemo(
-    () => generateQteSequence(Math.random, interceptorStealth !== null),
-    [interceptorStealth]
+    () => generateQteSequence(Math.random, interceptorStealth !== null, sequenceLength),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [interceptorStealth, sequenceLength]
   );
-  const timePerKey = qteTimePerKeyMs(interceptorStealth);
+  const timePerKey = Math.round(qteTimePerKeyMs(interceptorStealth) * timePerKeyScale);
 
   const [index, setIndex] = useState(0);
   const [fraction, setFraction] = useState(1);
