@@ -8,8 +8,8 @@ import { AnimationKey } from '@/types/sprite.types';
  * sistema genérico de roomies, cubierto en cameraMath.test.ts).
  * Estos tests conservan la verificación de integridad de su data.
  * Los antiguos tests que REPLICABAN a mano el mapeo de CharacterSprite
- * se retiraron: el mapeo real ahora vive en resolveRoomieAnimation()
- * y se prueba directamente en cameraMath.test.ts.
+ * se retiraron: el mapeo real ahora vive en resolveDefinedAnimation()
+ * (bundles de diseño definido) y se prueba en cameraMath.test.ts.
  */
 describe('Ximena Sprite Sheet (NPC, data histórica intacta)', () => {
   const expectedAnimations: AnimationKey[] = [

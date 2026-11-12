@@ -6,11 +6,7 @@ import {
   angleDelta,
   dampAngle,
 } from '@/game/systems/cameraMath';
-import {
-  ROOMIE_MANIFEST,
-  resolveRoomieAnimation,
-} from '@/data/characters/roomieSprites.data';
-import { RoomieAnimationKey } from '@/types/sprite.types';
+import { resolveDefinedAnimation } from '@/data/characters/definedSprites.data';
 
 const EPS = 1e-9;
 const close = (a: number, b: number) => Math.abs(a - b) < 1e-6;
@@ -95,45 +91,23 @@ describe('cameraMath: suavizado del giro', () => {
   });
 });
 
-describe('Sistema genérico de sprites de roomies (grid 64x64)', () => {
-  const keys = Object.keys(ROOMIE_MANIFEST) as RoomieAnimationKey[];
-
-  it('el manifest se calcula desde el grid: celdas de 64x64 dentro de 512x192', () => {
-    expect(keys.length).toBe(9);
-    keys.forEach((key) => {
-      const entry = ROOMIE_MANIFEST[key];
-      expect(entry.width).toBe(512);
-      expect(entry.height).toBe(192);
-      entry.frames.forEach((frame) => {
-        expect(frame.width).toBe(64);
-        expect(frame.height).toBe(64);
-        expect(frame.x % 64).toBe(0);
-        expect(frame.y % 64).toBe(0);
-        expect(frame.x + frame.width).toBeLessThanOrEqual(512);
-        expect(frame.y + frame.height).toBeLessThanOrEqual(192);
-      });
-    });
-  });
-
-  it('conteo de frames por animación: idle 1, walk 3, run 4', () => {
-    expect(ROOMIE_MANIFEST.idle_front.frames.length).toBe(1);
-    expect(ROOMIE_MANIFEST.walk_front.frames.length).toBe(3);
-    expect(ROOMIE_MANIFEST.run_front.frames.length).toBe(4);
-    expect(ROOMIE_MANIFEST.run_back.frames.length).toBe(4);
-    expect(ROOMIE_MANIFEST.run_right.frames.length).toBe(4);
-  });
-
+describe('Mapeo dirección+estado → animación (bundles definidos)', () => {
+  // La integridad de los bundles (animaciones presentes, frames dentro de
+  // su imagen, conteos) vive en definedSprites.test.ts. Aquí queda el
+  // mapeo de locomoción, con el mismo contrato que tenía el grid de
+  // placeholders retirado en la corrección de arte.
   it('mapea dirección+estado a animación usando la función real (incluye run_front)', () => {
-    expect(resolveRoomieAnimation('idle', 'down')).toEqual({ animKey: 'idle_front', flipH: false });
-    expect(resolveRoomieAnimation('idle', 'up')).toEqual({ animKey: 'idle_back', flipH: false });
-    expect(resolveRoomieAnimation('idle', 'right')).toEqual({ animKey: 'idle_right', flipH: false });
-    expect(resolveRoomieAnimation('idle', 'left')).toEqual({ animKey: 'idle_right', flipH: true });
-    expect(resolveRoomieAnimation('walk', 'left')).toEqual({ animKey: 'walk_right', flipH: true });
-    expect(resolveRoomieAnimation('walk', 'up')).toEqual({ animKey: 'walk_back', flipH: false });
-    // Cambio de Fase 1: correr hacia la cámara ya NO reutiliza walk_front
-    expect(resolveRoomieAnimation('run', 'down')).toEqual({ animKey: 'run_front', flipH: false });
-    expect(resolveRoomieAnimation('run', 'right')).toEqual({ animKey: 'run_right', flipH: false });
-    expect(resolveRoomieAnimation('run', 'left')).toEqual({ animKey: 'run_right', flipH: true });
-    expect(resolveRoomieAnimation('run', 'up')).toEqual({ animKey: 'run_back', flipH: false });
+    expect(resolveDefinedAnimation('idle', 'down')).toEqual({ animKey: 'idle_front', flipH: false });
+    expect(resolveDefinedAnimation('idle', 'up')).toEqual({ animKey: 'idle_back', flipH: false });
+    expect(resolveDefinedAnimation('idle', 'right')).toEqual({ animKey: 'idle_right', flipH: false });
+    expect(resolveDefinedAnimation('idle', 'left')).toEqual({ animKey: 'idle_right', flipH: true });
+    expect(resolveDefinedAnimation('walk', 'left')).toEqual({ animKey: 'walk_right', flipH: true });
+    expect(resolveDefinedAnimation('walk', 'up')).toEqual({ animKey: 'walk_back', flipH: false });
+    // Correr hacia la cámara NO reutiliza el set de Ximena: run_front
+    // deriva de walk_front (ver definedSprites.data.ts).
+    expect(resolveDefinedAnimation('run', 'down')).toEqual({ animKey: 'run_front', flipH: false });
+    expect(resolveDefinedAnimation('run', 'right')).toEqual({ animKey: 'run_right', flipH: false });
+    expect(resolveDefinedAnimation('run', 'left')).toEqual({ animKey: 'run_right', flipH: true });
+    expect(resolveDefinedAnimation('run', 'up')).toEqual({ animKey: 'run_back', flipH: false });
   });
 });
