@@ -14,8 +14,9 @@ import {
   pickShowdownVillain,
 } from '@/game/systems/villainSystem';
 import {
-  VILLAIN_CAT_INTRO_HOUR,
-  VILLAIN_JOSE_INTRO_HOUR,
+  CAT_ESCALATION_HOUR,
+  JOSE_ESCALATION_HOUR,
+  MANAGEMENT_START_HOUR,
 } from '@/game/core/balance';
 
 function makeRun(overrides: Partial<GameRun> = {}): GameRun {
@@ -42,7 +43,7 @@ function makeRun(overrides: Partial<GameRun> = {}): GameRun {
   };
 }
 
-describe('Villanos (Fase 4): zonas y estado', () => {
+describe('Villanos: zonas y estado', () => {
   it('las zonas van de exterior a cuarto, con puerta en 3 y cuarto en 4', () => {
     expect(VILLAIN_ZONES).toEqual(['exterior', 'cocina', 'sala', 'puerta', 'cuarto']);
     expect(DOOR_ZONE_INDEX).toBe(3);
@@ -67,67 +68,60 @@ describe('Villanos (Fase 4): zonas y estado', () => {
   });
 });
 
-describe('Villanos (Fase 4): activación derivada de la hora', () => {
-  it('el gato está inactivo a las 12 y activo a las 13', () => {
-    expect(VILLAIN_CAT_INTRO_HOUR).toBe(13);
-    expect(isVillainActive('gato', 12)).toBe(false);
-    expect(isVillainActive('gato', 13)).toBe(true);
-    expect(isVillainActive('gato', 20)).toBe(true);
+describe('Villanos (mejora Fase 4): amenaza DESDE EL INICIO', () => {
+  it('ambos villanos están activos desde las 7:00', () => {
+    expect(MANAGEMENT_START_HOUR).toBe(7);
+    expect(isVillainActive('gato', 7)).toBe(true);
+    expect(isVillainActive('jose', 7)).toBe(true);
+    expect(isVillainActive('gato', 12)).toBe(true);
+    expect(isVillainActive('jose', 20)).toBe(true);
+    expect(isVillainActive('gato', 6)).toBe(false);
   });
 
-  it('Jose está inactivo a las 14 y activo a las 15', () => {
-    expect(VILLAIN_JOSE_INTRO_HOUR).toBe(15);
-    expect(isVillainActive('jose', 14)).toBe(false);
-    expect(isVillainActive('jose', 15)).toBe(true);
-    expect(isVillainActive('jose', 24)).toBe(true);
+  it('las 13:00 y las 15:00 ya no son apariciones: son las escaladas de IA', () => {
+    expect(CAT_ESCALATION_HOUR).toBe(13);
+    expect(JOSE_ESCALATION_HOUR).toBe(15);
   });
 });
 
-describe('Villanos (Fase 4): ritmo de avance dueToAdvance', () => {
-  it('el gato avanza cada hora desde su aparición', () => {
-    expect(dueToAdvance('gato', 12, 13)).toBe(false); // aún no apareció en la hora previa
+describe('Villanos (mejora Fase 4): ritmo de avance dueToAdvance', () => {
+  it('el gato avanza cada hora desde las 7:00', () => {
+    expect(dueToAdvance('gato', 6, 7)).toBe(false); // aún no empieza la gestión
+    expect(dueToAdvance('gato', 7, 8)).toBe(true);
     expect(dueToAdvance('gato', 13, 14)).toBe(true);
-    expect(dueToAdvance('gato', 14, 15)).toBe(true);
     expect(dueToAdvance('gato', 20, 21)).toBe(true);
   });
 
-  it('Jose avanza solo cada 2 horas desde su intro: 15→16 no, 16→17 sí', () => {
-    expect(dueToAdvance('jose', 14, 15)).toBe(false); // aún no apareció
-    expect(dueToAdvance('jose', 15, 16)).toBe(false);
+  it('Jose avanza cada 2 horas desde las 7:00: res 7→8 no, 8→9 sí, 9→10 no, 10→11 sí', () => {
+    expect(dueToAdvance('jose', 6, 7)).toBe(false);
+    expect(dueToAdvance('jose', 7, 8)).toBe(false);
+    expect(dueToAdvance('jose', 8, 9)).toBe(true);
+    expect(dueToAdvance('jose', 9, 10)).toBe(false);
+    expect(dueToAdvance('jose', 10, 11)).toBe(true);
     expect(dueToAdvance('jose', 16, 17)).toBe(true);
     expect(dueToAdvance('jose', 17, 18)).toBe(false);
-    expect(dueToAdvance('jose', 18, 19)).toBe(true);
   });
 });
 
-describe('Villanos (Fase 4): pickShowdownVillain', () => {
+describe('Villanos: pickShowdownVillain', () => {
   it('null si nadie está en la puerta', () => {
     const run = makeRun({ hour: 18, villains: { joseZone: 2, gatoZone: 1 } });
     expect(pickShowdownVillain(run)).toBeNull();
-    expect(pickShowdownVillain(makeRun({ hour: 18 }))).toBeNull();
+    expect(pickShowdownVillain(makeRun({ hour: 7 }))).toBeNull();
   });
 
-  it('el gato en la puerta → showdown contra el gato', () => {
-    const run = makeRun({ hour: 16, villains: { joseZone: 0, gatoZone: 3 } });
+  it('el gato en la puerta → showdown contra el gato, incluso temprano', () => {
+    const run = makeRun({ hour: 10, villains: { joseZone: 0, gatoZone: 3 } });
     expect(pickShowdownVillain(run)).toBe('gato');
   });
 
   it('Jose en la puerta → showdown contra Jose', () => {
-    const run = makeRun({ hour: 18, villains: { joseZone: 3, gatoZone: 1 } });
+    const run = makeRun({ hour: 13, villains: { joseZone: 3, gatoZone: 1 } });
     expect(pickShowdownVillain(run)).toBe('jose');
   });
 
   it('ambos en la puerta → prioridad Jose', () => {
     const run = makeRun({ hour: 18, villains: { joseZone: 3, gatoZone: 3 } });
     expect(pickShowdownVillain(run)).toBe('jose');
-  });
-
-  it('un villano INACTIVO en la puerta no dispara showdown', () => {
-    // A las 14 Jose aún no apareció, aunque su zona diga puerta.
-    const run = makeRun({ hour: 14, villains: { joseZone: 3, gatoZone: 3 } });
-    expect(pickShowdownVillain(run)).toBe('gato');
-    // A las 12 ninguno apareció.
-    const early = makeRun({ hour: 12, villains: { joseZone: 3, gatoZone: 3 } });
-    expect(pickShowdownVillain(early)).toBeNull();
   });
 });
