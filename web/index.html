@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1 Minuto para la Fiesta</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="brand">🎂 <b>1 MINUTO</b> PARA LA FIESTA</div>
+    <div class="meter" id="m-sus"><label>Sospecha</label><div class="bar"><div class="fill"></div></div><span class="val">0%</span></div>
+    <div class="meter" id="m-sleep"><label>Sueño de Ximena</label><div class="segs"><i class="seg"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i></div><span class="val">—</span></div>
+    <div class="meter" id="m-noise"><label>Ruido</label><div class="bar"><div class="fill"></div></div><span class="val">0%</span></div>
+    <div class="meter" id="m-q"><label>Fiesta</label><div class="bar"><div class="fill"></div></div><span class="val">☆☆☆☆</span></div>
+  </header>
+  <main>
+    <section id="stagewrap">
+      <div id="stage">
+        <canvas id="cv" width="1280" height="720"></canvas>
+        <div id="overlay"></div>
+      </div>
+      <div id="inv" aria-label="Inventario"></div>
+    </section>
+    <aside id="phone">
+      <div class="ptop"><span class="dot"></span>Roomies 🏠<small>7 participantes</small></div>
+      <div id="msgs"></div>
+      <div id="actions"></div>
+    </aside>
+  </main>
+</div>
+<script src="js/sprites.js"></script>
+<script src="js/data.js"></script>
+<script src="js/world.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
