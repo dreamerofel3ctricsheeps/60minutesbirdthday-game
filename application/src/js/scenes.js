@@ -857,5 +857,364 @@
     }
   }
 
-  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, buildDecoSet };
+  // =========================================================
+  // 11. APAGÓN: ¿FANTASMA O DISFRAZ? — minijuego de observación
+  // (diseño de Jose, 2026-11-14: diseno-minijuego-apagon.md).
+  // Reemplaza la resolución del evento del apagón (antes: mandar a un
+  // roomie a arreglarlo con una tirada de dados). No es un duelo contra
+  // un jefe: el "jefe" nominal del evento es Pollito por sus falsas
+  // alarmas. 10 apariciones en la sala a oscuras; en cada una el jugador
+  // OBSERVA las pistas y responde:
+  //   ← 👻 FANTASMA · → 🎭 PERSONA DISFRAZADA · ↑ 😴 PERSONAJE ESPECIAL
+  // La opción ESPECIAL solo aparece (tras 1,2 s de observación) en las
+  // apariciones especiales: Ximena sonámbula y Pollito con una sábana.
+  // PISTAS — fantasma real: flota sobre el piso, NO proyecta sombra,
+  // brilla de forma antinatural, atraviesa la maceta, se desvanece un
+  // instante y reaparece más alto. Persona disfrazada: sprite definido
+  // bajo una sábana dibujada por código (con agujeros para los ojos a la
+  // altura de los ojos detectados de su frame idle): se le ven los
+  // ZAPATOS bajo el dobladillo, tiene sombra, tropieza con la maceta,
+  // se le cae un accesorio y en fase 2+ la sábana RESPIRA. Ximena: su
+  // frame de sonámbula (act), murmura de su guardia. Pollito: el gato
+  // real bajo una sábana mini, le quedan las patas y la cola fuera y
+  // maúlla. En fase 1 las pistas traen caption de aprendizaje (💡).
+  // ACIERTO: +16% de REPARACIÓN ELÉCTRICA (+12% en especiales) con
+  // justificación rotando (fusible, batería, tablero…). ERROR: sube el
+  // RIESGO de despertar (medidor propio 0–10), hace ruido y en fase 2+
+  // puede dañar la decoración. Sin respuesta a tiempo: la figura se
+  // esfuma (error leve, ambigüedad intacta). NUNCA hay game over.
+  // FASES: 1 (rondas 1–3, ventana 6 s, pistas claras con caption) ·
+  // 2 (4–7, 5 s, pistas tardías, especiales) · 3 (8–10, 3,5 s, luz que
+  // parpadea y una sombra pasajera de ambiente que NO se responde).
+  // Si la reparación llega a 100% la luz vuelve, pero se juegan las 10
+  // apariciones igual: hay que asegurar la casa entera.
+  // SALIDAS (done): { win, blackoutFixed, score, repair, awakeRisk,
+  // ghostsConfirmed, fakeGhostsFound, pollitoEvent, sleepwalkerFound,
+  // decoDamage, correct, errors } — el mapeo a los efectos reales del
+  // evento vive en MG.apagon.resolve (game.js). Duración ≈ 2 min.
+  // REGLA DEL GATO: Pollito se dibuja con Sp.catAnim('idle') frontal,
+  // jamás espejado; su sábana tampoco.
+  // =========================================================
+  const BO_STAGES = [{ x: 468, z: 118 }, { x: 655, z: 102 }, { x: 850, z: 130 }, { x: 540, z: 230 }, { x: 782, z: 220 }];
+  const BO_WINDOWS = [6, 5, 3.5];
+  const BO_ENTER = 1.15, BO_REVEAL = 1.7;
+  const BO_REPAIR = ['Recuperaron un fusible 🔌', 'Apareció una batería 🔋', 'Ubicaron el tablero eléctrico ⚡', 'Salió la linterna buena 🔦', 'Recuperaron el destornillador perdido 🪛', 'Falsa alarma descartada: tiempo ganado ⏱'];
+  const BO_DROPS = ['control', 'flores', 'velas', 'ovillo', 'bolsas'];
+  let boGhostCv = null; const boSheetCache = {}; let boMiniSheetCv = null;
+  function ghostCanvasArt() {
+    if (boGhostCv) return boGhostCv;
+    const cv = document.createElement('canvas'); cv.width = 96; cv.height = 112; cv._scale = 0.42;
+    const x = cv.getContext('2d');
+    const grd = x.createLinearGradient(0, 6, 0, 106);
+    grd.addColorStop(0, 'rgba(235,242,255,.96)'); grd.addColorStop(1, 'rgba(168,186,255,.88)');
+    x.beginPath();
+    x.moveTo(16, 104);
+    x.quadraticCurveTo(10, 40, 30, 18); x.quadraticCurveTo(48, 2, 66, 18); x.quadraticCurveTo(86, 40, 80, 104);
+    for (let i = 1; i <= 4; i++) { const px = 80 - i * 16; x.quadraticCurveTo(px + 8, 96 + (i % 2 ? 10 : 2), px, 104); }
+    x.closePath(); x.fillStyle = grd; x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.85)'; x.lineWidth = 2; x.stroke();
+    x.fillStyle = '#2c2a4a'; // ojos huecos y boca "o": terror de utilería, más tierno que miedo
+    x.beginPath(); x.ellipse(36, 46, 5.5, 8, 0, 0, 6.3); x.fill();
+    x.beginPath(); x.ellipse(60, 46, 5.5, 8, 0, 0, 6.3); x.fill();
+    x.beginPath(); x.ellipse(48, 62, 4, 5.5, 0, 0, 6.3); x.fill();
+    x.fillStyle = 'rgba(240,140,190,.4)';
+    x.beginPath(); x.ellipse(26, 60, 6, 4, 0, 0, 6.3); x.fill();
+    x.beginPath(); x.ellipse(70, 60, 6, 4, 0, 0, 6.3); x.fill();
+    boGhostCv = cv; return cv;
+  }
+  // Sábana de disfraz para un personaje: cúpula que sigue su silueta con
+  // el dobladillo SOBRE los zapatos (los zapatos visibles son LA pista) y
+  // agujeros para los ojos recortados a la altura de los ojos detectados
+  // del frame idle de su hoja definida.
+  function sheetCanvasFor(id) {
+    if (boSheetCache[id]) return boSheetCache[id];
+    const meta = Sp.META.chars[id];
+    const cv = document.createElement('canvas'); cv.width = meta.fw; cv.height = meta.fh; cv._scale = meta.scale;
+    const x = cv.getContext('2d');
+    const cx = meta.fw / 2, top = Math.max(4, meta.top - 10), hem = meta.base - 14, wT = meta.fw * 0.26, wB = meta.fw * 0.40;
+    x.beginPath();
+    x.moveTo(cx - wB, hem);
+    x.quadraticCurveTo(cx - wB - 4, top + (hem - top) * 0.45, cx - wT, top + 16);
+    x.quadraticCurveTo(cx - wT, top - 6, cx, top - 6);
+    x.quadraticCurveTo(cx + wT, top - 6, cx + wT, top + 16);
+    x.quadraticCurveTo(cx + wB + 4, top + (hem - top) * 0.45, cx + wB, hem);
+    for (let i = 1; i <= 6; i++) { const px = cx + wB - (i * 2 * wB) / 6, mx = cx + wB - ((i - 0.5) * 2 * wB) / 6; x.quadraticCurveTo(mx, hem + (i % 2 ? 7 : -2), px, hem); }
+    x.closePath(); x.fillStyle = '#f3efe3'; x.fill();
+    x.strokeStyle = 'rgba(110,100,80,.5)'; x.lineWidth = 2; x.stroke();
+    x.fillStyle = 'rgba(120,110,90,.18)'; x.fillRect(cx - wB * 0.7, hem - 16, wB * 1.4, 10); // desgaste inferior
+    const es = (meta.eyes || {})[meta.anims.idle[0]];
+    if (es && es.length) {
+      x.globalCompositeOperation = 'destination-out';
+      es.forEach((e) => { x.beginPath(); x.ellipse(e.x, e.y + 3, Math.max(5, e.r * 0.72), Math.max(4, e.r * 0.55), 0, 0, 6.3); x.fill(); });
+      x.globalCompositeOperation = 'source-over';
+    }
+    boSheetCache[id] = cv; return cv;
+  }
+  function miniSheetCanvas() {
+    if (boMiniSheetCv) return boMiniSheetCv;
+    const cv = document.createElement('canvas'); cv.width = 150; cv.height = 150; cv._scale = 0.25;
+    const x = cv.getContext('2d');
+    x.beginPath();
+    x.moveTo(28, 112);
+    x.quadraticCurveTo(24, 52, 48, 30); x.quadraticCurveTo(75, 12, 102, 30); x.quadraticCurveTo(126, 52, 122, 112);
+    for (let i = 1; i <= 4; i++) { const px = 122 - i * 23.5; x.quadraticCurveTo(px + 11.75, 112 + (i % 2 ? 6 : -2), px, 112); }
+    x.closePath(); x.fillStyle = '#f3efe3'; x.fill();
+    x.strokeStyle = 'rgba(110,100,80,.5)'; x.lineWidth = 2.5; x.stroke();
+    boMiniSheetCv = cv; return cv;
+  }
+  function buildBoLineup() {
+    const chars = shuffle(['natalia', 'itzel', 'alan', 'majo', 'saulo', 'fatima', 'samantha', 'jose'].slice());
+    const kinds = shuffle(['ghost', 'ghost', 'ghost', 'ghost', 'person', 'person', 'person', 'person']);
+    const lineup = kinds.map((k, i) => (k === 'person' ? { kind: 'person', charId: chars[i] } : { kind: 'ghost' }));
+    if (lineup[0].kind !== 'person') { const j = lineup.findIndex((f) => f.kind === 'person'); [lineup[0], lineup[j]] = [lineup[j], lineup[0]]; } // la 1ª aparición es un disfraz: la lectura más fácil
+    const xiAt = 3 + ((Math.random() * 3) | 0); // 3..5: nunca en la fase 1
+    lineup.splice(xiAt, 0, { kind: 'ximena' });
+    const cand = [4, 5, 6, 7].filter((i) => Math.abs(i - xiAt) >= 2);
+    lineup.splice(cand[(Math.random() * cand.length) | 0], 0, { kind: 'pollito' });
+    return lineup;
+  }
+  class BlackoutGame {
+    constructor(who, done) {
+      this.who = who; this.done = done; this.isBlackout = true;
+      this.p = new Actor(who, 655, 258); this.p.dir = 'up';
+      this.cam = { x: 655, y: 0, z: 165, dist: 700, pitch: 0.88, fov: 34 };
+      this.lineup = buildBoLineup();
+      this.round = 0; this.phase = 1; this.st = 'intro'; this.stT = 3.4; this.T = 0;
+      this.repair = 0; this.risk = 0; this.score = 0; this.correct = 0; this.errors = 0;
+      this.ghosts = 0; this.fakes = 0; this.decoDamage = 0;
+      this.pollitoEvt = false; this.sleepwalkerFound = false; this.lightsBack = false;
+      this.fig = null; this.lastRes = null; this.repLine = ''; this.banner = null; this.decoy = null;
+      this.obsT = 0; this.obsWin = BO_WINDOWS[0]; this.specReady = false;
+      this.result = null; this.doneFired = false;
+    }
+    startRound(n) {
+      this.round = n; this.phase = n <= 2 ? 1 : n <= 6 ? 2 : 3;
+      const stage = BO_STAGES[n % BO_STAGES.length], fromLeft = Math.random() < 0.5;
+      const f = (this.fig = { ...this.lineup[n], stageX: stage.x + rnd(-14, 14), stageZ: stage.z + rnd(-8, 8), x: 0, z: 0, bubble: null, caption: null, stumbleT: 0, dropped: false, dropItem: null, vanishOff: 0, vanishT: 0, phaseT: 0, clues: [] });
+      f.z = f.stageZ; f.fromX = fromLeft ? 358 : 952; f.x = f.fromX;
+      f.answerKey = f.kind === 'ghost' ? 'ghost' : f.kind === 'person' ? 'person' : 'special';
+      f.clues = this.buildClues(f);
+      this.st = 'enter'; this.stT = BO_ENTER; this.obsT = 0; this.specReady = false;
+      G.input.flush();
+    }
+    buildClues(f) {
+      const P = this.phase, C = [];
+      if (f.kind === 'ghost') {
+        C.push({ at: P === 1 ? 0.45 : P === 2 ? 0.55 : 0.6, type: 'phase' });
+        if (P >= 2) C.push({ at: 0.82, type: 'vanish' });
+      } else if (f.kind === 'person') {
+        if (P === 1) { C.push({ at: 0.3, type: 'stumble' }); C.push({ at: 0.62, type: 'drop' }); }
+        else C.push({ at: P === 2 ? 0.5 : 0.65, type: Math.random() < 0.5 ? 'stumble' : 'drop' });
+      } else if (f.kind === 'ximena') { C.push({ at: 0.18, type: 'murmur', text: '…mi guardia…' }); C.push({ at: 0.55, type: 'murmur', text: '…zzz… anatomía…' }); }
+      else if (f.kind === 'pollito') C.push({ at: 0.5, type: 'meow' });
+      return C;
+    }
+    passiveCaption() {
+      const f = this.fig; if (!f || this.phase !== 1) return;
+      if (f.kind === 'ghost') f.caption = { text: '💡 Flota sobre el piso… y no proyecta sombra.', t: 2.6 };
+      else if (f.kind === 'person') f.caption = { text: '💡 Se le ven los zapatos bajo la sábana. Y tiene sombra.', t: 2.6 };
+    }
+    answer(kind) {
+      if (this.st !== 'observe' || !this.fig) return;
+      if (kind === 'special' && !this.specReady) return; // la opción especial aparece a los 1,2 s en las apariciones especiales
+      this.resolveRound(kind);
+    }
+    resolveRound(kind) {
+      const f = this.fig, ok = kind !== null && kind === f.answerKey;
+      let gain = 0;
+      if (ok) {
+        this.correct++; gain = f.answerKey === 'special' ? 12 : 16;
+        this.repair = Math.min(100, this.repair + gain);
+        this.score += 100 + (this.phase === 3 ? 25 : 0);
+        if (f.kind === 'ghost') this.ghosts++;
+        else if (f.kind === 'person') this.fakes++;
+        else if (f.kind === 'ximena') { this.sleepwalkerFound = true; this.risk = Math.max(0, this.risk - 3); }
+        else if (f.kind === 'pollito') this.pollitoEvt = true;
+        this.repLine = BO_REPAIR[(this.correct - 1) % BO_REPAIR.length];
+        G.sfx('ok');
+        if (f.kind === 'ghost') W.puff(f.x, f.z, 6, true);
+      } else {
+        this.errors++; this.score = Math.max(0, this.score - 30);
+        this.risk = Math.min(10, this.risk + (kind === null ? 1 : f.kind === 'ximena' ? 4 : 2));
+        if (kind !== null) G.addNoise(f.kind === 'ximena' ? 5 : 3);
+        if (this.phase >= 2 && kind !== null && f.kind !== 'ximena' && this.decoDamage < 3 && Math.random() < 0.5) this.decoDamage++;
+        G.sfx('bad');
+      }
+      if (!this.lightsBack && this.repair >= 100) { this.lightsBack = true; this.banner = { text: '🔌 ¡LA LUZ VOLVIÓ! …pero siguen apareciendo figuras. A asegurar la casa.', t: 2.6 }; G.sfx('party'); }
+      this.lastRes = { ok, kind, gain, line: this.revealLine(f, kind, ok) };
+      this.st = 'reveal'; this.stT = BO_REVEAL;
+    }
+    revealLine(f, kind, ok) {
+      if (kind === null) return 'La figura se esfumó antes del veredicto. ¿Fantasma? ¿Roomie veloz? Nadie lo sabrá nunca.';
+      if (f.kind === 'ghost') return ok ? 'Atravesó la maceta, la pared y dos leyes de la física. El grupo decide no hablar nunca de esto.' : 'Dijiste "persona"… y la figura se desvaneció ATRAVESANDO el piso. Silencio incómodo en la sala.';
+      if (f.kind === 'person') return ok ? (f.charId === 'jose' ? '¡Era JOSÉ con una sábana! Dice que "venía a ayudar". Nadie le cree.' : `¡Era ${G.CHARS[f.charId].name} bajo la sábana! Disfraz de emergencia nivel: tendedero.`) : `No era un fantasma: era ${G.CHARS[f.charId].name}, que ahora exige disculpas formales por escrito.`;
+      if (f.kind === 'ximena') return ok ? '¡Es Ximena, SONÁMBULA! La guían de vuelta a su cama en silencio total. Uf.' : '¡Era Ximena sonámbula! Casi la despiertan del susto: solo murmuró algo y siguió, con el sueño más ligero.';
+      return ok ? '¡Era POLLITO bajo una sábana! El caos tiene cuatro patas, bigotes y cero vergüenza.' : 'No era eso: era Pollito. Se va ofendido, arrastrando la sábana como una capa.';
+    }
+    finish() {
+      const fixed = this.repair >= 100;
+      const win = fixed && this.errors === 0 ? 'win' : fixed ? 'tie' : 'lose';
+      const awakeRisk = Math.max(-1, Math.min(2, (this.risk >= 7 ? 2 : this.risk >= 4 ? 1 : 0) - (this.sleepwalkerFound ? 1 : 0)));
+      this.result = { win, blackoutFixed: fixed, score: this.score + this.repair + (win === 'win' ? 200 : 0), repair: this.repair, awakeRisk, ghostsConfirmed: this.ghosts, fakeGhostsFound: this.fakes, pollitoEvent: this.pollitoEvt, sleepwalkerFound: this.sleepwalkerFound, decoDamage: this.decoDamage, correct: this.correct, errors: this.errors };
+      this.st = 'over'; this.stT = 3.2;
+      G.sfx(fixed ? 'party' : 'bad');
+    }
+    update(dt) {
+      this.T += dt; W.updateFx(dt); this.p.update(dt);
+      if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+      if (this.decoy) { this.decoy.x += 62 * dt; if (this.decoy.x > 950) this.decoy = null; }
+      const f = this.fig;
+      if (f) {
+        if (f.bubble && (f.bubble.t -= dt) <= 0) f.bubble = null;
+        if (f.caption && (f.caption.t -= dt) <= 0) f.caption = null;
+        if (f.stumbleT > 0) f.stumbleT -= dt;
+        if (f.phaseT) f.phaseT += dt;
+        if (f.vanishT > 0) { f.vanishT -= dt; if (f.vanishT <= 0) f.vanishOff = 9; }
+      }
+      if (this.st === 'intro') { G.input.flush(); if ((this.stT -= dt) <= 0) this.startRound(0); }
+      else if (this.st === 'enter') {
+        G.input.flush();
+        const prog = 1 - this.stT / BO_ENTER, e = 1 - Math.pow(1 - prog, 2);
+        f.x = f.fromX + (f.stageX - f.fromX) * e;
+        if ((this.stT -= dt) <= 0) { f.x = f.stageX; this.st = 'observe'; this.obsT = 0; this.obsWin = BO_WINDOWS[this.phase - 1]; this.passiveCaption(); }
+      } else if (this.st === 'observe') {
+        this.obsT += dt;
+        this.specReady = (f.kind === 'ximena' || f.kind === 'pollito') && this.obsT >= 1.2;
+        for (const cl of f.clues) {
+          if (cl.fired || this.obsT < cl.at * this.obsWin) continue;
+          cl.fired = true;
+          if (cl.type === 'stumble') { f.stumbleT = 0.5; f.bubble = { text: '¡ay!', t: 0.9 }; W.puff(f.x, f.z, 2); G.sfx('door'); if (this.phase === 1) f.caption = { text: '💡 ¡Tropezó con la maceta! Los fantasmas no tropiezan.', t: 2.4 }; }
+          else if (cl.type === 'drop') { f.dropped = true; f.dropItem = BO_DROPS[(Math.random() * BO_DROPS.length) | 0]; G.sfx('pick'); if (this.phase === 1) f.caption = { text: '💡 Se le cayó algo al piso. Muy poco fantasmal.', t: 2.4 }; }
+          else if (cl.type === 'phase') { f.phaseT = 0.0001; if (this.phase === 1) f.caption = { text: '💡 ¡Atravesó la maceta como si no existiera!', t: 2.4 }; }
+          else if (cl.type === 'vanish') { f.vanishT = 0.42; G.sfx('msg'); }
+          else if (cl.type === 'murmur') f.bubble = { text: cl.text, t: 1.6 };
+          else if (cl.type === 'meow') { f.bubble = { text: '¡miau!', t: 1.2 }; G.sfx('meow'); }
+        }
+        if (this.phase === 3 && !this.decoy && Math.random() < dt * 0.22) this.decoy = { x: 366, z: 96 };
+        if (G.input.hit('left')) this.answer('ghost');
+        else if (G.input.hit('right')) this.answer('person');
+        else if (G.input.hit('up')) this.answer('special');
+        if (this.st === 'observe' && this.obsT >= this.obsWin) this.resolveRound(null);
+      } else if (this.st === 'reveal') {
+        if (f && f.kind === 'ximena') f.x += 10 * dt; // sigue su camino, dormida
+        if ((this.stT -= dt) <= 0) { const n = this.round + 1; if (n >= this.lineup.length) this.finish(); else this.startRound(n); }
+      } else if (this.st === 'over') {
+        if ((this.stT -= dt) <= 0 && !this.doneFired) { this.doneFired = true; this.done(this.result); }
+      }
+    }
+    drawFigure(t) {
+      const f = this.fig; if (!f || this.st === 'intro' || this.st === 'over') return;
+      const T = this.T, reveal = this.st === 'reveal', pr = reveal ? 1 - this.stT / BO_REVEAL : 0;
+      let rx = f.x, elev = 0, alpha = 1;
+      if (f.stumbleT > 0) rx += Math.sin(T * 70) * 2 * f.stumbleT;
+      if (f.kind !== 'ghost') R.shadow(rx, f.z, f.kind === 'pollito' ? 9 : 13, 0.72); // el fantasma NO tiene sombra: es LA pista
+      if (f.kind === 'ghost') {
+        if (f.vanishT > 0) return; // se desvaneció por un instante (pista de fase 2+)
+        elev = 13 + Math.sin(T * 2.2) * 3.5 + f.vanishOff;
+        alpha = 0.86 + Math.sin(T * 7) * 0.09; // brillo antinatural
+        if (f.phaseT) { const p = Math.min(1, f.phaseT / 1.15), s = Math.sin(p * Math.PI); rx += s * (f.stageX + 48 - f.x); alpha *= 1 - 0.5 * s; } // atraviesa la maceta y vuelve
+        if (reveal) { elev += pr * 30; alpha *= 1 - pr * 0.75; }
+        R.sprite(ghostCanvasArt(), rx, elev, f.z, { feet: 0, alpha, lit: 0.15 });
+      } else if (f.kind === 'person') {
+        if (reveal) {
+          R.sprite(Sp.frame(f.charId, 'idle', 0, { expr: this.lastRes && this.lastRes.ok ? 'surprised' : 'angry' }), rx, 0, f.z, { feet: 2.6 });
+          R.sprite(sheetCanvasFor(f.charId), rx, 0.5 - 30 * pr, f.z + 0.3, { feet: 2.6, alpha: 0.94 * (1 - pr * 0.85) }); // la sábana cae
+        } else {
+          R.sprite(Sp.frame(f.charId, 'walk_down', Math.floor(T * 2.4)), rx, 0, f.z, { feet: 2.6 });
+          const breath = this.phase >= 2 ? 1 + Math.sin(T * 2.9) * 0.018 : 1; // la sábana respira (pista de fase 2+)
+          R.sprite(sheetCanvasFor(f.charId), rx, 0.5, f.z + 0.3, { feet: 2.6, alpha: 0.94, sy: breath });
+        }
+      } else if (f.kind === 'ximena') {
+        R.sprite(Sp.frame('ximena', 'act', Math.floor(T * 1.7) % 2, { expr: 'sleep' }), rx, 0, f.z, { feet: 2.6, roll: Math.sin(T * 1.3) * 0.03 });
+      } else if (f.kind === 'pollito') {
+        if (reveal) {
+          R.sprite(Sp.catAnim('pounce', pr < 0.5 ? 0 : 1), rx, Math.sin(pr * Math.PI) * 9, f.z, { feet: 2.5 });
+          R.sprite(miniSheetCanvas(), rx, 3 - 26 * pr, f.z + 0.3, { feet: 2, alpha: 0.95 * (1 - pr * 0.8) });
+        } else {
+          R.sprite(Sp.catAnim('idle', Math.floor(T * 0.9) % 2), rx, 0, f.z, { feet: 2.5 }); // frontal, jamás espejado
+          R.sprite(miniSheetCanvas(), rx, 3, f.z + 0.3, { feet: 2, alpha: 0.95 });
+        }
+      }
+      if (f.dropped) R.sprite(Sp.item(f.dropItem), f.x + 12, 1.5, f.z + 9, { feet: 4, sx: 0.9, sy: 0.9 });
+      if (this.decoy) R.sprite(Sp.frame('saulo', 'walk_right', Math.floor(T * 6) % 4), this.decoy.x, 0, this.decoy.z, { feet: 2.6, alpha: 0.32, lit: 0.1 }); // sombra de ambiente (fase 3): no se responde
+    }
+    hudDraw(c, t) {
+      const f = this.fig;
+      panel(c, 8, 8, 150, 40);
+      G.text(c, `APARICIÓN ${Math.min(this.round + 1, 10)}/10`, 83, 20, { size: 10, stroke: false });
+      G.text(c, ['FASE 1 · APRENDIENDO', 'FASE 2 · CONFUSIÓN', 'FASE 3 · CAOS'][this.phase - 1], 83, 36, { size: 7.5, color: '#b9b0d6', stroke: false });
+      panel(c, 196, 8, 248, 40);
+      G.text(c, '⚡ REPARACIÓN ELÉCTRICA', 320, 18, { size: 8, color: '#ffd23f', stroke: false });
+      c.fillStyle = '#1c1826'; c.fillRect(226, 26, 188, 10);
+      c.fillStyle = this.repair >= 100 ? '#7dff8a' : '#ffd23f'; c.fillRect(226, 26, 188 * (this.repair / 100), 10);
+      G.text(c, this.repair + '%', 320, 31, { size: 9, color: '#1c1826', stroke: false });
+      panel(c, 482, 8, 150, 40, '#40243a');
+      G.text(c, '😴 RIESGO DE DESPERTAR', 557, 18, { size: 7.5, color: '#ffb0b8', stroke: false });
+      c.fillStyle = '#1c1826'; c.fillRect(497, 25, 120, 8);
+      c.fillStyle = '#ff6b7a'; c.fillRect(497, 25, 120 * (this.risk / 10), 8);
+      G.text(c, 'Puntos: ' + this.score, 557, 41, { size: 8, stroke: false });
+      if (this.banner) G.text(c, this.banner.text, 320, 66, { size: 10.5, color: '#7dff8a' });
+      if (this.st === 'observe') {
+        c.fillStyle = '#1c1826'; c.fillRect(196, 52, 248, 4);
+        c.fillStyle = this.obsWin - this.obsT < 1.2 ? '#ff6b7a' : '#7fd3ff'; c.fillRect(196, 52, 248 * Math.max(0, 1 - this.obsT / this.obsWin), 4);
+        const by = 320, btn = (x, w, label, col) => { panel(c, x, by, w, 30, col); G.text(c, label, x + w / 2, by + 15, { size: 11, stroke: false }); };
+        btn(56, 190, '← 👻 FANTASMA', '#2c3a5e');
+        btn(394, 190, '🎭 DISFRAZADO →', '#3a2c50');
+        if (this.specReady) btn(248, 144, '↑ 😴 ESPECIAL', '#5e2c46');
+        else if (f && (f.kind === 'ximena' || f.kind === 'pollito')) G.text(c, '…algo no cuadra con esta figura…', 320, by + 15, { size: 9, color: '#ffd23f' });
+      }
+      if (f && this.st !== 'over' && this.st !== 'intro') {
+        if (f.bubble) { const q = R.project(f.x, 104, f.z); if (q.ok) G.bubble(c, f.bubble.text, q.x, q.y - 4); }
+        if (f.caption) { const q = R.project(f.x, -4, f.z + 16); if (q.ok) G.text(c, f.caption.text, q.x, q.y + 14, { size: 9, color: '#ffe9a8' }); }
+      }
+      if (this.st === 'reveal' && this.lastRes) {
+        const r = this.lastRes, k = Math.min(1, (BO_REVEAL - this.stT) * 5);
+        c.fillStyle = `rgba(20,16,30,${0.55 * k})`; c.fillRect(0, 124, 640, 96);
+        G.text(c, r.kind === null ? 'SE ESFUMÓ…' : r.ok ? '¡CORRECTO!' : '¡UPS!', 320, 152, { size: 24 + k * 6, color: r.ok ? '#7dff8a' : '#ff6b7a', lw: 7 });
+        wrap(c, r.line, 150, 180, 340, 9.5, '#fff');
+        if (r.ok) G.text(c, `REPARACIÓN +${r.gain}% — ${this.repLine}`, 320, 208, { size: 9.5, color: '#ffd23f', stroke: false });
+      }
+      if (this.st === 'intro') {
+        c.fillStyle = 'rgba(12,10,20,.82)'; c.fillRect(66, 66, 508, 216);
+        panel(c, 66, 66, 508, 216, '#221c33');
+        G.text(c, '🌑 APAGÓN: ¿FANTASMA O DISFRAZ?', 320, 92, { size: 16, color: '#ffd23f' });
+        wrap(c, 'Aparecen figuras en la oscuridad. OBSERVA sus pistas antes de responder:', 96, 122, 448, 10, '#fff');
+        wrap(c, '👻 Fantasma de verdad: FLOTA, no tiene sombra y atraviesa las cosas.', 96, 150, 448, 10, '#bfe0ff');
+        wrap(c, '🎭 Persona disfrazada: se le ven los zapatos bajo la sábana, tropieza y se le caen cosas.', 96, 178, 448, 10, '#ffd9ec');
+        wrap(c, '😴 Y ojo: no todo es fantasma ni disfraz… Ximena sonámbula y Pollito andan sueltos.', 96, 214, 448, 10, '#ffe9a8');
+        G.text(c, '← FANTASMA · → DISFRAZADO · ↑ ESPECIAL', 320, 252, { size: 11.5, color: '#7dff8a', stroke: false });
+        G.text(c, 'Cada acierto repara la luz. Cada error… hace ruido al lado de Ximena.', 320, 268, { size: 8.5, color: '#b9b0d6', stroke: false });
+      }
+      if (this.st === 'over' && this.result) {
+        const r = this.result;
+        c.fillStyle = 'rgba(12,10,20,.82)'; c.fillRect(86, 78, 468, 204);
+        panel(c, 86, 78, 468, 204, '#221c33');
+        G.text(c, r.blackoutFixed ? '🔌 ¡VOLVIÓ LA LUZ!' : '💡 LA LUZ VOLVIÓ TITILANDO…', 320, 108, { size: 18, color: r.blackoutFixed ? '#7dff8a' : '#ffd23f' });
+        G.text(c, r.win === 'win' ? 'Reparación perfecta: ni un grito, ni un rasguño.' : r.win === 'tie' ? 'La luz volvió, con alguna historia que contar.' : 'No se reparó del todo… pero la noche sigue.', 320, 132, { size: 10, stroke: false });
+        G.text(c, `Reparación ${r.repair}% · Aciertos ${r.correct}/10 · Errores ${r.errors}`, 320, 158, { size: 10.5, stroke: false });
+        G.text(c, `👻 Fantasmas confirmados: ${r.ghostsConfirmed} · 🎭 Disfraces descubiertos: ${r.fakeGhostsFound}`, 320, 178, { size: 10, stroke: false });
+        G.text(c, `${r.sleepwalkerFound ? '😴 Ximena sonámbula: encontrada y devuelta a su cama ✔' : '😴 Ximena siguió durmiendo (eso creemos)'}`, 320, 198, { size: 9.5, stroke: false });
+        G.text(c, `${r.decoDamage ? `💔 Decoración dañada en el caos: ${r.decoDamage}` : '🎀 Decoración intacta'}${r.pollitoEvent ? ' · 🐱 Pollito apareció con una sábana' : ''}`, 320, 216, { size: 9.5, stroke: false });
+        G.text(c, 'PUNTOS: ' + r.score, 320, 248, { size: 15, color: '#ffd23f', stroke: false });
+      }
+    }
+    draw(dt) {
+      const f = this.fig, P = this.p;
+      const flick = this.phase === 3 && !this.lightsBack && this.st !== 'over' ? 0.82 + Math.random() * 0.36 : 1;
+      const pts = [
+        { x: P.x, y: 54, z: P.y, r: 205, c: [0.52, 0.48, 0.36] },   // la luz del celular del jugador
+        { x: 655, y: 66, z: 120, r: 175 * flick, c: [0.15, 0.19, 0.33] }, // luna por la ventana (parpadea en fase 3)
+      ];
+      if (f && this.st !== 'over' && this.st !== 'intro') pts.push({ x: f.x, y: 52, z: f.z, r: 150, c: this.lightsBack ? [0.42, 0.4, 0.34] : [0.3, 0.33, 0.48] });
+      W.render({
+        cam: this.cam, dt, actors: [P], focusZ: 0,
+        light: { amb: this.lightsBack ? [0.3, 0.29, 0.36] : [0.11, 0.11, 0.19], sun: [0.03, 0.03, 0.06], sky: '#07060c', points: pts },
+        boxes: (mb) => { if (f && this.st !== 'over' && this.st !== 'intro') { mb.cyl(f.stageX + 48, 0, f.stageZ + 4, 9, 17, '#b5653a', { r2: 12 }); mb.cyl(f.stageX + 48, 17, f.stageZ + 4, 15, 13, '#3f8f4f', { r2: 5 }); } }, // la maceta con la que tropiezan (y que los fantasmas atraviesan)
+        sprites: (t) => this.drawFigure(t),
+        over: (c, t) => this.hudDraw(c, t),
+      });
+    }
+  }
+
+  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, buildDecoSet, BlackoutGame };
 })();

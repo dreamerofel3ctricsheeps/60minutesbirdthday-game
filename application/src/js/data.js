@@ -123,23 +123,21 @@
     },
 
     apagon: {
-      title: 'El apagón', kind: 'Gestión', type: 'assign', dark: true,
+      // Antes era type 'assign' (mandar a un roomie con una tirada): desde
+      // 2026-11-14 es el minijuego de observación de Jose, «¿Fantasma o
+      // disfraz?» — ver Sc.BlackoutGame en scenes.js y el mapeo de salidas
+      // en MG.apagon.resolve (game.js).
+      title: 'Apagón: ¿fantasma o disfraz?', kind: 'Duelo', type: 'minigame', game: 'apagon', boss: 'pollito', view: 'sala', dark: true,
       chat: [
         { who: 'sistema', text: '⚡ Se fue la luz en todo el departamento.' },
         { who: 'fatima', text: 'No veo nada. Acabo de abrazar el refrigerador pensando que era Saulo.' },
         { who: 'saulo', text: 'La oscuridad sólo revela lo que ya éramos.' },
-        { who: 'alan', text: 'Es la llave general. Alguien tiene que ir a la caja de luz.' },
+        { who: 'alan', text: 'Es la llave general. La caja de luz está cruzando la sala.' },
+        { who: 'fatima', text: 'Pregunta seria: ¿eso que se acaba de mover en la sala era… una persona?', mood: 'surprised' },
+        { who: 'majo', text: 'Sea lo que sea: para reparar la luz hay que cruzar la sala e identificar CADA figura que aparezca. Y sin gritar, que Ximena duerme ahí al lado.' },
       ],
-      test: { stats: ['logica', 'velocidad'], dc: 11, bonus: { alan: 4 }, itemBonus: { herramientas: 3 }, prompt: '¿Quién arregla la luz?' },
-      success: { effects: { quality: 4 }, reply: (who) => [
-        { who, text: 'Listo, volvió la luz. Era un fusible.' },
-        { who: 'fatima', text: 'Perdón, refrigerador. Fue lindo mientras duró.' },
-      ] },
-      fail: { effects: { noise: 22, quality: -5, sleep: 1 }, reply: (who) => [
-        { who, text: 'Me tropecé con algo. Con varios algos. Uno era de vidrio.', mood: 'surprised' },
-        { who: 'majo', text: 'Eso sonó hasta en el primer piso.', mood: 'angry' },
-        { who: 'sistema', text: 'La luz vuelve sola un rato después. El daño ya está hecho.' },
-      ] },
+      intro: 'El departamento quedó a oscuras y empiezan a aparecer figuras con sábanas. Obsérvalas bien antes de responder: un fantasma de verdad FLOTA, no tiene sombra y atraviesa las cosas; una persona disfrazada se le ven los zapatos, tropieza y se le caen cosas. ← 👻 FANTASMA · → 🎭 PERSONA DISFRAZADA · ↑ 😴 PERSONAJE ESPECIAL cuando algo no cuadre (¿Ximena sonámbula? ¿Pollito?). Cada acierto repara la luz; cada error hace ruido.',
+      goal: 'Completa la REPARACIÓN ELÉCTRICA identificando las 10 apariciones, sin despertar a Ximena.',
     },
 
     pollito: {

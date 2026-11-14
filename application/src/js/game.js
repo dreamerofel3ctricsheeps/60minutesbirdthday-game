@@ -208,18 +208,19 @@
   });
 
   // ---------- Minijuegos: práctica directa ----------
-  // Lista de los 10 duelos jugable desde el título y desde la pausa, sin
+  // Lista de los duelos jugable desde el título y desde la pausa, sin
   // pasar por la historia. La práctica es PURA: no usa runEvent ni aplica
   // efectos/inventario/duelos al estado S; corre la misma escena de duelo
   // (MG[game].Scene) que la historia. Si se lanza un duelo a mitad de una
   // partida, la partida se ABANDONA (enterPractice descarta los
   // temporizadores de la historia): al terminar se va a la lista o al
   // título, nunca de vuelta a la run.
-  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'pizza', 'sonambula', 'memoria', 'cactus', 'repisas', 'pisoton', 'azotea'];
+  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'apagon', 'pizza', 'sonambula', 'memoria', 'cactus', 'repisas', 'pisoton', 'azotea'];
   const DUEL_DESC = {
     decoracion: 'Cuelga la decoración en su zona antes de que Pollito la tire.',
     pollito: 'Persigue al gato por la sala y recupera lo que robó.',
     mensajes: 'Duelo de tipeo: responde los mensajes antes que José.',
+    apagon: 'Apagón total: observa cada figura y decide si es un fantasma real o alguien disfrazado, mientras reparas la luz.',
     pizza: 'Baja la pizza por la escalera cuidando el equilibrio.',
     sonambula: 'Llega hasta Ximena sonámbula antes que José.',
     memoria: 'Da vuelta las cajas y junta más parejas que José.',
@@ -241,7 +242,7 @@
   function duelListScreen(from) {
     return new Promise((res) => {
       const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = G.CHARS[ev.boss]; return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
-      menuShow(`<h2>🧩 Minijuegos — práctica</h2><p class="dim">Los 10 duelos contra los jefes, directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
+      menuShow(`<h2>🧩 Minijuegos — práctica</h2><p class="dim">Los duelos contra los jefes (y el apagón), directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
       overlay.querySelectorAll('.duel').forEach((b) => (b.onclick = () => { G.sfx('pick'); res(b.dataset.id); }));
       $('#mback').onclick = () => { G.sfx('pick'); res('back'); };
     });
@@ -423,6 +424,35 @@
     repisas: { stats: ['velocidad'], Scene: () => Sc.ClimbDuel, note: () => 'Reflejos: ← y →', setup() {} },
     pisoton: { stats: ['velocidad'], Scene: () => Sc.StompDuel, note: () => 'Velocidad para cambiar de cojín', setup() {} },
     azotea: { stats: ['velocidad'], Scene: () => Sc.DroneDuel, note: () => 'Velocidad lateral', setup() {} },
+    apagon: {
+      stats: ['logica', 'sigilo'], Scene: () => Sc.BlackoutGame, note: () => 'Lógica para leer pistas · Sigilo para no despertarla', setup() {},
+      async resolve(r, who) {
+        // MAPEO de las salidas del diseño de Jose a este resultado:
+        // BLACKOUT_FIXED → r.blackoutFixed · BLACKOUT_SCORE → r.score ·
+        // XIMENA_AWAKE_RISK → r.awakeRisk (delta del medidor global de
+        // sueño S.sleep) · GHOSTS_CONFIRMED → r.ghostsConfirmed ·
+        // FAKE_GHOSTS_FOUND → r.fakeGhostsFound · POLLITO_EVENT_TRIGGERED
+        // → r.pollitoEvent · XIMENA_SLEEPWALKER_FOUND → r.sleepwalkerFound
+        // · DECORATION_DAMAGE → r.decoDamage. Todo queda guardado en
+        // S.flags.apagon como gancho para eventos/WhatsApp/finales.
+        S.flags.apagon = { fixed: r.blackoutFixed, score: r.score, ghosts: r.ghostsConfirmed, fakes: r.fakeGhostsFound, pollito: r.pollitoEvent, sleepwalker: r.sleepwalkerFound, damage: r.decoDamage };
+        if (r.ghostsConfirmed > 0) S.flags.rutaParanormal = true; // gancho: la ruta paranormal queda abierta (sin confirmar nada, como pide el diseño)
+        const posts = [];
+        if (r.blackoutFixed) posts.push({ who, text: '¡VOLVIÓ LA LUZ! Y sé exactamente cómo lo logramos. Bueno, casi.', mood: 'happy' });
+        else posts.push({ who: 'sistema', text: '💡 La luz volvió sola, titilando. Nadie logró arreglarla del todo.' }, { who, text: 'Si titila otra vez, yo no vi nada. Literalmente nada.', mood: 'surprised' });
+        if (r.sleepwalkerFound) posts.push({ who: 'itzel', text: 'Fun fact: una de las "apariciones" era XIMENA SONÁMBULA paseando por la sala. La devolvimos a su cama y ni se enteró.' });
+        if (r.pollitoEvent) posts.push({ who: 'fatima', text: 'Y sí: otra de las apariciones era Pollito con una sábana encima. POR SUPUESTO que era Pollito.' });
+        if (r.ghostsConfirmed > 0) posts.push({ who: 'saulo', text: `Conté ${r.ghostsConfirmed} aparición(es) que nadie pudo explicar. No pienso dormir nunca más. En esta casa no.` }, { who: 'majo', text: 'Era el viento, Saulo. …¿Era el viento?' });
+        if (r.decoDamage > 0) {
+          // consecuencia visible: parte de la decoración YA colgada se cae
+          const broken = S.deco.filter((d) => d.placed).slice(0, r.decoDamage);
+          broken.forEach((d) => (d.placed = false));
+          posts.push({ who: 'samantha', text: broken.length ? 'En el caos del apagón se cayó parte de la decoración que habíamos colgado. La sala quedó… rústica.' : 'En el caos casi rompemos la decoración. Casi.', mood: 'surprised' });
+        }
+        await ui.postAll(posts);
+        apply({ quality: (r.win === 'win' ? 5 : r.win === 'tie' ? 2 : -4) - r.decoDamage * 2, noise: r.win === 'lose' ? 16 : r.win === 'tie' ? 6 : 0, sleep: r.awakeRisk }, who);
+      },
+    },
     mensajes: { stats: ['carisma'], Scene: () => Sc.MessageDuel, note: () => 'Más carisma = José escribe más lento', setup() {} },
     pizza: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.PizzaRace, note: () => 'Sigilo = mejor equilibrio', setup() {} },
     sonambula: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.SleepwalkDuel, note: () => 'Sigilo = más margen al frenar', setup() {} },
@@ -586,7 +616,7 @@
     const bg = new Sc.HomeScene(); bg.wander = true; G.setScene(bg);
     requestAnimationFrame(frame);
     await titleScreen();
-    // modo práctica: index.html?duelo=decoracion | pollito | mensajes | pizza | sonambula | memoria | cactus | repisas | pisoton | azotea
+    // modo práctica: index.html?duelo=decoracion | pollito | mensajes | apagon | pizza | sonambula | memoria | cactus | repisas | pisoton | azotea
     const pr = /[?&]duelo=(\w+)/.exec(location.search);
     if (pr && G.EVENTS[pr[1]] && G.EVENTS[pr[1]].type === 'minigame') {
       S.player = 'natalia'; S.phase = 'act2';
