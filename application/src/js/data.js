@@ -27,16 +27,41 @@
       skill: 'Técnico: +4 en problemas eléctricos y carga objetos pesados sin frenarse.',
       defect: 'Ruidoso: todo lo que hace suma ruido.',
     },
-    // Roomies que por ahora sólo participan en el chat
-    majo: { name: 'Majo', color: '#7f93d8' },
-    saulo: { name: 'Saulo', color: '#d98a62' },
-    fatima: { name: 'Fátima', color: '#e0b77a' },
-    samantha: { name: 'Samantha', color: '#e04fc4' },
+    majo: {
+      name: 'Majo', role: 'La organizadora perfeccionista', color: '#7f93d8', playable: true,
+      stats: { velocidad: 6, sigilo: 6, carisma: 6, logica: 9 },
+      skill: 'Plan B: siempre tiene una salida lógica; +4 en problemas de organización.',
+      defect: 'Perfeccionista: si algo sale mal frente a Ximena, se estresa (+ruido).',
+    },
+    saulo: {
+      name: 'Saulo', role: 'El poeta distraído', color: '#d98a62', playable: true,
+      stats: { velocidad: 4, sigilo: 7, carisma: 9, logica: 3 },
+      skill: 'Labia: puede venderle cualquier historia a Ximena; +4 al distraerla.',
+      defect: 'Distraído: se queda mirando la nada en el peor momento.',
+    },
+    fatima: {
+      name: 'Fátima', role: 'La cocinera serena', color: '#e0b77a', playable: true,
+      stats: { velocidad: 5, sigilo: 6, carisma: 8, logica: 6 },
+      skill: 'Manos de abuela: calma a cualquiera con comida; +4 en la cocina.',
+      defect: 'Lenta bajo presión: −3 cuando hay que correr.',
+    },
+    samantha: {
+      name: 'Samantha', role: 'La fotógrafa', color: '#e04fc4', playable: true,
+      stats: { velocidad: 8, sigilo: 5, carisma: 7, logica: 4 },
+      skill: 'Ojo de lince: encuentra objetos rápido y documenta TODO.',
+      defect: 'Flash indiscreto: su cámara puede delatar al grupo.',
+    },
     ximena: { name: 'Ximena', color: '#b48cf0' },
     jose: { name: 'José', color: '#5fae77', boss: 'El novio. Tiene su propio plan de cumpleaños.' },
     pollito: { name: 'Pollito', color: '#f0a04a', boss: 'El gato. Una fuerza del caos.' },
   };
-  G.PLAYABLE = ['natalia', 'itzel', 'alan'];
+  // Los 7 roomies son elegibles como protagonista y reclutables como
+  // partners en la recolección (diseño original retomado el 2026-11-14).
+  // Ximena NO es elegible (es la que duerme) ni José (es el villano).
+  // G.PLAYABLE = el roster completo del departamento; la PARTY de cada
+  // partida (protagonista + hasta 3 partners) vive en G.S.party.
+  G.PLAYABLE = ['natalia', 'saulo', 'itzel', 'fatima', 'samantha', 'majo', 'alan'];
+  G.ROOMIES = G.PLAYABLE;
   G.STAT_LABEL = { velocidad: 'Velocidad', sigilo: 'Sigilo', carisma: 'Carisma', logica: 'Lógica' };
 
   // ---------- Objetos del minuto de recolección ----------

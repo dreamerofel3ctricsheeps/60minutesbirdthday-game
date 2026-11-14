@@ -33,14 +33,87 @@
       this.speed = speedOf(playerId);
       const spots = shuffle(W.SPAWNS.slice());
       this.items = Object.keys(G.ITEMS).map((id, i) => ({ id, x: spots[i][0], y: spots[i][1] }));
-      this.others = G.PLAYABLE.filter((c) => c !== playerId).map((id, i) => new Actor(id, 420 + i * 170, 520 - i * 10));
+      // TODOS los roomies están en el departamento durante la recolección
+      // (diseño original retomado el 2026-11-14): los otros 6 son NPC
+      // repartidos por las habitaciones, cada uno en la suya ('free').
+      // Estados de un NPC: 'free' (vive el depa, se le puede cargar) →
+      // 'carried' (al hombro del jugador) → 'waiting' (reclutado: espera
+      // junto al armario y se queda para TODO el juego). Al bajarlo sin
+      // reclutar vuelve a 'free' donde quedó.
+      const npcRooms = ['cocina', 'sala', 'cuarto', 'pasillo', 'sala', 'cuarto'];
+      this.others = G.PLAYABLE.filter((c) => c !== playerId).map((id, i) => {
+        const room = npcRooms[i % npcRooms.length], pt = W.randomFreePoint(room);
+        const a = new Actor(id, pt[0], pt[1]);
+        a.state = 'free'; a.homeRoom = room; a.wt = 1 + i * 0.9; a.sprV = 0;
+        return a;
+      });
+      this.carrying = null;          // NPC al hombro (Actor) o null
+      this.partners = [];            // ids reclutados (máx. 3)
+      // Puestos de espera junto al armario (la zona segura) para los ya
+      // reclutados: visibles, en idle, viendo cómo crece el equipo.
+      this.waitSpots = [[566, 398], [634, 398], [600, 434]];
       this.cat = new Actor('pollito', 880, 150); this.cat.speed = 110; this.catWait = 7; this.catMoves = 0; this.catItem = null;
       this.cheer = 4; this.stashed = 0; this.msg = null;
       this.cam = { x: 510, y: 0, z: 440, dist: 560, pitch: 0.78, fov: 34 };
     }
     slotsUsed() { return this.p.carry.reduce((n, id) => n + G.ITEMS[id].slots, 0); }
+    // --- Partners: cargar al hombro, bajar y reclutar -------------------
+    // CONVIVENCIA CARGA DE ROOMIE / ÍTEMS (regla original adaptada a la
+    // v3.1): la capacidad total es 5 espacios = 3 del roomie al hombro +
+    // 2 de las manos. Las manos siguen EXACTAMENTE como ya funcionaban
+    // para ítems (máx. 2 espacios entre los dos, lo pesado frena); el
+    // roomie al hombro NO frena (regla original) y NO bloquea las manos:
+    // puedes recoger ítems mientras cargas a alguien y guardarlos en el
+    // armario en viajes separados. Un solo roomie a la vez.
+    pickUp(o) {
+      const p = this.p;
+      if (this.partners.length >= 3) { this.msg = { text: '¡Ya tienes a tus 3 partners! Los demás se quedan.', t: 1.6 }; p.emo('✖', 0.8); G.sfx('bad'); return; }
+      this.carrying = o; o.state = 'carried'; o.carriedPose = true; o.route = null; o.expr = 'surprised'; o.sprV = 0;
+      p.carryWalk = true;
+      this.msg = { text: `¡${G.CHARS[o.id].name} al hombro! Llévalo al ARMARIO`, t: 1.8 }; p.hop(120); G.sfx('pick');
+    }
+    dropCarried() {
+      const o = this.carrying, p = this.p; if (!o) return;
+      this.carrying = null; p.carryWalk = false;
+      o.state = 'free'; o.carriedPose = false; o.elev = 0; o.expr = null; o.jy = 0; o.jv = 0;
+      const cands = [[p.x + 28, p.y], [p.x - 28, p.y], [p.x, p.y + 28], [p.x, p.y - 28], [p.x, p.y]];
+      const spot = cands.find(([x, y]) => W.canStand(x, y)) || [p.x, p.y];
+      o.x = spot[0]; o.y = spot[1]; o.homeRoom = W.roomAt(o.x, o.y) || o.homeRoom; o.wt = 1.5;
+      this.msg = { text: `Bajaste a ${G.CHARS[o.id].name}`, t: 1.2 }; G.sfx('pick');
+    }
+    recruit(o) {
+      const p = this.p; this.carrying = null; p.carryWalk = false;
+      o.state = 'waiting'; o.carriedPose = false; o.elev = 0; o.jy = 0; o.jv = 0; o.expr = 'happy';
+      o.x = p.x; o.y = p.y;
+      const spot = this.waitSpots[this.partners.length];
+      this.partners.push(o.id);
+      if (spot) o.goTo(spot[0], spot[1], 130);
+      G.after(2.5, () => { if (o.state === 'waiting') o.expr = null; });
+      this.msg = { text: `✔ ¡${G.CHARS[o.id].name} se queda para la fiesta! Partners ${this.partners.length}/3`, t: 2.2 };
+      G.sfx('ok'); W.puff(o.x, o.y - 10, 5, true);
+    }
     update(dt) {
       const p = this.p; p.update(dt); this.others.forEach((o) => o.update(dt)); this.cat.update(dt); W.updateFx(dt);
+      // Vida de los NPC: el que va al hombro se acopla al portador (con un
+      // resorte suave que le da rebote y desfase al caminar); el reclutado
+      // camina a su puesto y espera; el libre deambula por SU habitación
+      // con gestos (sin pathfinding: rutas por puertas de World.path).
+      this.others.forEach((o) => {
+        if (o.state === 'carried') {
+          o.x = p.x; o.y = p.y; o.dir = p.dir; o.jy = p.jy; o.moving = false; o.vx = o.vy = 0;
+          o.sprV += ((46 - o.elev) * 90 - o.sprV * 11) * dt; o.elev += o.sprV * dt;
+          return;
+        }
+        if (o.route && o.route.length) { o.follow(dt); return; }
+        o.moving = false; o.vx = o.vy = 0;
+        if (o.state === 'free' && this.count <= 0 && !this.over && (o.wt -= dt) <= 0) {
+          o.wt = 2.5 + Math.random() * 4;
+          const k = Math.random();
+          if (k < 0.5) { const pt = W.randomFreePoint(o.homeRoom); o.goTo(pt[0], pt[1], 46); }
+          else if (k < 0.68) o.hop(110);
+          else o.dir = ['down', 'left', 'right', 'up'][(Math.random() * 4) | 0];
+        }
+      });
       W.camLerp(this.cam, p.x, p.y - 20, dt, 5);
       if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
       if (this.count > 0) { this.count -= dt; G.input.flush(); return; }
@@ -49,7 +122,7 @@
         // el cierre llega a los 1.1 s con el reloj del JUEGO (dt), no con
         // setTimeout: así la PAUSA también congela esta transición.
         this.endT = (this.endT || 0) + dt;
-        if (this.endT >= 1.1 && !this.doneFired) { this.doneFired = true; this.done({ inHand: p.carry.slice(), stashed: this.stashed }); }
+        if (this.endT >= 1.1 && !this.doneFired) { this.doneFired = true; this.done({ inHand: p.carry.slice(), stashed: this.stashed, partners: this.partners.slice() }); }
         return;
       }
       this.time -= dt;
@@ -58,20 +131,31 @@
       const heavy = p.carry.some((id) => G.ITEMS[id].slots === 2);
       if (heavy && p.id !== 'alan') sp *= 0.62; else if (p.carry.length === 2) sp *= 0.86;
       p.walk(ax.x, ax.y, sp, dt);
-      this.near = null; this.nearStash = dist(p, W.STASH) < 48 && p.carry.length > 0;
+      this.near = null; this.nearStash = dist(p, W.STASH) < 48;
+      this.nearRoomie = null;
+      if (!this.carrying) { let best = 42; this.others.forEach((o) => { if (o.state !== 'free') return; const d = dist(p, o); if (d < best) { best = d; this.nearRoomie = o; } }); }
       if (!this.nearStash) { let best = 36; this.items.forEach((it) => { const d = dist(p, it); if (d < best) { best = d; this.near = it; } }); }
       if (G.input.hit('action')) {
-        if (this.nearStash) {
+        if (this.nearStash && this.carrying) {
+          this.recruit(this.carrying);
+        } else if (this.nearStash && p.carry.length) {
           p.carry.forEach((id) => { G.S.inv[id] = true; this.stashed++; });
           this.msg = { text: '¡Guardado! ' + p.carry.map((id) => G.ITEMS[id].name).join(' + '), t: 1.6 };
           p.carry = []; p.hop(140); W.puff(W.STASH.x, W.STASH.y - 14, 5, true); G.sfx('ok'); G.ui.refreshInv();
-        } else if (this.near) {
+        } else if (this.near && (!this.nearRoomie || dist(p, this.near) <= dist(p, this.nearRoomie))) {
+          // Ítem vs roomie cuando ambos están cerca: gana el MÁS cercano
+          // (pararte sobre un roomie junto a un spawn no debe robarle el
+          // interact a recoger el objeto, ni al revés).
           const need = G.ITEMS[this.near.id].slots;
           if (this.slotsUsed() + need <= 2) {
             p.carry.push(this.near.id); this.items.splice(this.items.indexOf(this.near), 1);
             if (this.catItem === this.near) this.catItem = null;
             this.msg = { text: G.ITEMS[this.near.id].name + (need === 2 ? ' (pesado)' : ''), t: 1.2 }; p.hop(110); G.sfx('pick');
           } else { this.msg = { text: '¡Manos llenas! Guarda en el armario del pasillo', t: 1.6 }; p.emo('✖', 0.8); G.sfx('bad'); }
+        } else if (this.carrying) {
+          this.dropCarried();
+        } else if (this.nearRoomie) {
+          this.pickUp(this.nearRoomie);
         }
       }
       // Pollito: fuerza del caos
@@ -90,11 +174,21 @@
       }
       if ((this.cheer -= dt) <= 0) {
         this.cheer = 5 + Math.random() * 4;
-        const o = this.others[(Math.random() * 2) | 0];
-        const lines = this.time < 15 ? ['¡YA VIENE!', '¡Escucho el ascensor!', '¡Guarda lo que tengas!'] : ['¡Apúrate!', '¡El pastel, el pastel!', 'Yo vigilo la puerta.', '¡No te olvides de guardar!', '¿Dónde quedaron los globos?'];
-        o.say(lines[(Math.random() * lines.length) | 0], 2.2); o.hop(130);
+        const free = this.others.filter((o) => o.state === 'free');
+        const o = (free.length ? free : this.others)[(Math.random() * (free.length ? free.length : this.others.length)) | 0];
+        const lines = this.time < 15
+          ? ['¡YA VIENE!', '¡Escucho el ascensor!', '¡Guarda lo que tengas!', '¡Si no me reclutaste, me voy!']
+          : this.partners.length < 3
+            ? ['¡Apúrate!', '¡El pastel, el pastel!', 'Yo vigilo la puerta.', '¡No te olvides de guardar!', '¿Dónde quedaron los globos?', '¡Elige a tus 3 partners!', '¡A mí, al armario, porfa!']
+            : ['¡Ya estamos los que somos!', '¡El pastel, el pastel!', 'Yo vigilo la puerta.', '¡No te olvides de guardar!'];
+        if (o.state !== 'carried') { o.say(lines[(Math.random() * lines.length) | 0], 2.2); o.hop(130); }
       }
-      if (this.time <= 0) { this.over = true; G.sfx('bell'); this.others.forEach((o) => o.emo('!', 1.5)); p.emo('!', 1.5); }
+      if (this.time <= 0) {
+        this.over = true; G.sfx('bell'); this.others.forEach((o) => o.emo('!', 1.5)); p.emo('!', 1.5);
+        // Si el minuto muere con alguien al hombro SIN entregar, no cuenta
+        // como partner: se baja solo y queda entre los que huirán.
+        if (this.carrying) { const o = this.carrying; this.carrying = null; p.carryWalk = false; o.state = 'free'; o.carriedPose = false; o.elev = 0; o.expr = 'surprised'; o.x = p.x + 28; o.y = p.y; }
+      }
     }
     draw(dt) {
       const p = this.p;
@@ -103,8 +197,11 @@
         sprites: (t) => { ring(W.STASH.x, W.STASH.y, 40 + Math.sin(t * 5) * 3, p.carry.length ? [0.4, 1, 0.5] : [1, 1, 1], p.carry.length ? 0.75 : 0.3); },
         over: (c, t) => {
           if (this.count <= 0 && !this.over) {
-            if (this.nearStash) { const h = p.head(34); G.prompt(c, 'ESPACIO: guardar', h.x, h.y); }
-            else if (this.near) { const q = R.project(this.near.x, 46, this.near.y); G.prompt(c, 'ESPACIO: ' + G.ITEMS[this.near.id].name, q.x, q.y); }
+            if (this.nearStash && this.carrying) { const h = p.head(40); G.prompt(c, `ESPACIO: ${G.CHARS[this.carrying.id].name} se queda ✔`, h.x, h.y); }
+            else if (this.nearStash && p.carry.length) { const h = p.head(34); G.prompt(c, 'ESPACIO: guardar', h.x, h.y); }
+            else if (this.near && (!this.nearRoomie || dist(p, this.near) <= dist(p, this.nearRoomie))) { const q = R.project(this.near.x, 46, this.near.y); G.prompt(c, 'ESPACIO: ' + G.ITEMS[this.near.id].name, q.x, q.y); }
+            else if (this.carrying) { const h = p.head(40); G.prompt(c, 'Al ARMARIO con tu partner · ESPACIO: bajarlo', h.x, h.y); }
+            else if (this.nearRoomie) { const h = this.nearRoomie.head(6); G.prompt(c, this.partners.length >= 3 ? 'Ya tienes 3 partners' : `ESPACIO: cargar a ${G.CHARS[this.nearRoomie.id].name}`, h.x, h.y); }
           }
           // indicador del armario
           const s = R.project(W.STASH.x, 110, W.STASH.y), on = s.x > 20 && s.x < 620 && s.y > 50 && s.y < 340;
@@ -117,6 +214,7 @@
           c.fillStyle = '#7dff8a'; c.fillRect(mx + W.STASH.x * k - 1, my + W.STASH.y * k - 3, 6, 4);
           this.items.forEach((it) => { c.fillStyle = '#ffd23f'; c.fillRect(mx + 1 + it.x * k, my + 1 + it.y * k, 3, 3); });
           c.fillStyle = '#f0a04a'; c.fillRect(mx + 1 + this.cat.x * k, my + 1 + this.cat.y * k, 3, 3);
+          this.others.forEach((o) => { if (o.state === 'carried') return; c.fillStyle = o.state === 'waiting' ? '#7dff8a' : '#b9b0d6'; c.fillRect(mx + 1 + o.x * k, my + 1 + o.y * k, 3, 3); });
           c.fillStyle = '#fff'; c.beginPath(); c.arc(mx + 2 + p.x * k, my + 2 + p.y * k, 2.6, 0, 6.3); c.fill();
           if (this.msg) G.text(c, this.msg.text, 320, 338, { size: 11, color: '#fff' });
           // reloj
@@ -127,12 +225,14 @@
           panel(c, 396, 6, 92, 40); G.text(c, 'MANOS', 442, 16, { size: 7, color: '#b9b0d6', stroke: false });
           for (let i = 0; i < 2; i++) { c.fillStyle = i < this.slotsUsed() ? '#ffd23f' : '#463c66'; c.beginPath(); c.roundRect(416 + i * 28, 24, 24, 16, 4); c.fill(); }
           panel(c, 152, 6, 92, 40); G.text(c, 'GUARDADOS', 198, 16, { size: 7, color: '#b9b0d6', stroke: false }); G.text(c, this.stashed + '/10', 198, 32, { size: 15, color: '#7dff8a', stroke: false });
+          panel(c, 54, 6, 92, 40); G.text(c, 'PARTNERS', 100, 16, { size: 7, color: '#b9b0d6', stroke: false }); G.text(c, this.partners.length + '/3' + (this.carrying ? ' +1🏋' : ''), 100, 32, { size: 15, color: this.carrying ? '#ffb86b' : '#7dff8a', stroke: false });
           if (this.count > 0) {
             c.fillStyle = 'rgba(20,16,30,.55)'; c.fillRect(0, 0, 640, 360);
             const n = Math.ceil(this.count - 0.3);
             G.text(c, n > 0 ? String(n) : '¡YA!', 320, 160, { size: 70, color: '#ffd23f', lw: 9 });
             G.text(c, 'Recoge objetos (ESPACIO) y guárdalos en el ARMARIO del pasillo', 320, 226, { size: 11 });
-            G.text(c, 'Moverse: WASD o flechas  ·  Sólo puedes cargar 2 espacios a la vez', 320, 244, { size: 9, bold: false });
+            G.text(c, 'Carga roomies (ESPACIO junto a ellos) y déjalos en el ARMARIO: tus 3 partners se quedan toda la noche', 320, 244, { size: 9, bold: false });
+            G.text(c, 'Moverse: WASD o flechas  ·  Manos: 2 espacios  ·  Hombro: 1 roomie', 320, 260, { size: 9, bold: false });
           }
           if (this.over) { c.fillStyle = 'rgba(20,16,30,.5)'; c.fillRect(0, 0, 640, 360); G.text(c, '¡LLEGÓ XIMENA!', 320, 170, { size: 42, color: '#ff6b7a', lw: 8 }); }
         },
@@ -145,16 +245,25 @@
   // =========================================================
   const VIEWS = { todo: { x: 500, z: 318, dist: 1080, pitch: 0.98 }, sala: { x: 655, z: 170, dist: 640, pitch: 0.84 }, pasillo: { x: 520, z: 440, dist: 560, pitch: 0.8 }, xroom: { x: 800, z: 430, dist: 500, pitch: 0.8 }, cocina: { x: 190, z: 170, dist: 520, pitch: 0.82 } };
   class HomeScene {
-    constructor() {
-      this.roomies = G.PLAYABLE.map((id, i) => new Actor(id, 450 + i * 120, 215 + (i % 2) * 40));
+    // ids = quiénes están EN el departamento en esta escena. Por defecto:
+    // la party de la partida si ya existe (G.S.party); si no, los 7 roomies
+    // (fondo del título y práctica: el depa lleno). La llegada de Ximena se
+    // construye con los 7 y, tras la huida de los no reclutados, la escena
+    // se queda solo con la party vía removeRoomie().
+    constructor(ids) {
+      const list = ids || (G.S && G.S.party && G.S.party.length ? G.S.party : G.PLAYABLE);
+      this.roomies = list.map((id, i) => new Actor(id, 450 + i * 120, 215 + (i % 2) * 40));
       this.cat = new Actor('pollito', 890, 150); this.cat.speed = 80;
       this.xi = new Actor('ximena', 510, 640); this.xi.hidden = true; this.xi.speed = 62;
       this.jose = new Actor('jose', 510, 640); this.jose.hidden = true;
-      this.xState = 'away'; this.wander = false; this.confetti = null; this.wt = [1, 2.5, 4]; this.catT = 3; this.title = null;
+      this.xState = 'away'; this.wander = false; this.confetti = null; this.wt = this.roomies.map((_, i) => 1 + i * 1.3); this.catT = 3; this.title = null;
       this.cam = { ...VIEWS.todo, y: 0, fov: 34 }; this.view = VIEWS.todo; this.followA = null; this.T = Math.random() * 9;
       this.lightA = W.LIGHT.noche; this.lightB = W.LIGHT.noche; this.lk = 1; this.lightKey = 'noche';
     }
     actor(id) { return id === 'ximena' ? this.xi : id === 'pollito' ? this.cat : id === 'jose' ? this.jose : this.roomies.find((r) => r.id === id); }
+    // Saca a un roomie de la escena (los que huyen al llegar Ximena): deja
+    // de dibujarse, de deambular y de contar para actor()/revelación.
+    removeRoomie(id) { const i = this.roomies.findIndex((r) => r.id === id); if (i >= 0) { this.roomies.splice(i, 1); this.wt.splice(i, 1); } }
     setView(v) { this.view = VIEWS[v] || v; this.followA = null; }
     follow(actor, d) { this.followA = actor; this.view = { dist: d || 520, pitch: 0.8 }; }
     setLight(key, instant) { const L = W.LIGHT[key]; if (L === this.lightB) return; const m = W.mixLight(this.lightA, this.lightB, this.lk); m.points = this.lightB.points; this.lightA = m; this.lightB = L; this.lk = instant ? 1 : 0; this.lightKey = key; }

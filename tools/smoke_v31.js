@@ -16,6 +16,11 @@
       sin fin y determinista, set dibujado acotado a cualquier
       altura, caída de una repisa al fallar (la máxima no se
       pierde) y resultado por altura máxima (win/tie/lose).
+   G) Party (diseño original retomado): roster de 7 elegibles,
+      reclutar partners en la recolección (cargar/entregar, tope
+      3, bajar no recluta, ítems conviven), la huida al llegar
+      Ximena deja la escena solo con la party, y las asignaciones
+      posteriores ofrecen solo a la party.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -118,9 +123,9 @@ load('scenes.js');
 // game.js no exporta MG; la inyección es SOLO para la prueba (el archivo
 // real no cambia): se añade MG a lo que G.debug ya expone.
 load('game.js', (code) => {
-  const from = 'G.debug = { S, apply, runEvent, tick };';
+  const from = 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect };';
   if (!code.includes(from)) throw new Error('no se encontró G.debug en game.js');
-  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, MG };');
+  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG };');
 });
 
 const G = sandbox.G, Sc = G.Scenes, W = G.World;
@@ -392,6 +397,93 @@ const tick = () => new Promise((r) => setImmediate(r));
     const tieRun = driveClimb((d) => { d.cstep = 1e9; d.ct = 1e9; }, false);
     check('empate: nadie se mueve, misma altura máxima (0 m)', tieRun.result && tieRun.result.win === 'tie' && tieRun.result.pMeters === 0 && tieRun.result.cMeters === 0, tieRun.result && tieRun.result.win);
   }
+
+  // ================= G) Party: roster, partners y huida ===================
+  console.log('\nG) Party — protagonista entre los 7, partners reclutables y huida');
+  check('roster: los 7 roomies son elegibles, todos con stats/rol/habilidad/defecto',
+    G.PLAYABLE.length === 7 && G.PLAYABLE.every((id) => { const c = G.CHARS[id]; return c.stats && c.role && c.skill && c.defect && c.playable; }), G.PLAYABLE.join(','));
+  check('ni Ximena (duerme) ni José (villano) son elegibles', !G.PLAYABLE.includes('ximena') && !G.PLAYABLE.includes('jose'));
+  check('metadata: los 7 roomies exponen carried y carrywalk_down/up/right',
+    G.PLAYABLE.every((id) => { const m = G.Sprites.META.chars[id]; return ['carried', 'carrywalk_down', 'carrywalk_up', 'carrywalk_right'].every((a) => m.anims[a] && m.anims[a].length >= 1); }));
+
+  // --- Recolección: cargar, convivir con ítems, bajar y reclutar ---
+  Object.assign(S, { inv: {}, flags: {}, partners: [], party: [], fled: [] });
+  let collectRes = null;
+  const csc = new Sc.CollectScene('natalia', (r) => { collectRes = r; });
+  csc.count = 0; // sin cuenta regresiva: directo al minuto
+  const cstep = () => csc.update(0.016);
+  const goNear = (o) => { csc.p.x = o.x; csc.p.y = o.y; };
+  check('en el departamento están los otros 6 roomies como NPC libres', csc.others.length === 6 && csc.others.every((o) => o.state === 'free'), 'npcs=' + csc.others.length);
+  const npcA = csc.others[0];
+  goNear(npcA); tap('Space'); cstep();
+  check('ESPACIO junto a un roomie lo carga al hombro (carried + carryWalk)', csc.carrying === npcA && npcA.state === 'carried' && npcA.carriedPose === true && csc.p.carryWalk === true);
+  const it0 = csc.items[0];
+  csc.p.x = it0.x; csc.p.y = it0.y; tap('Space'); cstep();
+  check('cargando un roomie, las manos siguen libres: se puede recoger un ítem', csc.p.carry.includes(it0.id) && csc.carrying === npcA, 'manos=' + csc.p.carry.join(','));
+  csc.p.x = W.STASH.x; csc.p.y = W.STASH.y; tap('Space'); cstep();
+  check('en el armario, ESPACIO recluta al partner (queda waiting, partner +1)', csc.carrying === null && csc.partners.includes(npcA.id) && npcA.state === 'waiting' && csc.p.carryWalk === false);
+  tap('Space'); cstep();
+  check('otro ESPACIO en el armario guarda los ítems de las manos (convivencia)', csc.p.carry.length === 0 && S.inv[it0.id] === true);
+  const npcB = csc.others.find((o) => o.state === 'free');
+  goNear(npcB); tap('Space'); cstep();
+  const wasCarrying = csc.carrying === npcB;
+  csc.p.x = 200; csc.p.y = 150; tap('Space'); cstep();
+  check('bajarlo fuera del armario NO lo recluta: vuelve a free donde quedó', wasCarrying && csc.carrying === null && npcB.state === 'free' && !csc.partners.includes(npcB.id));
+  for (const o of csc.others.filter((x) => x.state === 'free')) {
+    if (csc.partners.length >= 3) break;
+    goNear(o); tap('Space'); cstep();
+    if (csc.carrying !== o) break;
+    csc.p.x = W.STASH.x; csc.p.y = W.STASH.y; tap('Space'); cstep();
+  }
+  check('se reclutan exactamente 3 partners', csc.partners.length === 3, 'partners=' + csc.partners.join(','));
+  const npcExtra = csc.others.find((o) => o.state === 'free');
+  goNear(npcExtra); tap('Space'); cstep();
+  check('con 3 partners, un cuarto roomie es rechazado (mensaje, sin cargar)', csc.carrying === null && csc.partners.length === 3 && npcExtra.state === 'free');
+  csc.time = 0;
+  for (let i = 0; i < 90 && !collectRes; i++) cstep();
+  check('el resultado de la recolección entrega los partners reclutados', !!collectRes && collectRes.partners.length === 3, collectRes && collectRes.partners.join(','));
+
+  // --- Dibujo de la recolección con partners (caminos de draw nuevos) ---
+  {
+    const realRender = W.render, realProject = G.R.project;
+    const ctx2d = new FakeCtx();
+    W.render = (opts) => { if (opts.boxes) opts.boxes(new G.R.MB(), 0); if (opts.sprites) opts.sprites(0); if (opts.over) opts.over(ctx2d, 0); };
+    G.R.project = () => ({ x: 320, y: 180, ok: true });
+    try {
+      const dsc = new Sc.CollectScene('alan', () => {});
+      dsc.count = 0;
+      const dn = dsc.others[0];
+      dsc.p.x = dn.x; dsc.p.y = dn.y; tap('Space'); dsc.update(0.016);
+      dsc.draw(0.016);
+      check('draw sin errores: CollectScene cargando un partner al hombro', dsc.carrying === dn);
+      dsc.p.x = W.STASH.x; dsc.p.y = W.STASH.y; tap('Space'); dsc.update(0.016);
+      dsc.draw(0.016);
+      check('draw sin errores: CollectScene con el partner reclutado esperando', dn.state === 'waiting');
+    } catch (e) {
+      check('draw sin errores en CollectScene (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
+    } finally { W.render = realRender; G.R.project = realProject; }
+  }
+
+  // --- Llegada: la huida deja la escena solo con la party ---
+  Object.assign(S, { player: 'natalia', partners: ['itzel', 'alan', 'saulo'], inv: {}, flags: {}, sus: 0, sleep: 1, noise: 0, qBonus: 0, duels: [], done: {}, tired: null });
+  S.party = ['natalia', ...S.partners];
+  S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
+  await G.debug.actArrival({ inHand: [], stashed: 0, x: 510, y: 450 });
+  check('huida: huyeron exactamente los no reclutados', S.fled.length === 3 && S.fled.every((id) => !G.home.actor(id)), 'fled=' + S.fled.join(','));
+  check('huida: la escena queda SOLO con la party (4 actores)', G.home.roomies.length === 4 && G.home.roomies.every((r) => S.party.includes(r.id)), G.home.roomies.map((r) => r.id).join(','));
+
+  // --- Asignaciones posteriores: solo la party ---
+  let settledW = false, cardCount = -1;
+  const pw = G.debug.runEvent('whatsapp').then(() => { settledW = true; }, (e) => { settledW = true; console.log('  (error en whatsapp: ' + e.message + ')'); });
+  let itw = 0;
+  while (!settledW && itw++ < 2000) {
+    await tick();
+    const actions = documentFake.querySelector('#actions');
+    const cards = actions ? queryWithin(actions, '.card', true).filter((b) => b.onclick) : [];
+    if (cards.length) { if (cardCount < 0) cardCount = cards.length; const b = cards.find((x) => !x.disabled); if (b) b.onclick(); }
+  }
+  await pw;
+  check('asignación de evento: se ofrecen SOLO los 4 de la party (ningún huido)', cardCount === 4, 'tarjetas=' + cardCount);
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);

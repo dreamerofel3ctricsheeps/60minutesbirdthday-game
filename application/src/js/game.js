@@ -13,6 +13,11 @@
   const S = (G.S = {
     phase: 'title', player: null, inv: {}, sus: 0, sleep: 1, noise: 0, qBonus: 0, quality: 0,
     flags: {}, deco: [], duels: [], tired: null, done: {}, log: { fallos: 0, despertares: 0 },
+    // La PARTY de la partida: protagonista + partners reclutados en la
+    // recolección (máx. 3). Todo lo posterior a la llegada de Ximena
+    // (asignaciones, duelos, chat, casa, revelación) usa SOLO la party;
+    // los no reclutados huyeron y no vuelven a aparecer en la run.
+    partners: [], party: [], fled: [],
   });
   function recalc() {
     S.quality = clamp(Object.keys(S.inv).reduce((n, id) => n + (G.ITEMS[id] ? G.ITEMS[id].q : 0), 0) + S.qBonus, 0, 100);
@@ -104,6 +109,11 @@
     header(kind, title) { ui.raw(`<div class="evhead"><span>${kind}</span>${title}</div>`); },
     async post(m) {
       if (m.who === 'sistema') { await G.wait(ui.fast ? 0.05 : 0.5); ui.system(m.text); return; }
+      // Los roomies que NO fueron reclutados huyeron al llegar Ximena: no
+      // participan en el chat de la run (sus líneas se omiten; si el guion
+      // los menciona es como ausentes). Ximena, José y Pollito no son
+      // roomies reclutables y siempre pueden hablar.
+      if (S.party.length && G.PLAYABLE.includes(m.who) && !S.party.includes(m.who)) return;
       const ch = G.CHARS[m.who];
       const typing = ui.raw(`<div class="typing">${ch.name} está escribiendo…</div>`);
       await G.wait(ui.fast ? 0.05 : clamp(0.45 + m.text.length * 0.013, 0.5, 1.4));
@@ -132,12 +142,14 @@
         ui.scroll();
       });
     },
-    // tarjetas de asignación de personaje
+    // tarjetas de asignación de personaje: SOLO la party (protagonista +
+    // partners reclutados); antes de que exista party (práctica/?duelo=)
+    // se ofrece el roster completo.
     assign(prompt, info) {
       return new Promise((res) => {
         actions.innerHTML = `<div class="ask">${prompt}</div>`;
         const wrap = el('div', 'cards');
-        G.PLAYABLE.forEach((id) => {
+        (S.party.length ? S.party : G.PLAYABLE).forEach((id) => {
           const c = G.CHARS[id], tired = S.tired === id, inf = info(id);
           const b = el('button', 'card', `<img src="${Sp.portrait(id, tired ? 'tired' : null)}" alt=""><b>${c.name}</b><small>${inf.stats}</small>${inf.odds != null ? `<strong class="${inf.odds >= 0.6 ? 'hi' : inf.odds >= 0.35 ? 'mid' : 'lo'}">${Math.round(inf.odds * 100)}%</strong>` : ''}<small class="note">${tired ? 'Descansando (acaba de actuar)' : inf.note || ''}</small>`);
           b.disabled = tired; b.onclick = () => { actions.innerHTML = ''; ui.raw(`<div class="mine">Va ${c.name}</div>`); res(id); };
@@ -329,7 +341,7 @@
   }
   function selectChar() {
     return new Promise((res) => {
-      overlay.innerHTML = `<div class="modal wide"><h2>¿A quién controlas en el minuto de recolección?</h2><div class="pick"></div><p class="dim">Los otros dos seguirán disponibles para los eventos de la noche.</p></div>`;
+      overlay.innerHTML = `<div class="modal wide"><h2>¿A quién controlas en el minuto de recolección?</h2><div class="pick"></div><p class="dim">En el departamento estarán los 7 roomies. Durante el minuto podrás cargar hasta <b>3 partners</b> al hombro y dejarlos en el armario: ellos se quedan para toda la noche. Los demás… ya verás.</p></div>`;
       overlay.classList.add('show');
       G.PLAYABLE.forEach((id) => {
         const c = G.CHARS[id];
@@ -511,10 +523,17 @@
 
   async function actArrival(res) {
     S.phase = 'arrival'; S.sus = 5; S.sleep = 1;
-    const home = (G.home = new Sc.HomeScene());
+    // La llegada se juega con los 7 roomies presentes; al terminar la
+    // huida, la escena se queda solo con la party (removeRoomie).
+    const home = (G.home = new Sc.HomeScene(G.PLAYABLE));
     home.setLight('dia', true);
     const me = home.actor(S.player); me.x = res.x; me.y = res.y; me.carry = res.inHand.slice();
-    home.roomies.filter((r) => r !== me).forEach((r, i) => { r.x = 420 + i * 170; r.y = 520 - i * 10; r.dir = 'down'; });
+    // La party espera cerca de la puerta; los que van a huir están
+    // repartidos por el departamento, viviendo su último minuto ahí.
+    S.partners.map((id) => home.actor(id)).filter(Boolean).forEach((a, i) => { const sp = [[452, 528], [568, 528], [510, 556]][i]; a.x = sp[0]; a.y = sp[1]; a.dir = 'down'; });
+    const fledSpots = [[300, 150], [700, 220], [180, 470], [820, 180], [420, 516], [240, 244]];
+    const fledActors = S.fled.map((id) => home.actor(id)).filter(Boolean);
+    fledActors.forEach((a, i) => { const sp = fledSpots[i % fledSpots.length]; a.x = sp[0]; a.y = sp[1]; a.dir = 'down'; });
     res.inHand.forEach((id) => (S.inv[id] = true)); ui.refreshInv();
     G.setScene(home);
     const xi = home.xi; xi.hidden = false; xi.x = 510; xi.y = 650; xi.expr = 'tired'; xi.speed = 60; G.sfx('door');
@@ -524,13 +543,35 @@
     home.roomies.forEach((r) => { r.expr = 'surprised'; r.hop(150); r.emo('!', 1); });
     xi.route = [[510, 548]]; await G.until(() => xi.arrived); xi.dir = 'up';
     xi.say('Ya llegué… 36 horas de guardia. No siento las piernas.', 3.2); await G.wait(3.4);
+    // ---- LA HUIDA: los roomies NO reclutados salen despavoridos --------
+    // Pánico (expresión de sorpresa), líneas cómicas y carrera en cadena
+    // hacia la puerta con micro-retrasos. Al salir, desaparecen de la
+    // escena y de la run: home.roomies queda = la party.
+    if (fledActors.length) {
+      const lines = ['¡Nosotros ya nos íbamos! 😅', '¡Se me quema el arroz!', '¡Mañana madrugo! ¡Chau!', '¡Uy, justo salía!', '¡Nos vemos… algún día!'];
+      fledActors.forEach((a, i) => { a.expr = 'surprised'; a.emo('!!', 1.3); a.hop(170); if (i < 2) a.say(lines[i], 1.9); });
+      await G.wait(0.9);
+      fledActors.forEach((a, i) => G.after(0.15 + i * 0.3, () => a.goTo(510, 706, 208 + (i % 3) * 16)));
+      await G.until(() => fledActors.every((a) => a.arrived));
+      fledActors.forEach((a) => { a.hidden = true; home.removeRoomie(a.id); });
+      ui.system(`🏃 Los que no se quedaron (${fledActors.map((a) => G.CHARS[a.id].name).join(', ')}) salieron corriendo.`);
+      // Ximena, extrañada; alguien de la party la despista como puede.
+      xi.expr = 'suspicious'; xi.emo('?', 1.4);
+      xi.say('¿Y ellos? ¿Por qué se fueron corriendo? 🤔', 3); await G.wait(3.2);
+      const voice = (S.partners.length ? home.actor(S.partners[0]) : me) || me;
+      voice.say('Es que… ¡tenían examen mañana! Todos. El mismo examen. A la misma hora.', 2.8); await G.wait(3);
+      xi.say('Mmm. Qué raro. Bueno… ya fue, estoy muerta de cansancio.', 2.4); await G.wait(2.5);
+      xi.expr = 'tired';
+      ui.system('Ximena se quedó un poco extrañada con la estampida.');
+      apply({ sus: 3 });
+    }
     if (res.inHand.length) {
       const names = res.inHand.map((id) => G.ITEMS[id].name.toLowerCase()).join(' y ');
       if (S.player === 'itzel') { xi.say('¿Y eso que llevas?', 2); await G.wait(2.1); me.say('Ropa para lavar 🙂', 2); await G.wait(2.1); xi.say('Ah. Ya.', 1.5); await G.wait(1.6); ui.system(`Itzel disimuló (${names}). Sin sospechas.`); }
       else { xi.expr = 'suspicious'; xi.emo('?', 1.2); xi.say(`¿Por qué tienes ${names} en la mano?`, 2.8); await G.wait(3); me.hop(140); me.say('¡Nada! Es… reciclaje.', 2.2); await G.wait(2.4); ui.system(`Ximena vio lo que no alcanzaste a guardar (${names}).`); apply({ sus: 9 * res.inHand.length }); xi.expr = 'tired'; }
     }
     if (S.flags.pollitoJugo) { xi.say('¿Y por qué Pollito anda arrastrando cosas por la casa?', 2.8); await G.wait(3); apply({ sus: 4 }); }
-    if (!res.inHand.length && !S.flags.pollitoJugo) { xi.say('Qué raro verlos a todos despiertos y… parados.', 2.6); await G.wait(2.8); }
+    if (!res.inHand.length && !S.flags.pollitoJugo) { xi.say('Bueno… ustedes quédense despiertos si quieren. Yo no existo hasta mañana.', 2.8); await G.wait(3); }
     xi.say('Me voy a dormir. Si alguien me despierta, lo opero sin anestesia.', 3.2); await G.wait(3.3);
     me.carry = [];
     W.xDoorOpen = true; xi.route = [[510, 455], [640, 455], [720, 455], [830, 430]]; xi.speed = 66;
@@ -561,7 +602,7 @@
 
   async function actReveal(ruina) {
     const home = G.home, xi = home.xi; S.phase = 'reveal'; home.wander = false;
-    const spots = [[470, 150], [560, 250], [420, 240]];
+    const spots = [[470, 150], [560, 250], [420, 240], [648, 186]];
     const jw = S.duels.filter((d) => d.boss === 'jose' && d.win === 'win').length;
     if (ruina) {
       ui.header('Final', 'Demasiadas pistas');
@@ -626,11 +667,17 @@
     }
     S.player = await selectChar();
     const res = await actCollect();
+    // La party queda fijada al cerrar la recolección: protagonista +
+    // partners entregados en el armario. Los demás roomies son los que
+    // huirán cuando Ximena cruce la puerta.
+    S.partners = res.partners || [];
+    S.party = [S.player, ...S.partners];
+    S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
     await actArrival(res);
     const ruina = await actNight();
     const key = await actReveal(ruina);
     await showEnding(key);
   }
-  G.debug = { S, apply, runEvent, tick };
+  G.debug = { S, apply, runEvent, tick, actArrival, actCollect };
   main();
 })();

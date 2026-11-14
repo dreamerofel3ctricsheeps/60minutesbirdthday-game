@@ -238,14 +238,29 @@
       else if (this.moving && (dir === 'left' || dir === 'right')) shear = (dir === 'left' ? -1 : 1) * 3.5 * Math.min(1, this.spd / 90);   // se inclina hacia donde corre
       let anim, idx = 0, flip = false;
       const fo = this.frameOverride;
-      if (fo != null) {
+      if (this.carriedPose) {
+        // Pasajero al hombro durante la recolección: pose 'carried'
+        // (acostado, pateando de a ratos: 2 frames en ciclo lento). Lo
+        // posiciona la escena (x/y del portador, elev = sus hombros y un
+        // resorte de acople); aquí solo se elige el frame. Se espeja con
+        // la dirección del portador (personaje humano: espejo libre).
+        anim = 'carried'; idx = Math.floor(this.t * 2); flip = dir === 'left';
+      } else if (fo != null) {
         anim = typeof fo === 'string' ? fo : 'act';
         idx = Math.floor(this.t * 4);
       } else if (this.jy > 6) {
         anim = 'act'; idx = this.jy > 26 ? 1 : 0;
       } else if (this.moving && this.spin <= 0) {
         const run = this.spd > RUN_SPD, cyc = Math.floor(this.step / (run ? Math.PI / 1.15 : Math.PI / 2));
-        if (this.animSet) { anim = this.animSet; flip = dir === 'left'; }
+        if (this.carryWalk) {
+          // Portador con un partner al hombro: caminata carrywalk_* por
+          // dirección (brazos en alto sujetando). Cae en la cadencia
+          // genérica de abajo (3 frames = ping-pong, 4 = loop) y nunca
+          // usa run_* cargando: la zancada es la de caminata.
+          anim = dir === 'up' ? 'carrywalk_up' : dir === 'down' ? 'carrywalk_down' : 'carrywalk_right';
+          flip = dir === 'left';
+        }
+        else if (this.animSet) { anim = this.animSet; flip = dir === 'left'; }
         else if (dir === 'up') anim = run && Sp.hasAnim(this.id, 'run_up') ? 'run_up' : 'walk_up';
         else if (dir === 'down') anim = run && Sp.hasAnim(this.id, 'run_down') ? 'run_down' : 'walk_down';
         else { anim = run && Sp.hasAnim(this.id, 'run_right') ? 'run_right' : 'walk_right'; flip = dir === 'left'; }
@@ -261,7 +276,8 @@
         // (≈17.1 u) acordes a la zancada de carrera.
         idx = !run && Sp.animLen(this.id, anim) === 3 ? ppIdx(cyc, 3) : cyc;
       } else {
-        if (dir === 'up') anim = 'idle_up';
+        if (this.carryWalk) { anim = dir === 'up' ? 'carrywalk_up' : dir === 'down' ? 'carrywalk_down' : 'carrywalk_right'; idx = 0; flip = dir === 'left'; }
+        else if (dir === 'up') anim = 'idle_up';
         else if (dir === 'down') { anim = 'idle'; idx = Math.floor(this.t / 0.85); }
         else { anim = 'idle_right'; flip = dir === 'left'; }
       }
