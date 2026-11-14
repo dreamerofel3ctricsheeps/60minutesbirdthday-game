@@ -21,7 +21,10 @@ manifest.json con rects irregulares), y por personaje:
 
 Animaciones empaquetadas (nombre de motor): idle, idle_up, idle_right,
 walk_down, walk_up, walk_right, run_down, run_up, run_right, act
-(+ sneak/celebrate en Jose; el gato usa idle/walk/pounce).
+(+ sneak/celebrate en Jose; el gato usa idle/walk/pounce y, para la
+escalada de repisas donde trepa DE ESPALDAS, back_idle/back_jump: su
+vista trasera generada a propósito, porque el bundle solo traía
+frontal/perfil/pounce).
 Los 7 roomies empaquetan ADEMÁS carried y carrywalk_down/up/right: desde el
 rediseño de flujo de 2026-11-14 la recolección permite cargar partners al
 hombro (el portador camina con carrywalk_*, el pasajero va en su pose
@@ -261,8 +264,16 @@ def build_char(cid, bundle, geom, anim_names, report):
         hs = [boxes[(eng, i)][3] - boxes[(eng, i)][1] for i in range(len(frames[eng])) if boxes[(eng, i)]]
         return max(hs) if hs else 1
     if cid == 'pollito':
-        s_all = geom['target_h'] / max(maxh(e) for e in frames)
+        # La escala global sale de las vistas de siempre (idle/walk/pounce):
+        # las vistas TRASERAS nuevas (back_idle/back_jump, para la escalada
+        # de repisas) NO deben re-escalar al gato en todo el juego. Usan la
+        # misma escala, con guarda de celda si un frame estirado no cupiera
+        # sobre la línea de piso.
+        s_all = geom['target_h'] / max(maxh(e) for e in frames if not e.startswith('back_'))
         scale_of = {eng: s_all for eng in frames}
+        for eng in frames:
+            if eng.startswith('back_'):
+                scale_of[eng] = min(s_all, (geom['base'] - 6) / maxh(eng))
     else:
         s_idle = geom['target_h'] / minh('idle')
         scale_of = {}
@@ -381,8 +392,11 @@ def main():
     jobs.append(('jose', load_bundle(os.path.join(NS, 'characters/villains/jose')), HUMAN,
                  PACK_HUMAN + ['sneak', 'celebrate']))
     gato = load_bundle(os.path.join(NS, 'characters/villains/gato'))
+    back = gato.get('back', [])  # vista trasera: [0] sentado, [1..] saltando/trepando
     jobs.append(('pollito', {'idle': gato.get('idle', []), 'walk': gato.get('prowl', []),
-                             'pounce': gato.get('pounce', [])}, CATG, ['idle', 'walk', 'pounce']))
+                             'pounce': gato.get('pounce', []),
+                             'back_idle': back[:1], 'back_jump': back[1:]}, CATG,
+                 ['idle', 'walk', 'pounce', 'back_idle', 'back_jump']))
     meta_all, data_all = {}, {}
     for cid, bundle, geom, anims in jobs:
         meta, sheet = build_char(cid, bundle, geom, anims, report)

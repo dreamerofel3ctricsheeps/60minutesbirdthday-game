@@ -301,14 +301,18 @@
       const anim = dir === 'up' ? 'idle_up' : dir === 'down' ? 'idle' : 'idle_right';
       return frameCanvas(id, anim, 0, dir === 'left', expr);
     },
-    // El gato real de Jose: anim = 'idle' | 'walk' (prowl) | 'pounce'.
+    // El gato real de Jose: anim = 'idle' | 'walk' (prowl) | 'pounce' |
+    // 'back_idle' | 'back_jump' (su vista TRASERA, para trepar de
+    // espaldas en la escalada de repisas).
     // ESPEJO POR TIPO DE VISTA: 'walk' es un PERFIL (el strip mira a la
     // derecha); espejarlo al ir a la izquierda NO viola la regla de la
     // mancha — vemos el otro costado del gato, que es lo físicamente
     // correcto (la v3.1 original ya espejaba así su gato por código).
     // 'idle' y 'pounce' son vistas FRONTALES: ahí la mancha naranja debe
     // quedar en su cachete izquierdo, así que NUNCA se espejan — el flip
-    // que pase world.js se ignora para esas animaciones.
+    // que pase world.js se ignora para esas animaciones. Las traseras
+    // tampoco se espejan jamás: de espaldas la mancha del cachete no se
+    // ve (correcto) y su cola/patrón no se voltean sin necesidad.
     catAnim(anim, idx, flip) { return frameCanvas('pollito', anim, idx || 0, !!flip && anim === 'walk', null); },
     // compat con las poses del gato dibujado por código que usaba la v3.1
     cat(pose) {

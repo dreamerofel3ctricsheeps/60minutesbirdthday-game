@@ -7,7 +7,8 @@
    2. Toda animación requerida por la máquina de animación de world.js
       tiene >= 1 frame (humanos: idle, idle_up, idle_right, walk_down,
       walk_up, walk_right, run_down, run_up, run_right, act; Jose además
-      sneak y celebrate; el gato: idle, walk, pounce). Los 7 ROOMIES
+      sneak y celebrate; el gato: idle, walk, pounce y su vista trasera
+      back_idle/back_jump para la escalada de repisas). Los 7 ROOMIES
       además carried y carrywalk_down/up/right (carga de partners en la
       recolección: portador con carrywalk_*, pasajero con carried).
    3. Todo rect de celda cae dentro de su hoja (cols/filas vs sw/sh) y el
@@ -102,6 +103,14 @@ for (const id of ROOMIES) {
 
 const cat = META.chars.pollito;
 if (cat) for (const a of ['idle', 'walk', 'pounce']) ok(Array.isArray(cat.anims[a]) && cat.anims[a].length >= 1, `pollito: animación ${a} con frames`);
+// Vista TRASERA del gato (escalada de repisas: trepa de espaldas como el
+// jugador): back_idle sentado (>= 1) y back_jump saltando/trepando (>= 2:
+// estirado hacia arriba y recogido). Sin esto el duelo no puede mostrarlo
+// de espaldas y caería en el frontal de siempre.
+if (cat) {
+  ok(Array.isArray(cat.anims.back_idle) && cat.anims.back_idle.length >= 1, `pollito: animación back_idle (trasera quieto) con frames (${(cat.anims.back_idle || []).length})`);
+  ok(Array.isArray(cat.anims.back_jump) && cat.anims.back_jump.length >= 2, `pollito: animación back_jump (trasera saltando) con >= 2 frames (${(cat.anims.back_jump || []).length})`);
+}
 
 console.log(fails ? `\n${fails} FALLOS` : '\nTODO OK');
 process.exit(fails ? 1 : 0);
