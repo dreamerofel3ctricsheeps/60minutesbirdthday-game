@@ -7,7 +7,9 @@
    2. Toda animación requerida por la máquina de animación de world.js
       tiene >= 1 frame (humanos: idle, idle_up, idle_right, walk_down,
       walk_up, walk_right, run_down, run_up, run_right, act; Jose además
-      sneak y celebrate; el gato: idle, walk, pounce).
+      sneak y celebrate; el gato: idle, walk, pounce). Los 7 ROOMIES
+      además carried y carrywalk_down/up/right (carga de partners en la
+      recolección: portador con carrywalk_*, pasajero con carried).
    3. Todo rect de celda cae dentro de su hoja (cols/filas vs sw/sh) y el
       dataURL decodifica a un PNG de esas dimensiones exactas.
    4. Ojos: >= 90% de los frames frontales (idle, walk_down, run_down, act)
@@ -35,7 +37,9 @@ const META = G.DEFINED_META, DATA = G.DEFINED_DATA;
 ok(!!META && !!DATA, 'DEFINED_META y DEFINED_DATA presentes');
 
 const HUMANS = ['alan', 'fatima', 'itzel', 'majo', 'natalia', 'samantha', 'saulo', 'ximena', 'jose'];
+const ROOMIES = ['alan', 'fatima', 'itzel', 'majo', 'natalia', 'samantha', 'saulo'];
 const REQ_HUMAN = ['idle', 'idle_up', 'idle_right', 'walk_down', 'walk_up', 'walk_right', 'run_down', 'run_up', 'run_right', 'act'];
+const REQ_CARRY = ['carried', 'carrywalk_down', 'carrywalk_up', 'carrywalk_right'];
 const FRONT = ['idle', 'walk_down', 'run_down', 'act'];
 
 // 1. todo personaje de data.js existe
@@ -66,7 +70,8 @@ for (const [id, m] of Object.entries(META.chars)) {
 // 2 + 4. animaciones requeridas y cobertura de ojos
 for (const id of HUMANS) {
   const m = META.chars[id]; if (!m) continue;
-  const req = id === 'jose' ? REQ_HUMAN.concat(['sneak', 'celebrate']) : REQ_HUMAN;
+  let req = id === 'jose' ? REQ_HUMAN.concat(['sneak', 'celebrate']) : REQ_HUMAN;
+  if (ROOMIES.includes(id)) req = req.concat(REQ_CARRY);
   for (const a of req) ok(Array.isArray(m.anims[a]) && m.anims[a].length >= 1, `${id}: animación ${a} con frames`);
   let total = 0, det = 0, avgBad = 0;
   for (const a of FRONT) for (const c of (m.anims[a] || [])) {

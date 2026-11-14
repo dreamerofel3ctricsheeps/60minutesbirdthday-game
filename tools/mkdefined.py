@@ -22,10 +22,12 @@ manifest.json con rects irregulares), y por personaje:
 Animaciones empaquetadas (nombre de motor): idle, idle_up, idle_right,
 walk_down, walk_up, walk_right, run_down, run_up, run_right, act
 (+ sneak/celebrate en Jose; el gato usa idle/walk/pounce).
-NO se empaquetan (existen en los bundles pero esta base no tiene sistema para
-ellas): carried, carrywalk_* (no hay carga de roomies en la v3.1), idle_3_4 y
-sleep de Ximena (sleep es una ilustración con su propia cama, no encaja en la
-cama 3D del departamento; su cabeza se recorta del idle como hacía la v3.1).
+Los 7 roomies empaquetan ADEMÁS carried y carrywalk_down/up/right: desde el
+rediseño de flujo de 2026-11-14 la recolección permite cargar partners al
+hombro (el portador camina con carrywalk_*, el pasajero va en su pose
+carried). NO se empaquetan: idle_3_4 y sleep de Ximena (sleep es una
+ilustración con su propia cama, no encaja en la cama 3D del departamento;
+su cabeza se recorta del idle como hacía la v3.1).
 
 Uso:  python3 tools/mkdefined.py
 """
@@ -54,11 +56,19 @@ ANIM_MAP = {
     'idle': 'idle', 'walk_down': 'walk_front', 'walk_up': 'walk_back',
     'walk_right': 'walk_right', 'run_down': 'run_front', 'run_up': 'run_back',
     'run_right': 'run_right', 'act': 'action', 'sneak': 'sneak',
-    'celebrate': 'celebrate',
+    'celebrate': 'celebrate', 'carrywalk_down': 'carrywalk_front',
+    'carrywalk_up': 'carrywalk_back', 'carrywalk_right': 'carrywalk_right',
+    'carried': 'carried',
 }
 FRONTAL = {'idle', 'walk_down', 'run_down', 'act'}
 PACK_HUMAN = ['idle', 'walk_down', 'walk_up', 'walk_right', 'run_down',
               'run_up', 'run_right', 'act']
+# Solo los 7 roomies: son los únicos que pueden ser protagonistas/portadores
+# y pasajeros. carried NO entra en FRONTAL (la pose va acostada, de medio
+# lado: sin ojos útiles para repintar expresiones) y carrywalk_* tampoco
+# (la cara queda parcialmente tapada por los brazos en alto): en esas
+# animaciones el motor simplemente no repinta expresiones.
+PACK_CARRY = ['carrywalk_down', 'carrywalk_up', 'carrywalk_right', 'carried']
 
 
 def load_bundle(d):
@@ -205,9 +215,21 @@ def build_char(cid, bundle, geom, anim_names, report):
     else:
         s_idle = geom['target_h'] / minh('idle')
         scale_of = {}
+        if 'carried' in frames:
+            # carried va ACOSTADO (pose diagonal volando sobre el hombro):
+            # ni su alto (grosor del cuerpo tumbado) ni la escala del idle
+            # sirven — algunos bundles lo dibujan mucho más ancho que la
+            # estatura del personaje (Samantha salía 1.8× su alto). Se
+            # normaliza por ANCHO: el largo del cuerpo tumbado ≈ estatura
+            # de pie × 1.08 (la diagonal de la pose).
+            maxw_c = max(boxes[('carried', i)][2] - boxes[('carried', i)][0]
+                         for i in range(len(frames['carried'])) if boxes[('carried', i)])
+            scale_of['carried'] = geom['target_h'] * 1.08 / maxw_c
         for eng in frames:
             if eng in ('sneak', 'celebrate'):
                 scale_of[eng] = s_idle
+            elif eng == 'carried':
+                continue
             else:
                 s = geom['target_h'] / minh(eng)
                 # guarda de celda: el frame más alto de la animación debe caber
@@ -286,7 +308,7 @@ def main():
     os.makedirs(OUT_PNG, exist_ok=True)
     jobs = []
     for cid in ['alan', 'fatima', 'itzel', 'majo', 'natalia', 'samantha', 'saulo']:
-        jobs.append((cid, load_bundle(os.path.join(NS, 'characters/defined', cid)), HUMAN, PACK_HUMAN))
+        jobs.append((cid, load_bundle(os.path.join(NS, 'characters/defined', cid)), HUMAN, PACK_HUMAN + PACK_CARRY))
     jobs.append(('ximena', load_ximena(), HUMAN, PACK_HUMAN))
     jobs.append(('jose', load_bundle(os.path.join(NS, 'characters/villains/jose')), HUMAN,
                  PACK_HUMAN + ['sneak', 'celebrate']))
