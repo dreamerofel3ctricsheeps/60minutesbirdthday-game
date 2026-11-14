@@ -54,26 +54,26 @@
   ]
  },
  "walk_right": {
-  "width": 1920,
-  "height": 640,
+  "width": 1406,
+  "height": 593,
   "frames": [
    {
-    "x": 124,
-    "y": 31,
-    "width": 461,
+    "x": 0,
+    "y": 0,
+    "width": 485,
+    "height": 593
+   },
+   {
+    "x": 491,
+    "y": 1,
+    "width": 416,
     "height": 592
    },
    {
-    "x": 734,
-    "y": 31,
-    "width": 394,
-    "height": 591
-   },
-   {
-    "x": 1347,
-    "y": 31,
-    "width": 465,
-    "height": 592
+    "x": 913,
+    "y": 9,
+    "width": 493,
+    "height": 584
    }
   ]
  },

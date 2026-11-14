@@ -54,26 +54,26 @@
   ]
  },
  "walk_right": {
-  "width": 1920,
-  "height": 640,
+  "width": 1482,
+  "height": 632,
   "frames": [
    {
-    "x": 126,
-    "y": 20,
-    "width": 405,
-    "height": 608
+    "x": 0,
+    "y": 26,
+    "width": 556,
+    "height": 606
    },
    {
-    "x": 765,
-    "y": 20,
-    "width": 402,
-    "height": 612
+    "x": 562,
+    "y": 25,
+    "width": 453,
+    "height": 607
    },
    {
-    "x": 1401,
-    "y": 20,
-    "width": 405,
-    "height": 608
+    "x": 1021,
+    "y": 0,
+    "width": 461,
+    "height": 632
    }
   ]
  },

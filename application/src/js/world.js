@@ -122,6 +122,12 @@
   World.updateFx = (dt) => { for (let i = World.fx.length - 1; i >= 0; i--) { const p = World.fx[i]; p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.c === starC) p.vy -= 260 * dt; if (p.t >= p.d) World.fx.splice(i, 1); } };
 
   // ---------- Actores ----------
+  // Recorrido ping-pong de un ciclo de n frames: 0,1,…,n-1,n-2,…,1.
+  // Para ciclos de caminata de 3 poses [contacto, pase, contacto opuesto]
+  // produce contacto→pase→contacto opuesto→pase: ambas piernas alternan y
+  // la pose de pase aparece entre los dos apoyos, como en una zancada real.
+  function ppIdx(beat, n) { if (n <= 1) return 0; const per = 2 * n - 2, k = ((beat % per) + per) % per; return k < n ? k : per - k; }
+
   class Actor {
     constructor(id, x, y) {
       this.id = id; this.x = x; this.y = y; this.dir = 'down'; this.moving = false; this.t = Math.random() * 3;
@@ -166,7 +172,13 @@
       if (this.bubble && (this.bubble.t -= dt) <= 0) this.bubble = null;
       if (this.emote && (this.emote.t -= dt) <= 0) this.emote = null;
       if (this.moving) {
-        this.step += this.spd * dt * 0.1;
+        // step = fase de zancada: avanza 0.16 por unidad de mundo recorrida.
+        // Con beats de π/2 (ver draw3d) cada frame de caminata dura ≈9.8 u y
+        // el ciclo completo (ping-pong, 4 beats) ≈39.3 u = un periodo exacto
+        // del bob (2π): pies, balanceo y puff de pisada quedan EN FASE.
+        // (Antes: 0.1 → cada frame duraba 15.7 u y el ciclo 47 u desfasado
+        // del bob: las poses se arrastraban y el personaje "patinaba".)
+        this.step += this.spd * dt * 0.16;
         const s = Math.floor(this.step / Math.PI);
         if (s !== this.lastStep) { this.lastStep = s; if (this.spd > 95 && this.jy <= 0) World.puff(this.x, this.y, 1); }
       } else this.step = 0;
@@ -197,7 +209,7 @@
         // impone en Sp.catAnim (solo 'walk' admite flip).
         let anim, idx;
         if (this.jy > 2) { anim = 'pounce'; idx = this.jy > 26 ? 1 : 0; }
-        else if (this.moving) { anim = 'walk'; idx = Math.floor(this.step / (Math.PI / 2)); }
+        else if (this.moving) { anim = 'walk'; idx = ppIdx(Math.floor(this.step / (Math.PI / 3)), 3); }
         else { anim = 'idle'; idx = Math.floor(this.t / 0.9); }
         if (this.spin > 0) roll = this.spin * 14;
         // feet = (fh - base) * scale de su hoja = (150 - 140) * 0.25 = 2.5
@@ -233,11 +245,21 @@
         anim = 'act'; idx = this.jy > 26 ? 1 : 0;
       } else if (this.moving && this.spin <= 0) {
         const run = this.spd > RUN_SPD, cyc = Math.floor(this.step / (run ? Math.PI / 1.15 : Math.PI / 2));
-        idx = cyc;
         if (this.animSet) { anim = this.animSet; flip = dir === 'left'; }
         else if (dir === 'up') anim = run && Sp.hasAnim(this.id, 'run_up') ? 'run_up' : 'walk_up';
         else if (dir === 'down') anim = run && Sp.hasAnim(this.id, 'run_down') ? 'run_down' : 'walk_down';
         else { anim = run && Sp.hasAnim(this.id, 'run_right') ? 'run_right' : 'walk_right'; flip = dir === 'left'; }
+        // CADENCIA (arreglo "solo mueve una pierna / se desliza", 2026-11-14):
+        // beat = π/2 de step ≈ 9.8 u por frame (step avanza 0.16/u). Los
+        // ciclos de caminata de 3 frames son [contacto, pase, contacto
+        // opuesto] y se recorren en PING-PONG (0,1,2,1): el ciclo completo
+        // dura 4 beats ≈ 39.3 u ≈ dos zancadas, ningún frame domina, y queda
+        // en fase con el bob (|sin(step)| pica en los beats de pase) y con el
+        // puff de pisada (cada π de step = cada beat de contacto). Los ciclos
+        // de 4 frames (walk_down y todos los run_*) son ciclos reales
+        // medidos y van en loop directo; correr usa beats más largos
+        // (≈17.1 u) acordes a la zancada de carrera.
+        idx = !run && Sp.animLen(this.id, anim) === 3 ? ppIdx(cyc, 3) : cyc;
       } else {
         if (dir === 'up') anim = 'idle_up';
         else if (dir === 'down') { anim = 'idle'; idx = Math.floor(this.t / 0.85); }
