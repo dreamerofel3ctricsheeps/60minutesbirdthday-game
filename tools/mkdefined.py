@@ -40,7 +40,14 @@ OUT_JS = os.path.join(ROOT, 'application/src/js/defined-sheets.js')
 OUT_PNG = os.path.join(ROOT, 'application/src/assets/sprites/defined')
 
 HUMAN = dict(fh=244, base=236, target_h=198, scale=0.33)
-CATG = dict(fh=150, base=140, target_h=118, scale=0.42)
+# Gato: la escala se calibró contra el Pollito ORIGINAL de la v3.1 (dibujado
+# por código en sprites.js): su 'sit' medía ≈33 u de mundo sobre el piso y su
+# caminata ≈27 u (su head() anclaba en 34 u; el humano mide ≈65 u). Con
+# target_h=118 px (el contenido más alto = idle sentado): 118 × 0.25 = 29.5 u,
+# ×1.15 de sy del actor en world.js ≈ 34 u sentado y ≈28 u en prowl (96 px),
+# es decir prowl ≈43% de la altura humana — la proporción original. Con el
+# 0.42 anterior el gato medía ≈50 u (≈76% de un humano): se veía enorme.
+CATG = dict(fh=150, base=140, target_h=118, scale=0.25)
 
 # nombre de motor -> clave en el bundle
 ANIM_MAP = {

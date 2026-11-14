@@ -187,14 +187,21 @@
       const fl = this.flash > 0 && Math.floor(this.flash * 20) % 2 ? [0.9, 0.9, 0.9] : null;
       if (this.id === 'pollito') {
         // Pollito es el gato calicó REAL (hoja definida): idle sentado, prowl
-        // al moverse (ciclo de 3 frames) y pounce en el aire. NUNCA se espeja:
-        // su mancha naranja va en el cachete izquierdo.
+        // al moverse (ciclo de 3 frames) y pounce en el aire.
+        // ESPEJO POR TIPO DE VISTA: el prowl es un PERFIL — al ir a la
+        // izquierda se espeja, porque lo que vemos es su OTRO costado (lo
+        // físicamente correcto, igual que hacía el Pollito por código de la
+        // v3.1 con Sp.cat(pose, dir==='left')). Las vistas FRONTALES (idle
+        // sentado y pounce, que salta hacia la cámara) NUNCA se espejan: ahí
+        // la mancha naranja debe quedar en su cachete izquierdo. La regla se
+        // impone en Sp.catAnim (solo 'walk' admite flip).
         let anim, idx;
         if (this.jy > 2) { anim = 'pounce'; idx = this.jy > 26 ? 1 : 0; }
         else if (this.moving) { anim = 'walk'; idx = Math.floor(this.step / (Math.PI / 2)); }
         else { anim = 'idle'; idx = Math.floor(this.t / 0.9); }
         if (this.spin > 0) roll = this.spin * 14;
-        R.sprite(Sp.catAnim(anim, idx), this.x, E + this.jy + (this.moving ? walkBob * 0.5 : 0), this.y, { feet: 5, roll, sx: sx * 1.15, sy: sy * 1.15, flash: fl });
+        // feet = (fh - base) * scale de su hoja = (150 - 140) * 0.25 = 2.5
+        R.sprite(Sp.catAnim(anim, idx, this.dir === 'left'), this.x, E + this.jy + (this.moving ? walkBob * 0.5 : 0), this.y, { feet: 2.5, roll, sx: sx * 1.15, sy: sy * 1.15, flash: fl });
         if (this.carry && this.carry.length) R.sprite(Sp.item(this.carry[0]), this.x + (this.dir === 'left' ? -14 : 14), E + this.jy + 16, this.y + 0.6, { feet: 4, sx: 0.8, sy: 0.8 });
         return;
       }
@@ -243,7 +250,7 @@
       }
     }
     // punto sobre la cabeza en coordenadas de la capa 2D
-    head(extra) { return R.project(this.x, (this.id === 'pollito' ? 42 : Sp.charTop(this.id) + 3) * R.stretch * this.scale + this.elev + this.jy + (extra || 0), this.y); }
+    head(extra) { return R.project(this.x, (this.id === 'pollito' ? 34 : Sp.charTop(this.id) + 3) * R.stretch * this.scale + this.elev + this.jy + (extra || 0), this.y); }
   }
   G.Actor = Actor;
 

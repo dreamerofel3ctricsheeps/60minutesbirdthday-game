@@ -245,8 +245,9 @@
 
   const cache = {};
   // Canvas de UNA celda de la hoja definida, con expresión repintada si el
-  // frame tiene ojos registrados. flip espeja la celda (solo humanos: el
-  // gato calicó nunca se espeja).
+  // frame tiene ojos registrados. flip espeja la celda: lo usan los humanos
+  // (izquierda = espejo de walk_right) y el PERFIL del gato al ir a la
+  // izquierda (ver catAnim); las vistas frontales del gato jamás se espejan.
   const blankC = typeof document !== 'undefined' ? (() => { const c = document.createElement('canvas'); c.width = c.height = 4; c._scale = 0.33; return c; })() : null;
   function frameCanvas(id, anim, idx, flip, expr) {
     const meta = M.chars[id]; if (!meta) return blankC;
@@ -283,8 +284,15 @@
       const anim = dir === 'up' ? 'idle_up' : dir === 'down' ? 'idle' : 'idle_right';
       return frameCanvas(id, anim, 0, dir === 'left', expr);
     },
-    // El gato real de Jose: anim = 'idle' | 'walk' (prowl) | 'pounce'. Sin flip, nunca.
-    catAnim(anim, idx) { return frameCanvas('pollito', anim, idx || 0, false, null); },
+    // El gato real de Jose: anim = 'idle' | 'walk' (prowl) | 'pounce'.
+    // ESPEJO POR TIPO DE VISTA: 'walk' es un PERFIL (el strip mira a la
+    // derecha); espejarlo al ir a la izquierda NO viola la regla de la
+    // mancha — vemos el otro costado del gato, que es lo físicamente
+    // correcto (la v3.1 original ya espejaba así su gato por código).
+    // 'idle' y 'pounce' son vistas FRONTALES: ahí la mancha naranja debe
+    // quedar en su cachete izquierdo, así que NUNCA se espejan — el flip
+    // que pase world.js se ignora para esas animaciones.
+    catAnim(anim, idx, flip) { return frameCanvas('pollito', anim, idx || 0, !!flip && anim === 'walk', null); },
     // compat con las poses del gato dibujado por código que usaba la v3.1
     cat(pose) {
       if (pose === 'sit') return this.catAnim('idle', 0);
