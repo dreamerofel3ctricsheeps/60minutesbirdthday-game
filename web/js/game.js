@@ -12,7 +12,7 @@
   // ---------- Estado ----------
   const S = (G.S = {
     phase: 'title', player: null, inv: {}, sus: 0, sleep: 1, noise: 0, qBonus: 0, quality: 0,
-    flags: {}, deco: [], tired: null, done: {}, log: { fallos: 0, despertares: 0 },
+    flags: {}, deco: [], duels: [], tired: null, done: {}, log: { fallos: 0, despertares: 0 },
   });
   function recalc() {
     S.quality = clamp(Object.keys(S.inv).reduce((n, id) => n + (G.ITEMS[id] ? G.ITEMS[id].q : 0), 0) + S.qBonus, 0, 100);
@@ -48,20 +48,19 @@
   };
 
   // ---------- Bucle principal ----------
-  const cv = $('#cv'), ctx = cv.getContext('2d');
+  const cv = $('#cv'); G.ovCtx = cv.getContext('2d');
+  if (/[?&]low/.test(location.search)) { $('#gl').width = 640; $('#gl').height = 360; G.R.ss = 1; } // ?low: mitad de resolución 3D para equipos lentos
+  if (/[?&]nofx/.test(location.search)) G.R.noPost = true;                                          // ?nofx: sin posproceso
+  const hasGL = G.R.init($('#gl'));
   const timers = [];
   G.wait = (s) => new Promise((r) => timers.push({ t: s, r }));
   G.until = (fn) => new Promise((r) => timers.push({ fn, r }));
-  G.setScene = (sc) => { G.scene = sc; G.input.flush(); };
+  G.setScene = (sc) => { G.scene = sc; G.input.flush(); const f = $('#fade'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     for (let i = timers.length - 1; i >= 0; i--) { const tm = timers[i]; if (tm.fn ? tm.fn() : (tm.t -= dt) <= 0) { timers.splice(i, 1); tm.r(); } }
-    if (G.scene) {
-      G.scene.update(dt);
-      ctx.setTransform(2, 0, 0, 2, 0, 0); ctx.imageSmoothingEnabled = false;
-      G.scene.draw(ctx);
-    }
+    if (G.scene) { G.scene.update(dt); G.scene.draw(dt); }
     requestAnimationFrame(frame);
   }
 
@@ -144,7 +143,7 @@
   function titleScreen() {
     return ui.modal(`<div class="logo"><small>🎂</small><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
       <p>Siete roomies. Una fiesta sorpresa. Y Ximena, que vuelve de 36 horas de guardia, está por llegar.</p>
-      <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa y, sobre todo, <b>no la despiertes</b>.</p>`, 'JUGAR');
+      <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa, vence en duelo a <b>Pollito</b> y a <b>José</b> y, sobre todo, <b>no la despiertes</b>.</p>`, 'JUGAR');
   }
   function selectChar() {
     return new Promise((res) => {
@@ -153,7 +152,7 @@
       G.PLAYABLE.forEach((id) => {
         const c = G.CHARS[id];
         const stats = Object.keys(c.stats).map((k) => `<div class="st"><span>${G.STAT_LABEL[k]}</span><i><u style="width:${c.stats[k] * 10}%"></u></i><em>${c.stats[k]}</em></div>`).join('');
-        const b = el('button', 'pcard', `<img src="${Sp.char(id, 'down', 0).toDataURL()}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small>${stats}<p class="good">✔ ${c.skill}</p><p class="bad">✖ ${c.defect}</p>`);
+        const b = el('button', 'pcard', `<img src="${Sp.full(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small>${stats}<p class="good">✔ ${c.skill}</p><p class="bad">✖ ${c.defect}</p>`);
         b.onclick = () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok'); res(id); };
         overlay.querySelector('.pick').appendChild(b);
       });
@@ -173,7 +172,8 @@
     const ev = G.EVENTS[id], home = G.home;
     S.done[id] = true;
     ui.header(ev.kind, ev.title);
-    if (ev.dark) home.targetDark = 0.8;
+    if (ev.dark) home.setLight('oscuro');
+    home.setView(ev.view || 'todo');
     if (ev.pre) apply(ev.pre);
     await ui.postAll(typeof ev.chat === 'function' ? ev.chat(S) : ev.chat);
 
@@ -198,60 +198,72 @@
     } else if (ev.type === 'minigame') {
       await runMinigame(ev);
     }
-    if (ev.dark) home.targetDark = 0.3;
+    if (ev.dark) home.setLight('noche');
+    home.setView('todo');
   }
 
+  // Duelos contra los jefes.  resolve() aplica consecuencias propias; el resto sale de ev.results
   const MG = {
     deco: {
-      stats: ['velocidad', 'logica'], Scene: () => Sc.DecoScene,
+      stats: ['velocidad', 'logica'], Scene: () => Sc.DecoDuel, note: (c) => (c === 'alan' ? 'Suma ruido' : ''),
       setup() {
         const kinds = ['guirnalda', 'globos', 'luces'].filter((k) => S.inv[k]);
         S.deco = kinds.length ? W.DECO_SPOTS.map((s, i) => ({ i, kind: s.kind })).filter((d) => kinds.includes(d.kind)).map((d) => ({ i: d.i, improv: false, placed: false }))
           : [0, 2, 4].map((i) => ({ i, improv: true, placed: false }));
+        // siempre hay al menos 3 zonas (una por ronda): las que falten se improvisan
+        for (const i of [0, 2, 4, 1, 3, 5]) { if (S.deco.length >= 3) break; if (!S.deco.some((d) => d.i === i)) S.deco.push({ i, improv: true, placed: false }); }
       },
       async resolve(r, who) {
-        const improv = S.deco[0] && S.deco[0].improv;
-        if (r.placed === r.total) await ui.postAll([{ who: 'samantha', text: improv ? 'Ok, el papel higiénico tiene… ¿encanto? Digamos que sí.' : 'QUEDÓ HERMOSO. Juro que no subo nada. (Todavía.)', mood: 'happy' }]);
-        else if (r.placed > 0) await ui.postAll([{ who: 'majo', text: `Quedaron ${r.total - r.placed} zonas sin decorar. Es lo que hay.` }]);
-        else { await ui.postAll([{ who: 'majo', text: 'No se colgó NADA. ¿Qué estuvieron haciendo?', mood: 'angry' }]); S.log.fallos++; }
-        apply({ quality: r.placed * (improv ? 2 : 4) }, who);
-      },
-    },
-    hide: {
-      stats: ['velocidad', 'sigilo'], Scene: () => Sc.HideScene, setup() {},
-      async resolve(r, who) {
-        if (r.seen === 0 && !r.seenPlayer) { await ui.postAll([{ who: 'itzel', text: 'Pasó, tomó agua y volvió. Ni cuenta se dio.', mood: 'happy' }]); apply({ sus: -6, sleep: -1 }, who); }
-        else if (r.seen === 0) { await ui.postAll([{ who: 'natalia', text: 'Te vio a ti, pero no vio nada más. Aceptable.' }]); apply({}, who); }
-        else { await ui.postAll([{ who: 'ximena', text: 'creo que estoy soñando. vi cosas raras en la sala.', mood: 'suspicious', direct: true }, { who: 'majo', text: `Vio ${r.seen} cosa${r.seen > 1 ? 's' : ''}. Recemos para que crea que fue un sueño.`, mood: 'angry' }]); S.log.fallos++; apply({ sleep: 1 }, who); }
+        const improv = S.deco.every((d) => d.improv);
+        if (r.win === 'win') await ui.postAll([{ who: 'samantha', text: improv ? 'Ok, el papel higiénico tiene… ¿encanto? Digamos que sí.' : 'QUEDÓ HERMOSO. Juro que no subo nada. (Todavía.)', mood: 'happy' }, { who: 'pollito', text: '😾' }]);
+        else if (r.placed > 0) await ui.postAll([{ who: 'majo', text: `Pollito tiró ${r.knocks}. Quedaron ${r.placed} de ${r.total} colgadas. Es lo que hay.` }, { who: 'pollito', text: '😼' }]);
+        else await ui.postAll([{ who: 'majo', text: 'No quedó NADA colgado. Nos ganó un gato.', mood: 'angry' }, { who: 'pollito', text: '😸' }]);
+        apply({ quality: S.deco.filter((d) => d.placed).reduce((n, d) => n + (d.improv ? 2 : 4), 0) + (r.win === 'win' ? 3 : 0) }, who);
       },
     },
     pollito: {
-      stats: ['velocidad'], Scene: () => Sc.PollitoScene, setup() {},
+      stats: ['velocidad'], Scene: () => Sc.ChaseDuel, note: (c) => (S.inv.premios ? 'Atún: +4 s por ronda' : ''), setup() {},
       async resolve(r, who) {
         const t = r.target;
-        if (r.caught) { await ui.postAll([{ who, text: `Lo tengo. Recuperé ${t.article}. Sólo tiene un poquito de baba.`, mood: 'happy' }, { who: 'pollito', text: '😾' }]); apply({ quality: 3 }, who); }
-        else if (t.id === 'control') { S.flags.tvOn = true; await ui.postAll([{ who: 'sistema', text: '📺 Pollito pisó el control. La tele se prende a todo volumen.' }, { who: 'alan', text: '¡APÁGUENLA!', mood: 'surprised' }]); S.log.fallos++; apply({ noise: 24 }, who); setTimeout(() => (S.flags.tvOn = false), 6000); }
+        if (r.win === 'win') { await ui.postAll([{ who, text: `Lo tengo. Recuperé ${t.article}. Sólo tiene un poquito de baba.`, mood: 'happy' }, { who: 'pollito', text: '😾' }]); apply({ quality: 3 }, who); }
+        else if (t.id === 'control') { S.flags.tvOn = true; await ui.postAll([{ who: 'sistema', text: '📺 Pollito pisó el control. La tele se prende a todo volumen.' }, { who: 'alan', text: '¡APÁGUENLA!', mood: 'surprised' }]); apply({ noise: 24 }, who); setTimeout(() => (S.flags.tvOn = false), 6000); }
         else {
-          delete S.inv[t.id]; ui.refreshInv(); S.log.fallos++;
+          delete S.inv[t.id]; ui.refreshInv();
           if (t.id === 'regalo') S.flags.regaloRoto = true;
           await ui.postAll([{ who: 'natalia', text: `No lo alcanzamos. ${t.name}: destruido. Descansa en paz.`, mood: 'surprised' }, { who: 'pollito', text: '😸' }]);
           ui.system(`Perdiste: ${t.name}`); apply({ noise: 6 }, who);
         }
       },
     },
+    memoria: { stats: ['logica'], Scene: () => Sc.MemoryDuel, note: () => 'Más lógica = José recuerda menos', setup() {} },
+    cactus: { stats: ['velocidad'], Scene: () => Sc.SpikeDuel, note: () => 'Velocidad para esquivar', setup() {} },
+    repisas: { stats: ['velocidad'], Scene: () => Sc.ClimbDuel, note: () => 'Reflejos: ← y →', setup() {} },
+    pisoton: { stats: ['velocidad'], Scene: () => Sc.StompDuel, note: () => 'Velocidad para cambiar de cojín', setup() {} },
+    azotea: { stats: ['velocidad'], Scene: () => Sc.DroneDuel, note: () => 'Velocidad lateral', setup() {} },
+    mensajes: { stats: ['carisma'], Scene: () => Sc.MessageDuel, note: () => 'Más carisma = José escribe más lento', setup() {} },
+    pizza: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.PizzaRace, note: () => 'Sigilo = mejor equilibrio', setup() {} },
+    sonambula: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.SleepwalkDuel, note: () => 'Sigilo = más margen al frenar', setup() {} },
   };
 
   async function runMinigame(ev) {
-    const mg = MG[ev.game];
-    const who = await ui.assign('¿Quién va?', (c) => ({ stats: statLine(c, mg.stats), note: c === 'alan' ? 'Suma ruido' : c === 'itzel' && ev.game === 'hide' ? 'Esconde el doble de rápido' : '' }));
+    const mg = MG[ev.game], boss = G.CHARS[ev.boss];
+    const who = await ui.assign(`¿Quién se enfrenta a ${boss.name}?`, (c) => ({ stats: statLine(c, mg.stats), note: mg.note ? mg.note(c) : '' }));
     mg.setup();
     const c = G.CHARS[who];
-    await ui.modal(`<h2>${ev.title}</h2><img class="hero" src="${Sp.char(who, 'down', 0).toDataURL()}" alt=""><p>${ev.intro}</p><p class="dim">Juega <b style="color:${c.color}">${c.name}</b> · WASD/flechas para moverte · ESPACIO para actuar</p>`, '¡EMPEZAR!');
+    const bossImg = Sp.full(ev.boss);
+    await ui.modal(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${bossImg}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
+      <h2>${ev.title}</h2><p>${ev.intro}</p><p class="goal">🏆 ${ev.goal}</p>`, '¡EMPEZAR!');
     G.captureKeys = true; $('#phone').classList.add('dim');
     const res = await new Promise((r) => G.setScene(new (mg.Scene())(who, r)));
     G.captureKeys = false; $('#phone').classList.remove('dim');
     G.setScene(G.home);
-    await mg.resolve(res, who);
+    S.duels.push({ game: ev.game, boss: ev.boss, win: res.win });
+    ui.raw(`<div class="roll ${res.win === 'win' ? 'good' : res.win === 'tie' ? 'mid' : 'bad'}">${res.win === 'win' ? `✔ VENCISTE A ${boss.name.toUpperCase()}` : res.win === 'tie' ? '● EMPATE' : `✖ GANÓ ${boss.name.toUpperCase()}`}</div>`);
+    const actor = G.home.actor(who); if (actor) { actor.expr = res.win === 'win' ? 'happy' : 'surprised'; actor.hop(160); setTimeout(() => (actor.expr = null), 4000); }
+    if (res.win !== 'win') S.log.fallos++;
+    if (mg.resolve) await mg.resolve(res, who);
+    const br = ev.results && (ev.results[res.win] || ev.results.lose);
+    if (br) { await ui.postAll(br.reply(who, res)); apply(br.effects, who); }
     S.tired = who;
   }
 
@@ -276,7 +288,7 @@
   async function actCollect() {
     S.phase = 'collect'; ui.refreshHUD(); msgs.innerHTML = '';
     ui.header('Acto 0', '1 minuto para la fiesta');
-    ['majo|Ximena sale de guardia y viene para acá. Tenemos UN minuto.', 'fatima|El pastel quedó en algún lado. No me miren así.', 'majo|Agarren todo lo que sirva y guárdenlo en el armario del pasillo. Lo que no esté guardado cuando llegue, lo va a ver.'].forEach((l) => { const [w, t] = l.split('|'); ui.raw(`<div class="msg"><img class="av" src="${Sp.portrait(w)}" alt=""><div class="bubble"><b style="color:${G.CHARS[w].color}">${G.CHARS[w].name}</b>${t}</div></div>`); });
+    ['majo|Ximena sale de guardia y viene para acá. Tenemos UN minuto.', 'fatima|El pastel quedó en algún lado. No me miren así.', 'majo|Agarren todo lo que sirva y guárdenlo en el armario del pasillo. Lo que no esté guardado cuando llegue, lo va a ver.', 'saulo|Y cuidado con Pollito y con José. Presiento que hoy van a ser nuestros jefes finales.'].forEach((l) => { const [w, t] = l.split('|'); ui.raw(`<div class="msg"><img class="av" src="${Sp.portrait(w)}" alt=""><div class="bubble"><b style="color:${G.CHARS[w].color}">${G.CHARS[w].name}</b>${t}</div></div>`); });
     G.captureKeys = true; $('#phone').classList.add('dim');
     let scene;
     const res = await new Promise((r) => G.setScene((scene = new Sc.CollectScene(S.player, r))));
@@ -287,30 +299,33 @@
   async function actArrival(res) {
     S.phase = 'arrival'; S.sus = 5; S.sleep = 1;
     const home = (G.home = new Sc.HomeScene());
+    home.setLight('dia', true);
     const me = home.actor(S.player); me.x = res.x; me.y = res.y; me.carry = res.inHand.slice();
-    home.roomies.filter((r) => r !== me).forEach((r, i) => { r.x = 290 + i * 84; r.y = 330 + i * 6; r.dir = "up"; });
+    home.roomies.filter((r) => r !== me).forEach((r, i) => { r.x = 420 + i * 170; r.y = 520 - i * 10; r.dir = 'down'; });
     res.inHand.forEach((id) => (S.inv[id] = true)); ui.refreshInv();
     G.setScene(home);
-    const xi = home.xi; xi.hidden = false; xi.expr = 'tired'; G.sfx('door');
+    const xi = home.xi; xi.hidden = false; xi.x = 510; xi.y = 650; xi.expr = 'tired'; xi.speed = 60; G.sfx('door');
+    home.cam.x = 510; home.cam.z = 470; home.cam.dist = 620; home.cam.pitch = 0.8; home.follow(xi, 560);
     ui.header('Acto 1', 'Llegada de Ximena');
     ui.system('🔑 La puerta se abre.');
-    home.roomies.forEach((r) => (r.expr = 'surprised'));
-    await G.wait(0.8);
+    home.roomies.forEach((r) => { r.expr = 'surprised'; r.hop(150); r.emo('!', 1); });
+    xi.route = [[510, 548]]; await G.until(() => xi.arrived); xi.dir = 'up';
     xi.say('Ya llegué… 36 horas de guardia. No siento las piernas.', 3.2); await G.wait(3.4);
     if (res.inHand.length) {
       const names = res.inHand.map((id) => G.ITEMS[id].name.toLowerCase()).join(' y ');
       if (S.player === 'itzel') { xi.say('¿Y eso que llevas?', 2); await G.wait(2.1); me.say('Ropa para lavar 🙂', 2); await G.wait(2.1); xi.say('Ah. Ya.', 1.5); await G.wait(1.6); ui.system(`Itzel disimuló (${names}). Sin sospechas.`); }
-      else { xi.expr = 'suspicious'; xi.say(`¿Por qué tienes ${names} en la mano?`, 2.8); await G.wait(3); me.say('¡Nada! Es… reciclaje.', 2.2); await G.wait(2.4); ui.system(`Ximena vio lo que no alcanzaste a guardar (${names}).`); apply({ sus: 9 * res.inHand.length }); xi.expr = 'tired'; }
+      else { xi.expr = 'suspicious'; xi.emo('?', 1.2); xi.say(`¿Por qué tienes ${names} en la mano?`, 2.8); await G.wait(3); me.hop(140); me.say('¡Nada! Es… reciclaje.', 2.2); await G.wait(2.4); ui.system(`Ximena vio lo que no alcanzaste a guardar (${names}).`); apply({ sus: 9 * res.inHand.length }); xi.expr = 'tired'; }
     }
     if (S.flags.pollitoJugo) { xi.say('¿Y por qué Pollito anda arrastrando cosas por la casa?', 2.8); await G.wait(3); apply({ sus: 4 }); }
     if (!res.inHand.length && !S.flags.pollitoJugo) { xi.say('Qué raro verlos a todos despiertos y… parados.', 2.6); await G.wait(2.8); }
     xi.say('Me voy a dormir. Si alguien me despierta, lo opero sin anestesia.', 3.2); await G.wait(3.3);
     me.carry = [];
-    W.xDoorOpen = true; xi.route = [[253, 292], [446, 292], [560, 296]]; xi.speed = 46;
+    W.xDoorOpen = true; xi.route = [[510, 455], [640, 455], [720, 455], [830, 430]]; xi.speed = 66;
     await G.until(() => xi.arrived);
     xi.hidden = true; home.xState = 'sleeping'; W.xDoorOpen = false; G.sfx('door');
     home.roomies.forEach((r) => (r.expr = null));
-    S.phase = 'act2'; home.targetDark = 0.3; home.wander = true; recalc();
+    S.phase = 'act2'; home.setLight('noche'); home.setView('todo'); home.wander = true; recalc();
+    await G.wait(1.2);
     home.showTitle('ACTO 2', 'OPERACIÓN: NO LA DESPIERTEN', 3.6);
     ui.system('Ximena se durmió.');
     await G.wait(3.4);
@@ -333,29 +348,35 @@
 
   async function actReveal(ruina) {
     const home = G.home, xi = home.xi; S.phase = 'reveal'; home.wander = false;
-    const spots = [[290, 140], [360, 160], [250, 110]];
+    const spots = [[470, 150], [560, 250], [420, 240]];
+    const jw = S.duels.filter((d) => d.boss === 'jose' && d.win === 'win').length;
     if (ruina) {
       ui.header('Final', 'Demasiadas pistas');
       await ui.postAll([{ who: 'ximena', text: 'ya. voy a salir a ver qué está pasando.', mood: 'suspicious', direct: true }, { who: 'majo', text: 'Nadie se mueva.', mood: 'surprised' }]);
     } else {
       ui.header('Acto 4', 'La gran revelación');
+      if (jw >= 3) { S.flags.joseUne = true; await ui.postAll([{ who: 'jose', text: 'Ok. Me ganaron limpio. El amanecer puede esperar: yo prendo las velas.' }]); apply({ quality: 8 }); }
       await ui.postAll([{ who: 'majo', text: 'Es la hora. Todos a la sala. Posiciones.' }, { who: 'saulo', text: 'Pase lo que pase, fue un honor improvisar con ustedes.' }, { who: 'itzel', text: 'Yo la despierto. Tres… dos…' }]);
     }
-    home.roomies.forEach((r, i) => r.goTo(spots[i][0], spots[i][1], 70));
-    home.cat.goTo(330, 130, 80);
+    home.setView('sala');
+    home.roomies.forEach((r, i) => r.goTo(spots[i][0], spots[i][1], 110));
+    home.cat.goTo(530, 130, 120);
+    if (S.flags.joseUne) { const j = home.jose; j.hidden = false; j.x = 510; j.y = 320; j.goTo(620, 262, 110, true); }
     await G.until(() => home.roomies.every((r) => r.arrived));
     home.roomies.forEach((r) => { r.dir = 'down'; r.expr = ruina ? 'surprised' : null; });
-    home.xState = 'up'; W.xDoorOpen = true; xi.hidden = false; xi.x = 458; xi.y = 292; xi.expr = ruina ? 'suspicious' : 'tired'; xi.speed = 52; G.sfx('door');
-    xi.route = [[326, 292], [326, 196], [326, 132]];
+    home.xState = 'up'; W.xDoorOpen = true; xi.hidden = false; xi.x = 690; xi.y = 455; xi.expr = ruina ? 'suspicious' : 'tired'; xi.speed = 80; G.sfx('door');
+    xi.route = [[640, 455], [510, 455], [510, 300], [510, 205]];
     await G.until(() => xi.arrived);
     xi.dir = 'up';
-    if (ruina) { xi.say('…¿Qué es todo esto?', 3); await G.wait(3.2); home.cat.say('miau.', 2); await G.wait(1.6); return 'ruina'; }
-    home.targetDark = 0; home.darkness = 0; home.startConfetti(); G.sfx('party');
-    home.roomies.forEach((r) => { r.frameOverride = 3; r.expr = 'happy'; r.say('¡SORPRESA!', 3); });
-    xi.expr = 'surprised'; await G.wait(2.2);
+    if (ruina) { xi.emo('?', 1.5); xi.say('…¿Qué es todo esto?', 3); await G.wait(3.2); home.cat.say('miau.', 2); await G.wait(1.6); return 'ruina'; }
+    home.setLight('fiesta', true); home.startConfetti(); G.sfx('party');
+    const party = [...home.roomies, ...(S.flags.joseUne ? [home.jose] : [])];
+    party.forEach((r) => { r.expr = 'happy'; r.say('¡SORPRESA!', 3); });
+    const jump = setInterval(() => party.forEach((r) => r.hop(150 + Math.random() * 70)), 520);
+    xi.expr = 'surprised'; xi.hop(180); xi.emo('!!', 1.4); await G.wait(2.2);
     const good = S.quality >= 45;
     xi.expr = 'happy'; xi.dir = 'down'; xi.say(good ? '¡¿Hicieron todo esto por mí?!' : 'JAJAJA ¿qué le pasó a la sala?', 3.2);
-    await G.wait(3.4);
+    await G.wait(3.6); clearInterval(jump);
     return good ? 'sorpresa' : 'caos';
   }
 
@@ -363,22 +384,33 @@
     const e = G.ENDINGS[key], text = typeof e.text === 'function' ? e.text(S) : e.text;
     const lvl = Math.min(4, Math.floor(S.quality / 20));
     const extras = [];
-    if (S.flags.jose === 'aliado') extras.push('José llegó con hielo y no tocó el timbre.');
+    if (S.flags.joseUne) extras.push('José se unió: prendió las velas y juró que el amanecer queda para otro día.');
+    else extras.push('José se quedó en una esquina, abrazando sus flores.');
     if (S.flags.pastel === 'pan') extras.push('La vela en el pan se volvió tradición de la casa.');
     if (S.flags.pastel === 'torre') extras.push('La torre de bocaditos de Fátima salió en tres historias.');
     if (S.flags.regalo === 'pollito') extras.push('Pollito, con moño, fue oficialmente el regalo.');
     if (S.flags.regalo === 'cupones') extras.push('Ximena guardó los cupones de Saulo en su billetera.');
     ui.header('Final', e.title);
     await ui.modal(`<div class="ending ${e.tone}"><small>FINAL</small><h1>${e.title}</h1><p>${text}</p>${extras.length && key !== 'ruina' ? `<p class="dim">${extras.join(' ')}</p>` : ''}
-      <div class="stats"><div><b>${'★'.repeat(lvl)}${'☆'.repeat(4 - lvl)}</b><span>Calidad de la fiesta (${S.quality})</span></div><div><b>${S.sus}%</b><span>Sospecha</span></div><div><b>${Object.keys(S.inv).length}/10</b><span>Objetos</span></div><div><b>${S.log.fallos}</b><span>Tropiezos</span></div></div></div>`, 'JUGAR OTRA VEZ');
+      <div class="stats"><div><b>${'★'.repeat(lvl)}${'☆'.repeat(4 - lvl)}</b><span>Calidad de la fiesta (${S.quality})</span></div><div><b>${S.sus}%</b><span>Sospecha</span></div><div><b>${Object.keys(S.inv).length}/10</b><span>Objetos</span></div><div><b>${S.duels.filter((d) => d.win === 'win').length}/${S.duels.length}</b><span>Duelos ganados</span></div></div></div>`, 'JUGAR OTRA VEZ');
     location.reload();
   }
 
   async function main() {
+    await Sp.ready;
     ui.refreshInv(); ui.refreshHUD();
+    if (!hasGL) { overlay.innerHTML = '<div class="modal"><h2>Tu navegador no tiene WebGL activo</h2><p>El juego necesita WebGL para dibujar el departamento en 3D. Prueba con Chrome, Edge o Firefox actualizados.</p></div>'; overlay.classList.add('show'); return; }
     const bg = new Sc.HomeScene(); bg.wander = true; G.setScene(bg);
     requestAnimationFrame(frame);
     await titleScreen();
+    // modo práctica: index.html?duelo=decoracion | pollito | mensajes | pizza | sonambula | memoria | cactus | repisas | pisoton | azotea
+    const pr = /[?&]duelo=(\w+)/.exec(location.search);
+    if (pr && G.EVENTS[pr[1]] && G.EVENTS[pr[1]].type === 'minigame') {
+      S.player = 'natalia'; S.phase = 'act2';
+      Object.keys(G.ITEMS).forEach((id) => (S.inv[id] = true)); ui.refreshInv();
+      G.home = new Sc.HomeScene(); G.home.xState = 'sleeping'; G.home.wander = true; G.setScene(G.home);
+      for (;;) { S.tired = null; await runEvent(pr[1]); await G.wait(1); }
+    }
     S.player = await selectChar();
     const res = await actCollect();
     await actArrival(res);

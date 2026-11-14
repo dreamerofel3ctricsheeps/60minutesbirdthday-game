@@ -33,8 +33,8 @@
     fatima: { name: 'Fátima', color: '#e0b77a' },
     samantha: { name: 'Samantha', color: '#e04fc4' },
     ximena: { name: 'Ximena', color: '#b48cf0' },
-    jose: { name: 'José', color: '#5fae77' },
-    pollito: { name: 'Pollito', color: '#f0a04a' },
+    jose: { name: 'José', color: '#5fae77', boss: 'El novio. Tiene su propio plan de cumpleaños.' },
+    pollito: { name: 'Pollito', color: '#f0a04a', boss: 'El gato. Una fuerza del caos.' },
   };
   G.PLAYABLE = ['natalia', 'itzel', 'alan'];
   G.STAT_LABEL = { velocidad: 'Velocidad', sigilo: 'Sigilo', carisma: 'Carisma', logica: 'Lógica' };
@@ -64,7 +64,7 @@
   // effects: { sus, noise, sleep, quality }   flags: { nombre: valor }
   G.EVENTS = {
     cajas: {
-      title: 'Las cajas del pasillo', kind: 'Gestión', type: 'decision',
+      title: 'Las cajas del pasillo', kind: 'Gestión', type: 'decision', view: 'pasillo',
       chat: [
         { who: 'majo', text: '¿Quién dejó las cajas en el pasillo?' },
         { who: 'natalia', text: 'Yo no fui.' },
@@ -83,7 +83,7 @@
     },
 
     decoracion: {
-      title: 'Decoración Express', kind: 'Minijuego', type: 'minigame', game: 'deco',
+      title: 'Decoración Express', kind: 'Duelo', type: 'minigame', game: 'deco', boss: 'pollito', view: 'sala',
       chat: (s) => {
         const n = ['globos', 'guirnalda', 'luces'].filter((i) => has(s, i)).length;
         return [
@@ -91,14 +91,16 @@
           n === 0
             ? { who: 'samantha', text: 'Chicos… no conseguimos ni una sola decoración. Tengo papel higiénico y post-its. Es "minimalista".', mood: 'surprised' }
             : { who: 'samantha', text: `Tenemos material para ${n * 2} zonas. Quiero que se vea increíble en las fotos.` },
-          { who: 'majo', text: 'Samantha, NADA de subir historias.', mood: 'angry' },
+          { who: 'pollito', text: '😼' },
+          { who: 'fatima', text: 'Pollito ya está mirando las guirnaldas como si fueran presas. Suerte.' },
         ];
       },
-      intro: 'Camina hasta cada zona marcada y presiona ESPACIO cuando la barra esté en verde para colgar la decoración. Si fallas, se cae y hace ruido.',
+      intro: 'Cuelga las decoraciones: acércate a cada zona y presiona ESPACIO cuando la barra esté en verde. Pollito va a intentar tirarlas: párate junto a él y presiona ESPACIO para espantarlo.',
+      goal: 'Tres rondas, cada una con sus zonas. Gana la ronda quien termine con todo colgado.',
     },
 
     whatsapp: {
-      title: 'El interrogatorio de WhatsApp', kind: 'Amenaza', type: 'assign',
+      title: 'El interrogatorio de WhatsApp', kind: 'Amenaza', type: 'assign', view: 'xroom',
       chat: [
         { who: 'ximena', text: 'oigan', mood: 'tired', direct: true },
         { who: 'ximena', text: 'me despertó una notificación del banco. ¿quién gastó S/ 85 en "Globos & Más" con la tarjeta de la casa?', mood: 'suspicious', direct: true },
@@ -139,46 +141,84 @@
     },
 
     pollito: {
-      title: 'Pollito robó algo', kind: 'Minijuego', type: 'minigame', game: 'pollito',
+      title: 'Pollito robó algo', kind: 'Duelo', type: 'minigame', game: 'pollito', boss: 'pollito', view: 'sala',
       chat: (s) => {
         const t = G.pollitoTarget(s);
         return [
           { who: 'itzel', text: `¿Alguien movió ${t.article}?`, mood: 'suspicious' },
           { who: 'natalia', text: 'Yo no.' },
           { who: 'pollito', text: '😼' },
-          { who: 'alan', text: `Pollito se lo llevó en el hocico. Lo acabo de ver cruzar la sala.`, mood: 'surprised' },
+          { who: 'alan', text: 'Pollito se lo llevó en el hocico. Lo acabo de ver cruzar la sala.', mood: 'surprised' },
           s.flags.pollitoOfendido ? { who: 'fatima', text: 'Les dije que lo de culparlo iba a traer consecuencias.' } : { who: 'majo', text: 'Atrápenlo. Sin gritar.' },
         ];
       },
-      intro: 'Pollito se esconde en los muebles. Fíjate cuál se mueve, acércate y presiona ESPACIO para revisar. Cuando lo encuentres va a salir corriendo a otro escondite: atrápalo las veces indicadas antes de que se acabe el tiempo.',
+      intro: 'Persigue a Pollito por la sala y embístelo con ESPACIO para atraparlo. Salta por encima si lo acorralas mal y va dejando ovillos: si pisas uno, te resbalas. Cada ronda corre más rápido.',
+      goal: 'Atrápalo antes de que se acabe el tiempo en 2 de 3 rondas.',
     },
 
     jose: {
       title: 'José escribe', kind: 'Amenaza', type: 'decision',
       chat: [
         { who: 'jose', text: 'Hola chicos. ¿Xime ya llegó? No me contesta.', direct: true },
-        { who: 'jose', text: 'Estaba pensando pasar ahora a dejarle algo por su cumple 🎁', direct: true },
-        { who: 'samantha', text: 'NO. Si toca el timbre la despierta.', mood: 'surprised' },
+        { who: 'jose', text: 'Tengo un plan: despertarla a las 4 am y llevarla a ver el amanecer por su cumple 🌅 Ya estoy saliendo.', direct: true },
+        { who: 'samantha', text: 'NO. Ni se te ocurra despertarla.', mood: 'surprised' },
         { who: 'saulo', text: 'El novio. El eterno tercer acto.' },
       ],
       options: [
-        { label: 'Contarle el plan y sumarlo', effects: { quality: 6, noise: 6 }, flags: { jose: 'aliado' },
-          reply: [{ who: 'jose', text: 'JAJA ya. Me apunto. Llevo hielo y no toco el timbre, lo juro.', direct: true }, { who: 'majo', text: 'Un invitado más. Anotado.' }] },
-        { label: '"Está dormida, mejor ven mañana"', effects: { sus: 4 }, flags: { jose: 'no_sabe' },
-          reply: [{ who: 'jose', text: 'Ah, ok. Le escribo un mensajito de buenas noches entonces.', direct: true }, { who: 'itzel', text: 'Le va a vibrar el celular. Genial.', mood: 'angry' }] },
-        { label: 'Dejarlo en visto', effects: { sus: 9, sleep: 1 }, flags: { jose: 'desconfia' },
-          reply: [{ who: 'jose', text: '¿Hola? Bueno, la llamo a ella.', direct: true }, { who: 'sistema', text: '📱 El celular de Ximena suena en su cuarto.' }] },
+        { label: 'Contarle lo de la fiesta', effects: {}, flags: { jose: 'aliado' },
+          reply: [{ who: 'jose', text: '¿Una fiesta? ¿Y nadie me avisó? Ok… pero mi plan del amanecer es mejor. Que gane el mejor 😎', direct: true }, { who: 'majo', text: 'Genial. Ahora es una competencia.' }] },
+        { label: '"Está dormida, mejor ven mañana"', effects: { sus: 3 }, flags: { jose: 'no_sabe' },
+          reply: [{ who: 'jose', text: 'Por eso mismo. Le escribo ahorita para despertarla suavecito.', direct: true }, { who: 'itzel', text: 'Le va a reventar el celular a mensajes.', mood: 'angry' }] },
+        { label: 'Dejarlo en visto', effects: { sus: 6 }, flags: { jose: 'desconfia' },
+          reply: [{ who: 'jose', text: 'Me dejaron en visto. Sospechoso. Voy para allá YA.', direct: true }, { who: 'saulo', text: 'Lo hemos vuelto más fuerte.' }] },
       ],
     },
 
-    agua: {
-      title: 'El vaso de agua', kind: 'Sueño', type: 'minigame', game: 'hide',
+    mensajes: {
+      title: 'Batalla de mensajes', kind: 'Duelo', type: 'minigame', game: 'mensajes', boss: 'jose', view: 'xroom',
       chat: [
-        { who: 'itzel', text: 'Escuché su puerta.', mood: 'surprised' },
-        { who: 'natalia', text: 'Siempre se levanta medio dormida a tomar agua. Va a cruzar TODA la sala.' },
-        { who: 'majo', text: 'ESCONDAN TODO lo que esté en su camino. YA.', mood: 'angry' },
+        { who: 'itzel', text: 'José le está escribiendo a Xime sin parar. Si le vibra el celular diez veces más, se despierta.', mood: 'angry' },
+        { who: 'ximena', text: 'mmm… ¿quién escribe tanto?', mood: 'tired', direct: true },
+        { who: 'majo', text: 'Alguien respóndale desde el chat de la casa ANTES de que lleguen los mensajes de José. Con calma. Para que se duerma.' },
       ],
-      intro: 'Ximena va a caminar dormida hasta la cocina y de regreso. Antes de que su luz toque cada evidencia, acércate y mantén ESPACIO para taparla. Lo que quede lejos de su camino no importa.',
+      intro: 'Ximena escribe medio dormida. Elige con ← ↑ → la respuesta que la tranquiliza, antes de que José termine de escribir la suya. Una respuesta equivocada le da el punto a José.',
+      goal: 'El primero en ganar 3 mensajes se lleva el duelo.',
+      results: {
+        win: { effects: { sus: -8, sleep: -1 }, reply: () => [{ who: 'ximena', text: 'ya, silencié el cel. buenas noches zzz', mood: 'tired', direct: true }, { who: 'jose', text: 'Ok, ok. Está dormida. Pero igual voy para allá.', direct: true }] },
+        lose: { effects: { sus: 6, sleep: 1, noise: 10 }, reply: () => [{ who: 'ximena', text: '¿por qué me vibra tanto el celular? ¿pasa algo?', mood: 'suspicious', direct: true }, { who: 'majo', text: 'José: 1. Nosotros: 0.', mood: 'angry' }] },
+      },
+    },
+
+    pizza: {
+      title: 'Pizza silenciosa', kind: 'Duelo', type: 'minigame', game: 'pizza', boss: 'jose',
+      chat: [
+        { who: 'fatima', text: 'Llegó el delivery. Está abajo, en la entrada del edificio.' },
+        { who: 'alan', text: '…y José acaba de bajar de un taxi con flores. Va directo a nuestro timbre.', mood: 'surprised' },
+        { who: 'majo', text: 'Alguien sube con la comida y llega a la puerta ANTES que él. Y sin botar nada: ese pasillo tiene eco.' },
+      ],
+      intro: 'Carrera por el pasillo del edificio. Mantén → para avanzar y usa ↑ ↓ para mantener la pizza en la zona verde. Mientras más rápido corras, más se tambalea. Si se cae, pierdes tiempo y haces ruido.',
+      goal: 'Son tres pisos. Gana el que llegue primero a la escalera en 2 de ellos.',
+      results: {
+        win: { effects: { quality: 6 }, reply: (who) => [{ who, text: 'Llegué primero y le cerré la puerta con el pie. Elegante.', mood: 'happy' }, { who: 'jose', text: 'Buena carrera. Me quedo en el pasillo… por ahora.', direct: true }] },
+        lose: { effects: { noise: 20, sus: 3 }, reply: () => [{ who: 'sistema', text: '🔔 José toca el timbre. Tres veces.' }, { who: 'majo', text: 'ÁBRANLE antes de que toque una cuarta.', mood: 'angry' }, { who: 'jose', text: '¡Hola! ¿Y Xime?' }] },
+      },
+    },
+
+    sonambula: {
+      title: 'Sonámbula', kind: 'Duelo', type: 'minigame', game: 'sonambula', boss: 'jose', view: 'sala',
+      chat: [
+        { who: 'sistema', text: '🚪 La puerta de Ximena se abre sola.' },
+        { who: 'itzel', text: 'Está sonámbula. Camina dormida hacia la sala.', mood: 'surprised' },
+        { who: 'jose', text: 'Es mi oportunidad. Si llego a ella primero, me la llevo a ver el amanecer.' },
+        { who: 'natalia', text: 'Sobre mi cadáver. Bueno, sobre el de quien vaya.' },
+      ],
+      intro: 'Ximena está de espaldas, dormida. Mantén → para avanzar hacia ella, pero cuando murmure y voltee, ¡suelta todo y quédate quieto! Si te ve moverte, retrocedes y sube la sospecha. José juega con las mismas reglas.',
+      goal: 'Llega hasta Ximena antes que José en 2 de 3 rondas.',
+      results: {
+        win: { effects: { sus: -6, sleep: -2, quality: 4 }, reply: (who) => [{ who, text: 'La llevé de la mano hasta su cama. Ni se enteró.', mood: 'happy' }, { who: 'jose', text: '…Está bien. Ustedes ganan. ¿En qué ayudo?' }] },
+        tie: { effects: { sleep: 1 }, reply: () => [{ who: 'itzel', text: 'Se dio media vuelta sola y regresó a su cuarto. Nadie ganó, nadie perdió.' }] },
+        lose: { effects: { sus: 9, sleep: 2 }, reply: () => [{ who: 'jose', text: '¡Xime! ¡Amor! ¡Feliz…!' }, { who: 'ximena', text: '¿José…? ¿qué haces aquí? ¿qué hora es?', mood: 'suspicious', direct: true }, { who: 'majo', text: 'La despertó. LA DESPERTÓ.', mood: 'angry' }, { who: 'itzel', text: 'La regresé a su cama diciéndole que era un sueño. No sé si me creyó.' }] },
+      },
     },
 
     sinPastel: {
@@ -193,8 +233,8 @@
       options: [
         { label: 'Torre de bocaditos con una vela', requires: 'bocaditos', effects: { quality: 9 }, flags: { pastel: 'torre' },
           reply: [{ who: 'fatima', text: 'Denme diez minutos y una vela. Esto va a ser arquitectura.' }] },
-        { label: 'Pedir un pastel por delivery', effects: { quality: 12, noise: 18 }, flags: { pastel: 'delivery' },
-          reply: [{ who: 'samantha', text: 'Pedido. Le puse "NO TOCAR TIMBRE" en mayúsculas.' }, { who: 'sistema', text: '🔔 El repartidor toca el timbre. Dos veces.' }] },
+        { label: 'Sumar un pastel al delivery', effects: { quality: 12, noise: 5 }, flags: { pastel: 'delivery' },
+          reply: [{ who: 'samantha', text: 'Agregado al pedido. Le puse "NO TOCAR TIMBRE" en mayúsculas.' }] },
         { label: 'Una vela clavada en un pan', effects: { quality: 3 }, flags: { pastel: 'pan', caos: true },
           reply: [{ who: 'saulo', text: 'Humilde. Honesto. Devastador. Me encanta.' }] },
       ],
@@ -218,9 +258,88 @@
       ],
     },
 
+    memoria: {
+      title: 'Memoria de cajas', kind: 'Duelo', type: 'minigame', game: 'memoria', boss: 'jose', view: 'sala',
+      chat: [
+        { who: 'fatima', text: 'Con el apagón metimos todo en cajas iguales. Ya nadie sabe qué hay en cuál.' },
+        { who: 'jose', text: 'Yo las vi cuando llegué. Tengo memoria fotográfica 😎 Si acierto más que ustedes, me dejan despertar a Xime.', direct: true },
+        { who: 'majo', text: 'Acepto. Pero si pierdes, cargas las cajas tú.' },
+      ],
+      intro: 'Por turnos, abran dos cajas. Si son pareja se la quedan y repiten turno; si no, se cierran y le toca al otro. Mueve el cursor con las flechas y abre con ESPACIO.',
+      goal: 'Gana 2 de 3 rondas juntando más parejas que José.',
+      results: {
+        win: { effects: { quality: 5 }, reply: (who) => [{ who, text: 'Todo ordenado y etiquetado. Memoria fotográfica, decía.', mood: 'happy' }, { who: 'jose', text: 'Estaba oscuro. No cuenta.', direct: true }] },
+        tie: { effects: {}, reply: () => [{ who: 'saulo', text: 'Empate. El olvido nos iguala a todos.' }] },
+        lose: { effects: { quality: -4, sus: 4 }, reply: () => [{ who: 'jose', text: 'Gané. Voy calentando la voz para cantarle "Las Mañanitas".', direct: true }, { who: 'majo', text: 'Que alguien le esconda el celular.', mood: 'angry' }] },
+      },
+    },
+
+    cactus: {
+      title: 'Cactus rodantes', kind: 'Duelo', type: 'minigame', game: 'cactus', boss: 'pollito', view: 'cocina',
+      chat: [
+        { who: 'fatima', text: '¿Alguien ha visto mi colección de cactus bola? Estaban sobre el refrigerador.', mood: 'suspicious' },
+        { who: 'pollito', text: '😼' },
+        { who: 'alan', text: 'Pollito está arriba del refri empujándolos uno por uno. Están rodando por toda la cocina.', mood: 'surprised' },
+        { who: 'fatima', text: 'Que alguien entre por los bocaditos SIN que lo pinchen. Y sin gritar.' },
+      ],
+      intro: 'Pollito empuja cactus redondos que ruedan y rebotan por la cocina. Muévete para esquivarlos hasta que se acabe el tiempo de la ronda. Cada ronda hay más cactus y más rápidos.',
+      goal: 'Sobrevive 2 de 3 rondas sin que te toque ninguno.',
+      results: {
+        win: { effects: { quality: 3 }, reply: (who) => [{ who, text: 'Salí ileso y con los bocaditos. Pollito me mira con respeto. O con hambre.', mood: 'happy' }] },
+        tie: { effects: { noise: 5 }, reply: () => [{ who: 'fatima', text: 'Medio pinchado, medio ileso. Me lo llevo.' }] },
+        lose: { effects: { noise: 14 }, reply: (who) => [{ who, text: 'AY. Ay. Ay. Tengo espinas en lugares que no sabía que tenía.', mood: 'surprised' }, { who: 'majo', text: 'Grita hacia adentro.', mood: 'angry' }] },
+      },
+    },
+
+    repisas: {
+      title: 'Salto de repisas', kind: 'Duelo', type: 'minigame', game: 'repisas', boss: 'pollito', view: 'sala',
+      chat: [
+        { who: 'samantha', text: 'Las velas. ¿Dónde están las velas?', mood: 'surprised' },
+        { who: 'natalia', text: 'En la boca de Pollito. Y Pollito está subiendo por el librero.' },
+        { who: 'saulo', text: 'Siempre quiso llegar más alto que nosotros. Emocional y literalmente.' },
+      ],
+      intro: 'Carrera hacia lo más alto del librero. La siguiente repisa aparece a la izquierda o a la derecha: presiona ← o → según corresponda. Si te equivocas, resbalas y pierdes tiempo.',
+      goal: 'Llega arriba antes que Pollito en 2 de 3 rondas.',
+      results: {
+        win: { effects: { quality: 5 }, reply: (who) => [{ who, text: 'Velas recuperadas. Una tiene marcas de colmillo, pero prende.', mood: 'happy' }, { who: 'pollito', text: '😾' }] },
+        lose: { effects: { quality: -3, noise: 8 }, reply: () => [{ who: 'sistema', text: 'Pollito tira las velas desde lo más alto. Caen una por una.' }, { who: 'fatima', text: 'Usaremos fósforos largos. Nadie diga nada.' }] },
+      },
+    },
+
+    pisoton: {
+      title: 'Ojo con el pisotón', kind: 'Duelo', type: 'minigame', game: 'pisoton', boss: 'pollito', view: 'todo',
+      chat: [
+        { who: 'itzel', text: 'Fui al cuarto por los cojines para la sala y algo me cayó encima desde el camarote.', mood: 'angry' },
+        { who: 'pollito', text: '😼' },
+        { who: 'natalia', text: 'Está en modo cazador. Salta sobre todo lo que se mueve.' },
+        { who: 'majo', text: 'Necesitamos esos cojines. Alguien entra, esquiva y sale.' },
+      ],
+      intro: 'Estás sobre nueve cojines. Antes de cada pisotón aparecen sombras: Pollito va a caer sobre esos cojines. Muévete rápido a uno sin sombra. Cada ronda hay más sombras y menos tiempo.',
+      goal: 'Esquiva 5 pisotones por ronda. Gana 2 de 3 rondas.',
+      results: {
+        win: { effects: { quality: 3, sleep: -1 }, reply: (who) => [{ who, text: 'Cojines rescatados. Pollito se cansó y se quedó dormido encima del último.', mood: 'happy' }] },
+        lose: { effects: { noise: 16 }, reply: (who) => [{ who, text: 'Me cayó encima. Dos veces. Pesa más de lo que parece.', mood: 'surprised' }, { who: 'sistema', text: 'El golpe se escuchó en todo el piso.' }] },
+      },
+    },
+
+    azotea: {
+      title: 'Ataque al amanecer', kind: 'Duelo', type: 'minigame', game: 'azotea', boss: 'jose', view: 'todo',
+      chat: [
+        { who: 'alan', text: 'José subió a la azotea. Tiene un dron con un parlante amarrado.', mood: 'surprised' },
+        { who: 'jose', text: 'Plan B: serenata aérea frente a su ventana justo cuando salga el sol 🌅🎶', direct: true },
+        { who: 'majo', text: 'Alguien sube y lo distrae hasta que se le acabe la batería.' },
+      ],
+      intro: 'En la azotea, José lanza su dron contra ti por la pista. El dron te persigue de lado mientras avanza, pero cuando se pone rojo ya no puede girar: cambia de lado a último momento con ← →.',
+      goal: 'Esquiva 4 pasadas por ronda. Gana 2 de 3 rondas.',
+      results: {
+        win: { effects: { sus: -5 }, reply: (who) => [{ who, text: 'Batería en cero. El dron aterrizó solito en una maceta.', mood: 'happy' }, { who: 'jose', text: 'Ok, eso estuvo bueno. Bajo en son de paz.', direct: true }] },
+        lose: { effects: { noise: 18, sleep: 1 }, reply: () => [{ who: 'sistema', text: '🎶 El dron pasa zumbando frente a la ventana de Ximena con un bolero a medio volumen.' }, { who: 'itzel', text: 'Le cerré la cortina. No sé si alcanzó a oír.', mood: 'angry' }] },
+      },
+    },
+
     // ----- eventos reactivos -----
     vuelta: {
-      title: 'La vuelta', kind: 'Sueño', type: 'decision', reactive: true, timer: 9,
+      title: 'La vuelta', kind: 'Sueño', type: 'decision', reactive: true, timer: 9, view: 'xroom',
       when: (s) => s.sleep >= 3,
       chat: [
         { who: 'sistema', text: '🛏️ Ximena se da vuelta en la cama. Se escucha el colchón.' },
@@ -257,8 +376,20 @@
   };
 
   // Orden de la historia; los eventos reactivos se intercalan cuando se cumplen sus condiciones.
-  G.STORY = ['cajas', 'decoracion', 'whatsapp', 'apagon', 'pollito', 'sinRegalo', 'jose', 'agua', 'sinPastel'];
+  G.STORY = ['cajas', 'decoracion', 'whatsapp', 'jose', 'mensajes', 'apagon', 'memoria', 'pollito', 'sinRegalo', 'cactus', 'sinPastel', 'pizza', 'repisas', 'pisoton', 'azotea', 'sonambula'];
   G.REACTIVE = ['vuelta', 'sexto'];
+
+  // Rondas de la Batalla de Mensajes: x = lo que escribe Ximena, ok = respuesta que la calma
+  G.MESSAGES = [
+    { x: 'mmm… ¿qué hora es?', ok: 'Las 3 am. Sigue durmiendo 💜', bad: ['¡Hora de levantarse!', '¿Por qué preguntas? ¿Escuchaste algo?'], jose: '¡AMOR! ¿Estás despierta? ¡Te llamo ahorita!' },
+    { x: 'escuché un ruido en la sala…', ok: 'Fue Pollito con sus juguetes. Todo bien.', bad: ['¿Qué ruido? Aquí NADIE está haciendo nada.', 'Sí, se nos cayó algo grande. Ven a ver.'], jose: '¿Ruido? ¡Voy para allá a revisar!' },
+    { x: '¿por qué están todos conectados?', ok: 'Maratón de series. Ya nos vamos a dormir.', bad: ['Estamos organizando algo secreto.', 'No estamos conectados. Estás soñando. ¿O no?'], jose: '¡Yo también estoy conectado! ¿Videollamada?' },
+    { x: 'tengo sed pero no quiero pararme', ok: 'Tienes tu botella en el velador. Duerme.', bad: ['¡Ven a la cocina, hay de todo!', 'Yo te llevo agua, ya abro tu puerta.'], jose: '¡Te llevo un jugo! Llego en 5 minutos.' },
+    { x: '¿mañana alguien me despierta a las 10?', ok: 'Yo te despierto. Descansa tranquila.', bad: ['Mejor quédate despierta de una vez.', '¿Mañana? Mañana es tu… nada. Olvídalo.'], jose: '¡Mejor te despierto YO a las 4 para ver el amanecer!' },
+    { x: 'soñé que me hacían una fiesta jaja', ok: 'Jaja qué loco. Sigue soñando 😴', bad: ['¿QUIÉN TE DIJO?', 'No fue un sueño.'], jose: '¿Fiesta? ¿Cuál fiesta? ¿Hay fiesta?' },
+    { x: '¿apagaron la cocina? huele a algo', ok: 'Todo apagado. Es el vecino cocinando.', bad: ['Es el pastel. Digo, no. No hay pastel.', 'No sé, ¿vienes a oler?'], jose: '¿Huele a quemado? ¡Llamo a los bomberos!' },
+    { x: 'José me está escribiendo mucho…', ok: 'Silencia el cel y duerme. Mañana le respondes.', bad: ['Contéstale, parece urgente.', 'Sí, dice que viene para acá ahora.'], jose: '¡Xime! ¡Xime! ¡Xime! ¿Viste mis 14 mensajes?' },
+  ];
 
   // Qué se roba Pollito según el inventario
   G.pollitoTarget = function (s) {

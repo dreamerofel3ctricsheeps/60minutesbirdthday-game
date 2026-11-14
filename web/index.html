@@ -18,7 +18,9 @@
   <main>
     <section id="stagewrap">
       <div id="stage">
+        <canvas id="gl" width="1280" height="720"></canvas>
         <canvas id="cv" width="1280" height="720"></canvas>
+        <div id="fade"></div>
         <div id="overlay"></div>
       </div>
       <div id="inv" aria-label="Inventario"></div>
@@ -30,8 +32,10 @@
     </aside>
   </main>
 </div>
+<script src="js/sheets.js"></script>
 <script src="js/sprites.js"></script>
 <script src="js/data.js"></script>
+<script src="js/gl3d.js"></script>
 <script src="js/world.js"></script>
 <script src="js/scenes.js"></script>
 <script src="js/game.js"></script>
