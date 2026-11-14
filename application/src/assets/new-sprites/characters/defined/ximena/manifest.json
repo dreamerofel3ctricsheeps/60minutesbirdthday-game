@@ -22,5 +22,53 @@
     "height": 613
    }
   ]
+ },
+ "action": {
+  "width": 1270,
+  "height": 1066,
+  "frames": [
+   {
+    "x": 0,
+    "y": 7,
+    "width": 557,
+    "height": 1059
+   },
+   {
+    "x": 563,
+    "y": 0,
+    "width": 707,
+    "height": 1066
+   }
+  ]
+ },
+ "run_front": {
+  "width": 2422,
+  "height": 786,
+  "frames": [
+   {
+    "x": 0,
+    "y": 51,
+    "width": 563,
+    "height": 735
+   },
+   {
+    "x": 569,
+    "y": 44,
+    "width": 635,
+    "height": 742
+   },
+   {
+    "x": 1210,
+    "y": 0,
+    "width": 621,
+    "height": 786
+   },
+   {
+    "x": 1837,
+    "y": 1,
+    "width": 585,
+    "height": 785
+   }
+  ]
  }
 }
