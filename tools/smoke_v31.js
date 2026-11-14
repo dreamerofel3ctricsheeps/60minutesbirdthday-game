@@ -21,6 +21,11 @@
       3, bajar no recluta, ítems conviven), la huida al llegar
       Ximena deja la escena solo con la party, y las asignaciones
       posteriores ofrecen solo a la party.
+   H) Repisas al aterrizar + iconografía propia: la repisa nueva
+      de cada columna nace SOLO cuando el escalador aterriza en su
+      máxima (nunca antes, nunca en banda lejana), la cámara del
+      duelo está alejada, y ningún emoticono prohibido reaparece
+      en el entorno del juego (escenas/HUD) fuera del chat.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -484,6 +489,54 @@ const tick = () => new Promise((r) => setImmediate(r));
   }
   await pw;
   check('asignación de evento: se ofrecen SOLO los 4 de la party (ningún huido)', cardCount === 4, 'tarjetas=' + cardCount);
+
+  // ================= H) Repisas: spawn AL ATERRIZAR + iconografía propia ====
+  console.log('\nH) Salto de repisas — la repisa nueva nace al aterrizar · iconografía propia');
+  if (!Sc.ClimbDuel) { check('existe la escena ClimbDuel', false); }
+  else {
+    const d = new Sc.ClimbDuel('natalia', () => {});
+    d.st = 'play'; d.time = 1e9; d.cstep = 1e9; d.ct = 1e9; // Pollito congelado: su columna no debe generar nada
+    check('al inicio existen SOLO el objetivo (1) y la siguiente (2) en cada columna',
+      d.shelfBorn('p', 1) && d.shelfBorn('p', 2) && !d.shelfBorn('p', 3) && d.shelfBorn('c', 2) && !d.shelfBorn('c', 3),
+      `born p=${d.born.p} c=${d.born.c}`);
+    const jump = () => { tap(d.sideOf(d.pi) < 0 ? 'ArrowLeft' : 'ArrowRight'); d.update(0.016); };
+    jump(); // salto hacia la repisa 1: en pleno vuelo NO puede nacer la 3
+    check('en pleno salto aún NO nace la repisa 3', !d.shelfBorn('p', 3), 'born=' + d.born.p);
+    let fxAtLanding = null;
+    for (let i = 0; i < 80 && !d.shelfBorn('p', 3); i++) { d.update(0.05); if (d.shelfBorn('p', 3)) fxAtLanding = d.spawnFx.p[3]; }
+    check('al ATERRIZAR en la repisa 1 nace la 3, con su pop registrado en ese instante',
+      d.shelfBorn('p', 3) && fxAtLanding != null && d.puffs !== undefined, 'born=' + d.born.p);
+    check('y sigue sin existir la 4 (nada de banda lejana pre-generada)', !d.shelfBorn('p', 4));
+    const bornBefore = d.born.p;
+    jump(); // a la repisa 2 (nueva máxima): al aterrizar nace exactamente una más
+    for (let i = 0; i < 80 && d.born.p === bornBefore; i++) d.update(0.05);
+    check('al aterrizar en la 2 nace exactamente la 4 (ni una más)',
+      d.born.p === bornBefore + 1 && d.shelfBorn('p', 4) && !d.shelfBorn('p', 5), 'born=' + d.born.p);
+    check('la columna de Pollito NO genera repisas sin que él aterrice', d.born.c === 2, 'born.c=' + d.born.c);
+    check('la cámara del duelo está ALEJADA (dist ≥ 560 y fov ≥ 36; antes 380/34)',
+      d.cam.dist >= 560 && d.cam.fov >= 36, `dist=${d.cam.dist} fov=${d.cam.fov}`);
+  }
+  // --- Inventario de iconografía: los emoticones prohibidos no vuelven ---
+  {
+    const SRCROOT = path.join(__dirname, '..', 'application', 'src');
+    const FORBIDDEN = ['🏆', '🤝', '😱', '🌃', '🌌', '🚀', '🌑', '🧩', '⏸', '🚪', '🎂', '💡', '🔌', '🔋', '🔦', '🪛', '⏱', '⚡', '💔', '🎀', '🐱', '✋', '⚠', '👻', '🎭', '😴'];
+    const scenesTxt = fs.readFileSync(path.join(SRCROOT, 'js', 'scenes.js'), 'utf8');
+    const foundScenes = FORBIDDEN.filter((e) => scenesTxt.includes(e));
+    check('scenes.js: ningún emoticono prohibido en escenas/HUD de duelos', foundScenes.length === 0, foundScenes.join(' '));
+    // en game.js solo se toleran dentro de líneas del CHAT/teléfono (posts, ui.system, cabecera del grupo)
+    const chatLine = /(who:|postAll|posts\.push|ui\.system|ui\.post\(|group)/;
+    const badLines = fs.readFileSync(path.join(SRCROOT, 'js', 'game.js'), 'utf8').split('\n')
+      .filter((l) => !chatLine.test(l) && FORBIDDEN.some((e) => l.includes(e)));
+    check('game.js: ningún emoticono prohibido fuera del chat/teléfono', badLines.length === 0, badLines.join(' | ').slice(0, 140));
+    const htmlTxt = fs.readFileSync(path.join(SRCROOT, 'index.html'), 'utf8');
+    check('index.html: el HUD va sin emoticones (marca y botón de pausa)', !['🎂', '⏸', '🧩'].some((e) => htmlTxt.includes(e)));
+    const ICONS = ['trofeo', 'derrota', 'empate', 'alerta', 'techo', 'ciudad', 'luna', 'planeta', 'pastel'];
+    check('el set de íconos propios existe completo en assets/icons/',
+      ICONS.every((n) => fs.existsSync(path.join(SRCROOT, 'assets', 'icons', n + '.png'))), ICONS.join(','));
+    const worldTxt = fs.readFileSync(path.join(SRCROOT, 'js', 'world.js'), 'utf8');
+    check('el motor dibuja los íconos con G.icon (world) y las escenas lo usan',
+      worldTxt.includes('G.icon =') && scenesTxt.includes('G.icon(c,'));
+  }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);

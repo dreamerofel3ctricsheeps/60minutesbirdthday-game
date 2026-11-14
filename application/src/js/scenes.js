@@ -380,6 +380,8 @@
       if (ov) {
         const k = Math.min(1, this.endT * 4), w = this.result.win;
         c.fillStyle = `rgba(20,16,30,${0.6 * k})`; c.fillRect(0, 0, 640, 360);
+        // resultado con el ícono PROPIO del juego (trofeo/empate/derrota), nunca un emoticono
+        if (k > 0.5) G.icon(c, w === 'win' ? 'trofeo' : w === 'tie' ? 'empate' : 'derrota', 320, 100, 42);
         G.text(c, w === 'win' ? '¡GANASTE!' : w === 'tie' ? 'EMPATE' : `GANÓ ${Bo.name.toUpperCase()}`, 320, 160, { size: 30 + k * 18, color: w === 'win' ? '#7dff8a' : w === 'tie' ? '#ffd23f' : '#ff6b7a', lw: 9 });
         G.text(c, `${this.pw} – ${this.bw}`, 320, 202, { size: 22, lw: 6 });
         G.text(c, w === 'win' ? `${Bo.name} fue derrotado` : w === 'tie' ? 'Nadie cede terreno' : 'Habrá consecuencias…', 320, 230, { size: 11 });
@@ -589,7 +591,7 @@
             wrap(c, o.t, x + 38, oy + 12, w - 56, 8, '#fff');
           });
           const jy = y + h - 34; c.fillStyle = '#40243a'; c.beginPath(); c.roundRect(x + 10, jy, w - 20, 26, 8); c.fill(); face(c, 'jose', x + 14, jy + 3, 20);
-          if (show) { const pwin = this.last.w === 'p'; if (!pwin) wrap(c, 'José: ' + r.jose, x + 40, jy + 9, w - 56, 7.5, '#ffb0b8'); else G.text(c, 'José borró su mensaje.', x + 40, jy + 13, { size: 7.5, align: 'left', color: '#b9b0d6', stroke: false }); G.text(c, (pwin ? '✔ ' : '✖ ') + this.last.text, 320, y + h + 12, { size: 11, color: pwin ? '#7dff8a' : '#ff6b7a', lw: 4 }); }
+          if (show) { const pwin = this.last.w === 'p'; if (!pwin) wrap(c, 'José: ' + r.jose, x + 40, jy + 9, w - 56, 7.5, '#ffb0b8'); else G.text(c, 'José borró su mensaje.', x + 40, jy + 13, { size: 7.5, align: 'left', color: '#b9b0d6', stroke: false }); G.text(c, this.last.text, 320, y + h + 12, { size: 11, color: pwin ? '#7dff8a' : '#ff6b7a', lw: 4 }); }
           else if (this.read <= 0) { G.text(c, 'José está escribiendo…', x + 40, jy + 8, { size: 7, align: 'left', color: '#ffb0b8', stroke: false }); c.fillStyle = '#1c1826'; c.fillRect(x + 40, jy + 15, w - 60, 6); c.fillStyle = this.jt / this.jmax > 0.7 ? '#ff6b7a' : '#ffb86b'; c.fillRect(x + 40, jy + 15, (w - 60) * Math.min(1, this.jt / this.jmax), 6); }
           else G.text(c, 'Lee con calma…', x + 40, jy + 13, { size: 7.5, align: 'left', color: '#b9b0d6', stroke: false });
         },
@@ -682,7 +684,7 @@
     }
     setup(n) { const p = this.p, j = this.jose, xi = this.xi; p.x = j.x = this.x0; p.vx = j.vx = 0; p.dir = j.dir = 'right'; p.spin = j.spin = 0; xi.dir = 'right'; xi.expr = 'sleep'; this.ph = 'green'; this.pt = rnd(1.4, 2.4); this.redT = 0; this.jsp = this.jbase * (1 + n * 0.06); this.jmove = true; this.jwait = 0; }
     extra() { return { caught: this.caught }; }
-    back(a, isP) { a.x = Math.max(this.x0, a.x - 135); a.vx = 0; a.spin = 0.6; a.flash = 0.6; a.emo('😱', 1); W.puff(a.x, a.y, 5); if (isP) { this.caught++; G.addSus(4); G.sfx('bad'); } else G.sfx('msg'); }
+    back(a, isP) { a.x = Math.max(this.x0, a.x - 135); a.vx = 0; a.spin = 0.6; a.flash = 0.6; a.emo('!!', 1); W.puff(a.x, a.y, 5); if (isP) { this.caught++; G.addSus(4); G.sfx('bad'); } else G.sfx('msg'); }
     update(dt) {
       const p = this.p, j = this.jose, xi = this.xi; p.update(dt); j.update(dt); xi.update(dt);
       if (!this.tick(dt)) { p.walk(0, 0, 0, dt); j.moving = false; return; }
@@ -711,7 +713,9 @@
           this.hud(c, t, pr(this.p) + '%', pr(this.jose) + '%');
           if (this.st !== 'play') return;
           const h = xi.head(30); panel(c, h.x - 46, h.y - 8, 92, 18, red ? '#7a1f2b' : cue ? '#7a5a1f' : '#1f4a35');
-          G.text(c, red ? '✋ ¡QUIETO!' : cue ? '⚠ ¡VA A VOLTEAR!' : '▶ AVANZA', h.x, h.y + 1, { size: 9, color: red ? '#ffb0b8' : cue ? '#ffd23f' : '#7dff8a', stroke: false });
+          // la alerta de "va a voltear" lleva el ícono PROPIO de alerta; nada de emoticones/manitas
+          if (cue) { G.icon(c, 'alerta', h.x - 38, h.y + 1, 13); G.text(c, '¡VA A VOLTEAR!', h.x + 5, h.y + 1, { size: 9, color: '#ffd23f', stroke: false }); }
+          else G.text(c, red ? '¡QUIETO!' : '¡AVANZA!', h.x, h.y + 1, { size: 9, color: red ? '#ffb0b8' : '#7dff8a', stroke: false });
           if (red) { c.strokeStyle = 'rgba(255,80,90,.55)'; c.lineWidth = 6; c.strokeRect(3, 65, 634, 292); }
         },
       });
@@ -928,11 +932,20 @@
   // "siguiente" repisa recién aparecía al saltar la anterior. Ahora NO
   // HAY TECHO: las repisas se generan de forma procedural y
   // determinista hacia arriba, sin fin — el lado de cada repisa sale
-  // de un hash del índice (sideOf, con ventana cacheada y podada) —,
-  // siempre se ven las
-  // siguientes 3–5 y las de abajo dejan de dibujarse al salir de la
-  // banda visible: el set dibujado es acotado (~30 repisas) suba el
-  // jugador a 10 m o a 10 000 m.
+  // de un hash del índice (sideOf, con ventana cacheada y podada).
+  // RITMO DE GENERACIÓN (ajuste de Jose, 2026-11-14): las repisas NO se
+  // pre-generan en una banda lejana. Por columna existen solo el
+  // objetivo actual y la siguiente (born = máxima alcanzada + 2), y la
+  // repisa NUEVA nace — con un pop elástico y su puff de polvo — en el
+  // momento en que el escalador ATERRIZA sobre la repisa más alta que
+  // ha alcanzado (bornUp, al asentarse el actor). Las de muy abajo
+  // dejan de dibujarse al salir de la banda visible: el set dibujado
+  // es acotado suba el jugador a 10 m o a 10 000 m.
+  // CÁMARA LEJANA (mismo ajuste): dist 600 / fov 36 (antes 380/34): se
+  // ve ~el doble de escena en vertical, el departamento y el techo se
+  // empequeñecen abajo al salir y la altura se MIDE contra el edificio.
+  // ICONOGRAFÍA: los hitos, el "vas ganando" y el panel final usan los
+  // íconos propios del juego (G.icon), nunca emoticones.
   // GANA EL QUE MÁS ESCALÓ: una sola ronda de 60 s y cuenta la ALTURA
   // MÁXIMA alcanzada. Conversión: 25 unidades de mundo = 1 m (cada
   // repisa está a 27 u ≈ 1,1 m). Equivocarse de lado = resbalar y CAER
@@ -944,7 +957,7 @@
   // ZONAS por altura (elev en unidades de mundo): el librero interior
   // → EL TECHO (378 u ≈ 15 m: el librero lo ATRAVIESA, con escombros,
   // antena/chimenea/tanque en la azotea y el banner "¡SALISTE DEL
-  // TECHO! 😱") → cielo con nubes y pájaros → estratósfera (estrellas
+  // TECHO!" con el ícono propio de techo) → cielo con nubes y pájaros → estratósfera (estrellas
   // tenues, la luna) → ESPACIO (≥5000 u ≈ 200 m: estrellas, un satélite
   // que cruza, el planeta brillando abajo y FLOTACIÓN: subir y bajar
   // se vuelve lento y los actores quedan suspendidos con un vaivén —
@@ -972,6 +985,9 @@
   // salida y no el crudo: un crudo volteado seguido de crudos del
   // signo volteado armaría igual una racha de 4 (lo cazó la humo).
   function climbHash(k) { const s = Math.sin(k * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+  // Easing del nacimiento de una repisa: pop elástico (sobrepasa un
+  // poco el tamaño final y se asienta) para que el spawn se LEA.
+  function climbPop(k) { const u = Math.max(0, Math.min(1, k)), c = 1.70158; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); }
   function climbRaw(k) { return climbHash(k) < 0.5 ? -1 : 1; }
   const CLIMB_ZONES = [
     { e: 0, name: 'El librero' },
@@ -1002,10 +1018,16 @@
     constructor(who, done) {
       super(who, 'pollito', done, { rounds: 1, need: 1, time: CLIMB_TIME, label: 'ESCALADA', title: 'SALTO DE REPISAS', hint: '← o → según la siguiente repisa · Si fallas, caes una repisa · Gana la mayor altura en 60 s' });
       this.quietRend = true; // el cierre usa su propio panel con las alturas (ver endOverlay)
-      this.p = new Actor(who, -70, 12); this.cat = new Actor('pollito', 70, 12); this.cam = { x: 0, y: 50, z: 0, dist: 380, pitch: 0.3, fov: 34 }; this.begin();
+      this.p = new Actor(who, -70, 12); this.cat = new Actor('pollito', 70, 12); this.cam = { x: 0, y: 50, z: 0, dist: 600, pitch: 0.3, fov: 36 }; this.begin();
     }
     setup(n) {
       this.pi = 0; this.ci = 0; this.pMax = 0; this.cMax = 0; // repisa actual y MÁXIMA de cada uno
+      // GENERACIÓN AL ATERRIZAR: por columna existen las repisas 1..born
+      // (1 = objetivo actual, 2 = la siguiente). La nueva nace SOLO al
+      // aterrizar en una altura máxima nueva (ver bornUp en update).
+      this.born = { p: 2, c: 2 };
+      this.spawnFx = { p: { 1: 0, 2: 0.18 }, c: { 1: 0, 2: 0.18 } }; // nº de repisa -> instante de nacimiento (pop)
+      this.puffs = []; // polvo del nacimiento de cada repisa
       this.stun = 0; this.ct = 1; this.banner = null; this.debris = []; this.zoneSeen = 0; this.catZone = 0;
       this._sb = 0; this._sv = []; // ventana de lados generados desde el índice _sb (se poda: ver pruneSides)
       this.cstep = 0.44 * (G.S.flags.pollitoOfendido ? 0.93 : 1) + (10 - stat(this.who, 'velocidad')) * -0.004;
@@ -1029,15 +1051,30 @@
     // Generador procedural: la repisa i (i ≥ 1) existe para CUALQUIER i.
     shelfAt(base, i) { return i === 0 ? { x: base, e: 0 } : { x: base + this.sideOf(i - 1) * 28, e: i * SH }; }
     place(a, base, i, snap) { const q = this.shelfAt(base, i); a.tx = q.x; a.te = q.e; if (snap) { a.x = q.x; a.elev = q.e; } else a.hop(120); a.dir = i && this.sideOf(i - 1) < 0 ? 'left' : 'right'; }
+    // ¿La repisa i de la columna col ('p' | 'c') ya NACIÓ? Solo existen
+    // 1..born: el objetivo (actual+1) y la siguiente (actual+2).
+    shelfBorn(col, i) { return i >= 1 && i <= this.born[col]; }
+    // Nace la repisa nueva de una columna: se llama cuando el escalador
+    // se ASIENTA sobre su repisa más alta (máxima recién conquistada).
+    // Registra el pop y suelta el puff de polvo en el sitio exacto.
+    bornUp(col, idx) {
+      const target = idx + 2;
+      if (target <= this.born[col]) return;
+      this.born[col] = target;
+      this.spawnFx[col][target] = this.T;
+      const q = this.shelfAt(col === 'p' ? -70 : 70, target);
+      for (let j = 0; j < 5; j++) this.puffs.push({ x: q.x, y: q.e, t: -j * 0.035, seed: j * 2.4 + target });
+    }
     meters(i) { return Math.round((i * SH) / U_PER_M); }
     extra() { return { pMeters: this.meters(this.pMax), cMeters: this.meters(this.cMax), zone: CLIMB_ZONES[climbZone(this.pMax * SH)].name }; }
     zoneBanner(z) {
+      // cada hito lleva su ÍCONO PROPIO del juego (nada de emoticones)
       const B = [null,
-        { a: '¡SALISTE DEL TECHO! 😱', b: 'El librero sigue… ¿hasta dónde llega?' },
-        { a: '¡YA SE VE TODO LIMA! 🌃', b: 'Las nubes quedan abajo' },
-        { a: 'ESTRATÓSFERA 🌌', b: 'El cielo se oscurece…' },
-        { a: '¡FUERA DEL PLANETA! 🚀', b: 'Pollito también flota. Nadie entiende nada.' }][z];
-      if (B) this.banner = { a: B.a, b: B.b, t: 0, d: 3 };
+        { a: '¡SALISTE DEL TECHO!', b: 'El librero sigue… ¿hasta dónde llega?', icon: 'techo' },
+        { a: '¡YA SE VE TODO LIMA!', b: 'Las nubes quedan abajo', icon: 'ciudad' },
+        { a: 'ESTRATÓSFERA', b: 'El cielo se oscurece…', icon: 'luna' },
+        { a: '¡FUERA DEL PLANETA!', b: 'Pollito también flota. Nadie entiende nada.', icon: 'planeta' }][z];
+      if (B) this.banner = { a: B.a, b: B.b, icon: B.icon, t: 0, d: 3 };
     }
     update(dt) {
       const p = this.p, cat = this.cat;
@@ -1049,18 +1086,27 @@
         a.x += (a.tx - a.x) * Math.min(1, dt * 16); a.elev += (a.te - a.elev) * k;
         if (space && Math.abs(a.elev - a.te) < 1.5 && a.jy <= 0.01) a.jy = 2.2 + Math.sin(this.T * 2.2 + (a === cat ? 1.7 : 0)) * 2.2; // vaivén de ingravidez
       });
+      // NACIMIENTO AL ATERRIZAR: cuando un escalador se asienta sobre su
+      // repisa más alta (recién conquistada), nace la siguiente de la
+      // siguiente en su columna. Nunca antes, nunca por banda lejana.
+      const settled = (a) => Math.abs(a.elev - a.te) < 1.2 && Math.abs(a.x - a.tx) < 4;
+      if (settled(p) && this.pi === this.pMax) this.bornUp('p', this.pi);
+      if (settled(cat) && this.ci === this.cMax) this.bornUp('c', this.ci);
+      // polvo de los nacimientos + limpieza de pops ya asentados
+      this.puffs = this.puffs.filter((u) => (u.t += dt) < 0.5);
+      for (const col of ['p', 'c']) for (const k in this.spawnFx[col]) if (this.T - this.spawnFx[col][k] > 1) delete this.spawnFx[col][k];
       if (this.banner && (this.banner.t += dt) > this.banner.d) this.banner = null;
       this.debris = this.debris.filter((d) => { d.vy -= 500 * dt; d.y += d.vy * dt; return d.y > TECHO_E - 190; });
       // cámara vertical suave: sube ágil, baja lenta (no marear), nunca bajo el suelo
       const ty = Math.max(50, p.elev + 40);
       this.cam.y += (ty - this.cam.y) * Math.min(1, dt * (ty > this.cam.y ? 4.5 : 2));
-      this.pruneSides(Math.min(this.pi, this.ci, Math.max(0, Math.floor((this.cam.y - 220) / SH)))); // la ventana de lados no crece con la altura
+      this.pruneSides(Math.min(this.pi, this.ci, Math.max(0, Math.floor((this.cam.y - 300) / SH)))); // la ventana de lados no crece con la altura
       if (!this.tick(dt)) return;
       // hitos de zona según la altura MÁXIMA del jugador (una vez por zona)
       const pz = climbZone(this.pMax * SH);
       if (pz > this.zoneSeen) {
         this.zoneSeen = pz; this.zoneBanner(pz);
-        if (pz === 1) { p.emo('😱', 1.4); for (let i = 0; i < 7; i++) this.debris.push({ x: p.x + rnd(-46, 46), y: TECHO_E + rnd(0, 10), z: -14 + rnd(-6, 6), vy: rnd(-30, 10), s: rnd(4, 9) }); }
+        if (pz === 1) { p.emo('!!', 1.4); for (let i = 0; i < 7; i++) this.debris.push({ x: p.x + rnd(-46, 46), y: TECHO_E + rnd(0, 10), z: -14 + rnd(-6, 6), vy: rnd(-30, 10), s: rnd(4, 9) }); }
       }
       const cz = climbZone(this.cMax * SH);
       if (cz > this.catZone) { this.catZone = cz; if (cz === 1) cat.emo('😼', 1.2); }
@@ -1078,16 +1124,20 @@
       if ((this.ct -= dt) <= 0) { this.ct = this.cstep + rnd(-0.08, 0.1) + (Math.random() < 0.1 ? 0.5 : 0); this.ci++; if (this.ci > this.cMax) this.cMax = this.ci; this.place(cat, 70, this.ci); }
       if (this.time <= 0) { // se acabó el tiempo: decide la ALTURA MÁXIMA
         const w = this.pMax > this.cMax ? 'p' : this.cMax > this.pMax ? 'b' : 'tie';
-        if (w === 'tie') { p.emo('🤝', 1.5); cat.emo('🤝', 1.5); } else (w === 'p' ? p : cat).emo('🏆', 1.5);
+        // el resultado se anuncia con el panel final y su ícono propio;
+        // sobre la cabeza solo va la reacción de texto ('!!' / '!?')
+        if (w === 'tie') { p.emo('!?', 1.5); cat.emo('!?', 1.5); } else (w === 'p' ? p : cat).emo('!!', 1.5);
         this.endRound(w, `Altura final: tú ${this.meters(this.pMax)} m · Pollito ${this.meters(this.cMax)} m`);
       }
     }
     // Mundo procedural por BANDA VISIBLE: solo se construye lo que la
-    // cámara puede ver (de cam.y-200 a cam.y+220). Las repisas existen
-    // como función (shelfAt) y se materializan solo en la ventana; el
-    // nº de cajas es ~constante a cualquier altura (reciclaje total).
+    // cámara (lejana: dist 600 / fov 36) puede ver, de cam.y-270 a
+    // cam.y+290. Las repisas existen como función (shelfAt) pero solo
+    // se materializan las que ya NACIERON en cada columna (shelfBorn)
+    // y están en la ventana; el nº de cajas es ~constante a cualquier
+    // altura (reciclaje total).
     drawWorld(mb) {
-      const cy = this.cam.y, lo = cy - 200, hi = cy + 220, t = this.T, zone = climbZone(cy);
+      const cy = this.cam.y, lo = cy - 270, hi = cy + 290, t = this.T, zone = climbZone(cy);
       if (lo < 30) mb.flat(-400, -200, 800, 500, 0, '#c99b66'); // suelo del departamento
       // pared del librero (interior): paneles por tramos, SOLO bajo el techo
       for (let y = Math.max(0, Math.floor(lo / 54) * 54); y < Math.min(hi, TECHO_E); y += 54) mb.box(-262, y, -40, 524, 54, 20, '#3a3348', { s: '#4a405c' });
@@ -1137,17 +1187,30 @@
         for (let y = Math.max(0, Math.floor(lo / 90) * 90); y < hi; y += 90) {
           mb.box(bx - 52, y, -20, 4, 90, 20, '#74502f'); mb.box(bx + 48, y, -20, 4, 90, 20, '#74502f'); mb.box(bx - 52, y, -20, 104, 90, 2, '#5a3f28');
         }
-        const i0 = Math.max(1, Math.floor(lo / SH)), i1 = Math.ceil(hi / SH);
+        const col = cix ? 'c' : 'p', i0 = Math.max(1, Math.floor(lo / SH)), i1 = Math.min(Math.ceil(hi / SH), this.born[col]);
         for (let i = i0; i <= i1; i++) {
           const sx = bx + this.sideOf(i - 1) * 28, next = i === idx + 1 && this.st === 'play';
-          mb.box(sx - 22, i * SH - 4, -18, 44, 4, 26, next ? (cix ? '#ffb0b8' : '#b5f5bd') : '#b98a55', { top: next ? (cix ? '#ffd0d6' : '#d9ffe0') : '#c99a66', emit: next && !cix });
-          if (i % 3 === 0) mb.box(sx - this.sideOf(i - 1) * 8 - 5, i * SH, -14, 10, 12, 6, ['#e23b4e', '#3fa0f0', '#58c46a'][i % 3]); // un libro cada 3 repisas
+          // POP de nacimiento: la repisa recién nacida entra con escala
+          // elástica (0,38 s) para que se entienda que nace de tu avance
+          const st = this.spawnFx[col][i]; let sc = 1;
+          if (st != null) { const k = (t - st) / 0.38; if (k < 1) sc = Math.max(0.03, climbPop(k)); }
+          mb.box(sx - 22 * sc, i * SH - 4 * sc, -18, 44 * sc, 4 * Math.max(0.35, sc), 26, next ? (cix ? '#ffb0b8' : '#b5f5bd') : '#b98a55', { top: next ? (cix ? '#ffd0d6' : '#d9ffe0') : '#c99a66', emit: next && !cix });
+          if (i % 3 === 0 && sc > 0.55) mb.box(sx - this.sideOf(i - 1) * 8 - 5 * sc, i * SH, -14, 10 * sc, 12 * sc, 6, ['#e23b4e', '#3fa0f0', '#58c46a'][i % 3]); // un libro cada 3 repisas
+        }
+      });
+      // polvo del nacimiento de las repisas: anillo de motas que se abre
+      this.puffs.forEach((u) => {
+        if (u.t < 0) return;
+        for (let j = 0; j < 5; j++) {
+          const ang = u.seed + j * 1.2566, r = 5 + u.t * 30, s = Math.max(1.2, 4.2 - u.t * 6);
+          mb.box(u.x + Math.cos(ang) * r, u.y + Math.sin(ang) * r * 0.55 + u.t * 7, -16, s, s, s, '#e6d7ae');
         }
       });
     }
     endOverlay(c) {
       const w = this.result.win, pM = this.meters(this.pMax), cM = this.meters(this.cMax);
       c.fillStyle = 'rgba(16,12,26,.85)'; c.fillRect(0, 0, 640, 360);
+      G.icon(c, w === 'win' ? 'trofeo' : w === 'tie' ? 'empate' : 'derrota', 320, 84, 48); // ícono propio del resultado
       G.text(c, w === 'win' ? '¡GANASTE!' : w === 'tie' ? 'EMPATE' : 'GANÓ POLLITO', 320, 138, { size: 40, color: w === 'win' ? '#7dff8a' : w === 'tie' ? '#ffd23f' : '#ff6b7a', lw: 9 });
       G.text(c, `Tú: ${pM} m   ·   Pollito: ${cM} m`, 320, 182, { size: 17, lw: 6 });
       G.text(c, `Llegaste hasta: ${CLIMB_ZONES[climbZone(this.pMax * SH)].name}`, 320, 208, { size: 11, color: '#b7a8e8' });
@@ -1169,12 +1232,15 @@
           this.hud(c, t, `▲ ${pM} m`, `▲ ${cM} m`);
           if (this.st === 'play') {
             const d = pM - cM;
-            G.text(c, d > 0 ? `🏆 VAS GANANDO POR ${d} m` : d < 0 ? `Pollito va ${-d} m más alto 😼` : '¡EMPATADOS EN ALTURA!', 320, 66, { size: 10, color: d > 0 ? '#7dff8a' : d < 0 ? '#ff9db0' : '#ffd23f' });
+            // indicador de quién va ganando con el ícono propio (trofeo /
+            // derrota / empate), nunca un emoticono
+            G.icon(c, d > 0 ? 'trofeo' : d < 0 ? 'derrota' : 'empate', 320, 54, 21);
+            G.text(c, d > 0 ? `VAS GANANDO POR ${d} m` : d < 0 ? `Pollito va ${-d} m más alto` : '¡EMPATADOS EN ALTURA!', 320, 74, { size: 10, color: d > 0 ? '#7dff8a' : d < 0 ? '#ff9db0' : '#ffd23f' });
             const h = this.p.head(22);
             if (this.stun > 0) G.text(c, '¡Resbalaste!', h.x, h.y, { size: 10, color: '#ff6b7a' });
             else { const dir = this.sideOf(this.pi); G.prompt(c, dir < 0 ? '←' : '→', h.x + dir * 30, h.y); }
           }
-          if (this.banner) { const b = this.banner, a = Math.min(1, b.t * 3, (b.d - b.t) * 1.5); c.globalAlpha = Math.max(0, a); c.fillStyle = 'rgba(20,16,30,.78)'; c.fillRect(0, 128, 640, 92); G.text(c, b.a, 320, 158, { size: 24, color: '#ffd23f', lw: 7 }); G.text(c, b.b, 320, 192, { size: 11 }); c.globalAlpha = 1; }
+          if (this.banner) { const b = this.banner, a = Math.min(1, b.t * 3, (b.d - b.t) * 1.5); c.globalAlpha = Math.max(0, a); c.fillStyle = 'rgba(20,16,30,.78)'; c.fillRect(0, 122, 640, 104); if (b.icon) G.icon(c, b.icon, 320, 146, 34); G.text(c, b.a, 320, 178, { size: 24, color: '#ffd23f', lw: 7 }); G.text(c, b.b, 320, 208, { size: 11 }); c.globalAlpha = 1; }
         },
       });
     }
@@ -1189,7 +1255,9 @@
   // un jefe: el "jefe" nominal del evento es Pollito por sus falsas
   // alarmas. 10 apariciones en la sala a oscuras; en cada una el jugador
   // OBSERVA las pistas y responde:
-  //   ← 👻 FANTASMA · → 🎭 PERSONA DISFRAZADA · ↑ 😴 PERSONAJE ESPECIAL
+  //   ← FANTASMA · → PERSONA DISFRAZADA · ↑ PERSONAJE ESPECIAL
+  // (los botones se dibujan con el arte propio del juego — el fantasma
+  // y la sábana en miniatura y el ícono de luna —, sin emoticones.)
   // La opción ESPECIAL solo aparece (tras 1,2 s de observación) en las
   // apariciones especiales: Ximena sonámbula y Pollito con una sábana.
   // PISTAS — fantasma real: flota sobre el piso, NO proyecta sombra,
@@ -1201,7 +1269,7 @@
   // se le cae un accesorio y en fase 2+ la sábana RESPIRA. Ximena: su
   // frame de sonámbula (act), murmura de su guardia. Pollito: el gato
   // real bajo una sábana mini, le quedan las patas y la cola fuera y
-  // maúlla. En fase 1 las pistas traen caption de aprendizaje (💡).
+  // maúlla. En fase 1 las pistas traen caption de aprendizaje.
   // ACIERTO: +16% de REPARACIÓN ELÉCTRICA (+12% en especiales) con
   // justificación rotando (fusible, batería, tablero…). ERROR: sube el
   // RIESGO de despertar (medidor propio 0–10), hace ruido y en fase 2+
@@ -1222,7 +1290,7 @@
   const BO_STAGES = [{ x: 468, z: 118 }, { x: 655, z: 102 }, { x: 850, z: 130 }, { x: 540, z: 230 }, { x: 782, z: 220 }];
   const BO_WINDOWS = [6, 5, 3.5];
   const BO_ENTER = 1.15, BO_REVEAL = 1.7;
-  const BO_REPAIR = ['Recuperaron un fusible 🔌', 'Apareció una batería 🔋', 'Ubicaron el tablero eléctrico ⚡', 'Salió la linterna buena 🔦', 'Recuperaron el destornillador perdido 🪛', 'Falsa alarma descartada: tiempo ganado ⏱'];
+  const BO_REPAIR = ['Recuperaron un fusible', 'Apareció una batería', 'Ubicaron el tablero eléctrico', 'Salió la linterna buena', 'Recuperaron el destornillador perdido', 'Falsa alarma descartada: tiempo ganado'];
   const BO_DROPS = ['control', 'flores', 'velas', 'ovillo', 'bolsas'];
   let boGhostCv = null; const boSheetCache = {}; let boMiniSheetCv = null;
   function ghostCanvasArt() {
@@ -1335,8 +1403,8 @@
     }
     passiveCaption() {
       const f = this.fig; if (!f || this.phase !== 1) return;
-      if (f.kind === 'ghost') f.caption = { text: '💡 Flota sobre el piso… y no proyecta sombra.', t: 2.6 };
-      else if (f.kind === 'person') f.caption = { text: '💡 Se le ven los zapatos bajo la sábana. Y tiene sombra.', t: 2.6 };
+      if (f.kind === 'ghost') f.caption = { text: 'Flota sobre el piso… y no proyecta sombra.', t: 2.6 };
+      else if (f.kind === 'person') f.caption = { text: 'Se le ven los zapatos bajo la sábana. Y tiene sombra.', t: 2.6 };
     }
     answer(kind) {
       if (this.st !== 'observe' || !this.fig) return;
@@ -1364,7 +1432,7 @@
         if (this.phase >= 2 && kind !== null && f.kind !== 'ximena' && this.decoDamage < 3 && Math.random() < 0.5) this.decoDamage++;
         G.sfx('bad');
       }
-      if (!this.lightsBack && this.repair >= 100) { this.lightsBack = true; this.banner = { text: '🔌 ¡LA LUZ VOLVIÓ! …pero siguen apareciendo figuras. A asegurar la casa.', t: 2.6 }; G.sfx('party'); }
+      if (!this.lightsBack && this.repair >= 100) { this.lightsBack = true; this.banner = { text: '¡LA LUZ VOLVIÓ! …pero siguen apareciendo figuras. A asegurar la casa.', t: 2.6 }; G.sfx('party'); }
       this.lastRes = { ok, kind, gain, line: this.revealLine(f, kind, ok) };
       this.st = 'reveal'; this.stT = BO_REVEAL;
     }
@@ -1407,9 +1475,9 @@
         for (const cl of f.clues) {
           if (cl.fired || this.obsT < cl.at * this.obsWin) continue;
           cl.fired = true;
-          if (cl.type === 'stumble') { f.stumbleT = 0.5; f.bubble = { text: '¡ay!', t: 0.9 }; W.puff(f.x, f.z, 2); G.sfx('door'); if (this.phase === 1) f.caption = { text: '💡 ¡Tropezó con la maceta! Los fantasmas no tropiezan.', t: 2.4 }; }
-          else if (cl.type === 'drop') { f.dropped = true; f.dropItem = BO_DROPS[(Math.random() * BO_DROPS.length) | 0]; G.sfx('pick'); if (this.phase === 1) f.caption = { text: '💡 Se le cayó algo al piso. Muy poco fantasmal.', t: 2.4 }; }
-          else if (cl.type === 'phase') { f.phaseT = 0.0001; if (this.phase === 1) f.caption = { text: '💡 ¡Atravesó la maceta como si no existiera!', t: 2.4 }; }
+          if (cl.type === 'stumble') { f.stumbleT = 0.5; f.bubble = { text: '¡ay!', t: 0.9 }; W.puff(f.x, f.z, 2); G.sfx('door'); if (this.phase === 1) f.caption = { text: '¡Tropezó con la maceta! Los fantasmas no tropiezan.', t: 2.4 }; }
+          else if (cl.type === 'drop') { f.dropped = true; f.dropItem = BO_DROPS[(Math.random() * BO_DROPS.length) | 0]; G.sfx('pick'); if (this.phase === 1) f.caption = { text: 'Se le cayó algo al piso. Muy poco fantasmal.', t: 2.4 }; }
+          else if (cl.type === 'phase') { f.phaseT = 0.0001; if (this.phase === 1) f.caption = { text: '¡Atravesó la maceta como si no existiera!', t: 2.4 }; }
           else if (cl.type === 'vanish') { f.vanishT = 0.42; G.sfx('msg'); }
           else if (cl.type === 'murmur') f.bubble = { text: cl.text, t: 1.6 };
           else if (cl.type === 'meow') { f.bubble = { text: '¡miau!', t: 1.2 }; G.sfx('meow'); }
@@ -1468,12 +1536,13 @@
       G.text(c, `APARICIÓN ${Math.min(this.round + 1, 10)}/10`, 83, 20, { size: 10, stroke: false });
       G.text(c, ['FASE 1 · APRENDIENDO', 'FASE 2 · CONFUSIÓN', 'FASE 3 · CAOS'][this.phase - 1], 83, 36, { size: 7.5, color: '#b9b0d6', stroke: false });
       panel(c, 196, 8, 248, 40);
-      G.text(c, '⚡ REPARACIÓN ELÉCTRICA', 320, 18, { size: 8, color: '#ffd23f', stroke: false });
+      G.text(c, 'REPARACIÓN ELÉCTRICA', 320, 18, { size: 8, color: '#ffd23f', stroke: false });
       c.fillStyle = '#1c1826'; c.fillRect(226, 26, 188, 10);
       c.fillStyle = this.repair >= 100 ? '#7dff8a' : '#ffd23f'; c.fillRect(226, 26, 188 * (this.repair / 100), 10);
       G.text(c, this.repair + '%', 320, 31, { size: 9, color: '#1c1826', stroke: false });
       panel(c, 482, 8, 150, 40, '#40243a');
-      G.text(c, '😴 RIESGO DE DESPERTAR', 557, 18, { size: 7.5, color: '#ffb0b8', stroke: false });
+      G.icon(c, 'luna', 499, 18, 13); // el riesgo de despertar lleva el ícono propio de luna
+      G.text(c, 'RIESGO DE DESPERTAR', 566, 18, { size: 7.5, color: '#ffb0b8', stroke: false });
       c.fillStyle = '#1c1826'; c.fillRect(497, 25, 120, 8);
       c.fillStyle = '#ff6b7a'; c.fillRect(497, 25, 120 * (this.risk / 10), 8);
       G.text(c, 'Puntos: ' + this.score, 557, 41, { size: 8, stroke: false });
@@ -1481,10 +1550,12 @@
       if (this.st === 'observe') {
         c.fillStyle = '#1c1826'; c.fillRect(196, 52, 248, 4);
         c.fillStyle = this.obsWin - this.obsT < 1.2 ? '#ff6b7a' : '#7fd3ff'; c.fillRect(196, 52, 248 * Math.max(0, 1 - this.obsT / this.obsWin), 4);
-        const by = 320, btn = (x, w, label, col) => { panel(c, x, by, w, 30, col); G.text(c, label, x + w / 2, by + 15, { size: 11, stroke: false }); };
-        btn(56, 190, '← 👻 FANTASMA', '#2c3a5e');
-        btn(394, 190, '🎭 DISFRAZADO →', '#3a2c50');
-        if (this.specReady) btn(248, 144, '↑ 😴 ESPECIAL', '#5e2c46');
+        const by = 320, btn = (x, w, label, col) => { panel(c, x, by, w, 30, col); G.text(c, label, x + w / 2 + 12, by + 15, { size: 11, stroke: false }); };
+        btn(56, 190, '← FANTASMA', '#2c3a5e');
+        c.drawImage(ghostCanvasArt(), 66, by + 2, 24, 26); // el fantasma PROPIO del juego junto a su botón
+        btn(394, 190, 'DISFRAZADO →', '#3a2c50');
+        c.drawImage(miniSheetCanvas(), 404, by + 3, 24, 24); // la sábana en miniatura junto al suyo
+        if (this.specReady) { btn(248, 144, '↑ ESPECIAL', '#5e2c46'); G.icon(c, 'luna', 266, by + 15, 17); }
         else if (f && (f.kind === 'ximena' || f.kind === 'pollito')) G.text(c, '…algo no cuadra con esta figura…', 320, by + 15, { size: 9, color: '#ffd23f' });
       }
       if (f && this.st !== 'over' && this.st !== 'intro') {
@@ -1501,11 +1572,15 @@
       if (this.st === 'intro') {
         c.fillStyle = 'rgba(12,10,20,.82)'; c.fillRect(66, 66, 508, 216);
         panel(c, 66, 66, 508, 216, '#221c33');
-        G.text(c, '🌑 APAGÓN: ¿FANTASMA O DISFRAZ?', 320, 92, { size: 16, color: '#ffd23f' });
+        G.icon(c, 'luna', 96, 92, 26);
+        G.text(c, 'APAGÓN: ¿FANTASMA O DISFRAZ?', 330, 92, { size: 16, color: '#ffd23f' });
         wrap(c, 'Aparecen figuras en la oscuridad. OBSERVA sus pistas antes de responder:', 96, 122, 448, 10, '#fff');
-        wrap(c, '👻 Fantasma de verdad: FLOTA, no tiene sombra y atraviesa las cosas.', 96, 150, 448, 10, '#bfe0ff');
-        wrap(c, '🎭 Persona disfrazada: se le ven los zapatos bajo la sábana, tropieza y se le caen cosas.', 96, 178, 448, 10, '#ffd9ec');
-        wrap(c, '😴 Y ojo: no todo es fantasma ni disfraz… Ximena sonámbula y Pollito andan sueltos.', 96, 214, 448, 10, '#ffe9a8');
+        c.drawImage(ghostCanvasArt(), 68, 140, 20, 22);
+        wrap(c, 'Fantasma de verdad: FLOTA, no tiene sombra y atraviesa las cosas.', 96, 150, 448, 10, '#bfe0ff');
+        c.drawImage(miniSheetCanvas(), 68, 168, 20, 20);
+        wrap(c, 'Persona disfrazada: se le ven los zapatos bajo la sábana, tropieza y se le caen cosas.', 96, 178, 448, 10, '#ffd9ec');
+        G.icon(c, 'luna', 78, 206, 17);
+        wrap(c, 'Y ojo: no todo es fantasma ni disfraz… Ximena sonámbula y Pollito andan sueltos.', 96, 214, 448, 10, '#ffe9a8');
         G.text(c, '← FANTASMA · → DISFRAZADO · ↑ ESPECIAL', 320, 252, { size: 11.5, color: '#7dff8a', stroke: false });
         G.text(c, 'Cada acierto repara la luz. Cada error… hace ruido al lado de Ximena.', 320, 268, { size: 8.5, color: '#b9b0d6', stroke: false });
       }
@@ -1513,12 +1588,13 @@
         const r = this.result;
         c.fillStyle = 'rgba(12,10,20,.82)'; c.fillRect(86, 78, 468, 204);
         panel(c, 86, 78, 468, 204, '#221c33');
-        G.text(c, r.blackoutFixed ? '🔌 ¡VOLVIÓ LA LUZ!' : '💡 LA LUZ VOLVIÓ TITILANDO…', 320, 108, { size: 18, color: r.blackoutFixed ? '#7dff8a' : '#ffd23f' });
-        G.text(c, r.win === 'win' ? 'Reparación perfecta: ni un grito, ni un rasguño.' : r.win === 'tie' ? 'La luz volvió, con alguna historia que contar.' : 'No se reparó del todo… pero la noche sigue.', 320, 132, { size: 10, stroke: false });
-        G.text(c, `Reparación ${r.repair}% · Aciertos ${r.correct}/10 · Errores ${r.errors}`, 320, 158, { size: 10.5, stroke: false });
-        G.text(c, `👻 Fantasmas confirmados: ${r.ghostsConfirmed} · 🎭 Disfraces descubiertos: ${r.fakeGhostsFound}`, 320, 178, { size: 10, stroke: false });
-        G.text(c, `${r.sleepwalkerFound ? '😴 Ximena sonámbula: encontrada y devuelta a su cama ✔' : '😴 Ximena siguió durmiendo (eso creemos)'}`, 320, 198, { size: 9.5, stroke: false });
-        G.text(c, `${r.decoDamage ? `💔 Decoración dañada en el caos: ${r.decoDamage}` : '🎀 Decoración intacta'}${r.pollitoEvent ? ' · 🐱 Pollito apareció con una sábana' : ''}`, 320, 216, { size: 9.5, stroke: false });
+        G.icon(c, r.win === 'win' ? 'trofeo' : r.win === 'tie' ? 'empate' : 'derrota', 320, 96, 30); // ícono propio del resultado
+        G.text(c, r.blackoutFixed ? '¡VOLVIÓ LA LUZ!' : 'LA LUZ VOLVIÓ TITILANDO…', 320, 122, { size: 18, color: r.blackoutFixed ? '#7dff8a' : '#ffd23f' });
+        G.text(c, r.win === 'win' ? 'Reparación perfecta: ni un grito, ni un rasguño.' : r.win === 'tie' ? 'La luz volvió, con alguna historia que contar.' : 'No se reparó del todo… pero la noche sigue.', 320, 142, { size: 10, stroke: false });
+        G.text(c, `Reparación ${r.repair}% · Aciertos ${r.correct}/10 · Errores ${r.errors}`, 320, 162, { size: 10.5, stroke: false });
+        G.text(c, `Fantasmas confirmados: ${r.ghostsConfirmed} · Disfraces descubiertos: ${r.fakeGhostsFound}`, 320, 180, { size: 10, stroke: false });
+        G.text(c, `${r.sleepwalkerFound ? 'Ximena sonámbula: encontrada y devuelta a su cama' : 'Ximena siguió durmiendo (eso creemos)'}`, 320, 198, { size: 9.5, stroke: false });
+        G.text(c, `${r.decoDamage ? `Decoración dañada en el caos: ${r.decoDamage}` : 'Decoración intacta'}${r.pollitoEvent ? ' · Pollito apareció con una sábana' : ''}`, 320, 216, { size: 9.5, stroke: false });
         G.text(c, 'PUNTOS: ' + r.score, 320, 248, { size: 15, color: '#ffd23f', stroke: false });
       }
     }
