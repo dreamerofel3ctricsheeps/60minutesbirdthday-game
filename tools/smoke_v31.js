@@ -26,6 +26,13 @@
       máxima (nunca antes, nunca en banda lejana), la cámara del
       duelo está alejada, y ningún emoticono prohibido reaparece
       en el entorno del juego (escenas/HUD) fuera del chat.
+   I) Huida coreografiada + selección sin scrollbars: la ruta de
+      cada huido pasa AL LADO de Ximena (punto de paso calculado
+      con su posición, lados alternos) y termina en la puerta
+      principal (510, 706); la selección de protagonista y el
+      selector de práctica usan un carrusel con botones ‹ ›,
+      puntos y flechas del teclado, sin ninguna barra de scroll,
+      desde el que se alcanzan los 7 roomies.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -130,7 +137,7 @@ load('scenes.js');
 load('game.js', (code) => {
   const from = 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect };';
   if (!code.includes(from)) throw new Error('no se encontró G.debug en game.js');
-  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG };');
+  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen };');
 });
 
 const G = sandbox.G, Sc = G.Scenes, W = G.World;
@@ -473,8 +480,24 @@ const tick = () => new Promise((r) => setImmediate(r));
   Object.assign(S, { player: 'natalia', partners: ['itzel', 'alan', 'saulo'], inv: {}, flags: {}, sus: 0, sleep: 1, noise: 0, qBonus: 0, duels: [], done: {}, tired: null });
   S.party = ['natalia', ...S.partners];
   S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
+  // Captura de los actores huidos: actArrival los retira de la escena al
+  // terminar, pero sus objetos quedan con la fleeRoute calculada (en la
+  // prueba no hay bucle de frames: la ruta es lo que se verifica).
+  const fledById = {};
+  const origActorFn = Sc.HomeScene.prototype.actor;
+  Sc.HomeScene.prototype.actor = function (id) { const a = origActorFn.call(this, id); if (a && S.fled.includes(id)) fledById[id] = a; return a; };
   await G.debug.actArrival({ inHand: [], stashed: 0, x: 510, y: 450 });
+  Sc.HomeScene.prototype.actor = origActorFn;
   check('huida: huyeron exactamente los no reclutados', S.fled.length === 3 && S.fled.every((id) => !G.home.actor(id)), 'fled=' + S.fled.join(','));
+  const xiP = [G.home.xi.x, G.home.xi.y];
+  const sideOf = (id) => { const r = fledById[id] && fledById[id].fleeRoute; const p = r && r.find((pt) => Math.abs(pt[1] - xiP[1]) <= 12 && Math.abs(pt[0] - xiP[0]) >= 25 && Math.abs(pt[0] - xiP[0]) <= 55); return p ? Math.sign(p[0] - xiP[0]) : 0; };
+  check('huida: la ruta de cada huido pasa AL LADO de Ximena (a su misma altura, a 25–55 u de su eje)',
+    S.fled.every((id) => sideOf(id) !== 0), S.fled.map((id) => id + ':' + sideOf(id)).join(','));
+  check('huida: los huidos la envuelven — pasan por AMBOS lados de Ximena',
+    S.fled.some((id) => sideOf(id) < 0) && S.fled.some((id) => sideOf(id) > 0), S.fled.map((id) => sideOf(id)).join(','));
+  check('huida: toda ruta termina en la PUERTA PRINCIPAL (510, 706)',
+    S.fled.every((id) => { const r = fledById[id] && fledById[id].fleeRoute; return r && r[r.length - 1][0] === 510 && r[r.length - 1][1] === 706; }),
+    S.fled.map((id) => { const r = fledById[id] && fledById[id].fleeRoute; return r ? r[r.length - 1].join(',') : 'sin ruta'; }).join(' | '));
   check('huida: la escena queda SOLO con la party (4 actores)', G.home.roomies.length === 4 && G.home.roomies.every((r) => S.party.includes(r.id)), G.home.roomies.map((r) => r.id).join(','));
 
   // --- Asignaciones posteriores: solo la party ---
@@ -536,6 +559,54 @@ const tick = () => new Promise((r) => setImmediate(r));
     const worldTxt = fs.readFileSync(path.join(SRCROOT, 'js', 'world.js'), 'utf8');
     check('el motor dibuja los íconos con G.icon (world) y las escenas lo usan',
       worldTxt.includes('G.icon =') && scenesTxt.includes('G.icon(c,'));
+  }
+
+  // ================= I) Selección sin scrollbars: carrusel ================
+  console.log('\nI) Selección de personaje — carrusel con botones, sin barras de scroll');
+  {
+    const overlayEl = documentFake.querySelector('#overlay');
+    // --- Pantalla principal: protagonista entre los 7 ---
+    let pickedId = null;
+    const pSel = G.debug.selectChar().then((id) => { pickedId = id; });
+    await tick(); await tick();
+    const modalSel = overlayEl.children[0];
+    const cardsSel = modalSel ? queryWithin(modalSel, '.pcard', true) : [];
+    check('selección: el carrusel contiene las 7 tarjetas (una por roomie)', cardsSel.length === 7, 'cards=' + cardsSel.length);
+    check('selección: el modal va SIN scroll (clase noscroll = overflow oculto)', !!modalSel && modalSel._classes.has('noscroll'));
+    const trackSel = modalSel && queryWithin(modalSel, '.ctrack', false);
+    const navSel = modalSel ? queryWithin(modalSel, '.cnav', true) : [];
+    const nextSel = navSel.find((b) => b._classes.has('next'));
+    check('selección: hay botones de navegación a ambos lados (‹ ›)', navSel.length === 2 && !!nextSel);
+    check('selección: hay un punto de posición por parada (7 − 3 visibles + 1 = 5)',
+      !!modalSel && queryWithin(modalSel, '.cdot', true).length === 5, modalSel && queryWithin(modalSel, '.cdot', true).length);
+    nextSel.onclick(); nextSel.onclick();
+    check('selección: el botón › desplaza la vista 2 posiciones (−520 px)', !!trackSel && trackSel.style.transform === 'translateX(-520px)', trackSel && trackSel.style.transform);
+    key('ArrowRight', true); key('ArrowRight', false);
+    check('selección: la flecha → del teclado también navega (3 posiciones)', !!trackSel && trackSel.style.transform === 'translateX(-780px)', trackSel && trackSel.style.transform);
+    nextSel.onclick(); nextSel.onclick(); nextSel.onclick();
+    check('selección: la vista se detiene en la última parada (máx. 4: se ven los 3 últimos)', !!trackSel && trackSel.style.transform === 'translateX(-1040px)', trackSel && trackSel.style.transform);
+    const lastCard = cardsSel.find((b) => b.dataset.id === G.PLAYABLE[6]);
+    lastCard.onclick(); await pSel;
+    check('selección: navegando se alcanza y se elige al 7.º roomie', pickedId === G.PLAYABLE[6], 'picked=' + pickedId);
+
+    // --- Selector de práctica: el mismo carrusel ---
+    let pickRes = 'pendiente';
+    const pPick = G.debug.pickCharScreen(G.EVENTS.decoracion).then((v) => { pickRes = v; });
+    await tick(); await tick();
+    const modalPick = overlayEl.children[0];
+    const cardsPick = modalPick ? queryWithin(modalPick, '.pcard', true) : [];
+    check('práctica: su selector usa el mismo carrusel sin scroll (7 tarjetas)', cardsPick.length === 7 && !!modalPick && modalPick._classes.has('noscroll'), 'cards=' + cardsPick.length);
+    const nextPick = modalPick && queryWithin(modalPick, '.cnav', true).find((b) => b._classes.has('next'));
+    nextPick.onclick();
+    cardsPick[0].onclick(); await pPick;
+    check('práctica: navegar con › y tocar una tarjeta elige al personaje', pickRes === G.PLAYABLE[0], 'res=' + pickRes);
+    let backRes = 'pendiente';
+    const pBack = G.debug.pickCharScreen(G.EVENTS.decoracion).then((v) => { backRes = v; });
+    await tick(); await tick();
+    const backBtn = overlayEl.children[0] && queryWithin(overlayEl.children[0], '.big', true)[0];
+    backBtn.onclick(); await pBack;
+    check('práctica: el botón Volver del carrusel resuelve null (vuelve a la lista)', backRes === null, 'res=' + backRes);
+    G.menuOpen = false;
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

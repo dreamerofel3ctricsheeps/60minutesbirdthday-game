@@ -93,6 +93,28 @@ body.paused #phone, body.paused #inv { pointer-events: none; filter: saturate(.5
 .roll.mid { color: var(--yellow); background: #4a3f1f; }
 .hero { height: 150px; width: auto; image-rendering: pixelated; }
 .pick { display: flex; gap: 12px; justify-content: center; }
+/* Carrusel de selección de personaje: ventana con overflow OCULTO y
+   navegación por botones ‹ › / puntos / flechas del teclado. Ninguna
+   barra de scroll aparece en estas pantallas (pedido de Jose). */
+.modal.noscroll { overflow: hidden; }
+.car { position: relative; margin: 4px auto 2px; width: fit-content; }
+.cview { overflow: hidden; margin: 0 auto; }
+.ctrack { display: flex; gap: 12px; transition: transform .38s cubic-bezier(.25, 1.1, .35, 1); padding: 8px 0 12px; }
+.car.slim .ctrack { gap: 10px; }
+.car .pcard { flex: none; width: 248px; }
+.car.slim .pcard { width: 150px; }
+.car.slim .pcard img { height: 104px; }
+.cnav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; background: #17122a; border: 3px solid var(--yellow); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 3; box-shadow: 0 4px 0 #120f1b; padding: 0; }
+.cnav.prev { left: -24px; }
+.cnav.next { right: -24px; }
+.cnav i { display: block; width: 11px; height: 11px; }
+.cnav.prev i { border-top: 4px solid var(--yellow); border-left: 4px solid var(--yellow); transform: rotate(-45deg); margin-left: 5px; }
+.cnav.next i { border-top: 4px solid var(--yellow); border-right: 4px solid var(--yellow); transform: rotate(45deg); margin-right: 5px; }
+.cnav:hover { background: #241b40; }
+.cnav.off { opacity: .25; pointer-events: none; }
+.cdots { display: flex; gap: 7px; justify-content: center; margin: 0 0 10px; }
+.cdot { width: 11px; height: 11px; border-radius: 50%; border: 2px solid #120f1b; background: #4a4068; cursor: pointer; padding: 0; }
+.cdot.on { background: var(--yellow); transform: scale(1.25); }
 .pcard { flex: 1; background: var(--panel2); border: 3px solid #120f1b; border-radius: 12px; padding: 10px 12px; color: var(--ink); text-align: left; transition: transform .1s; }
 .pcard:hover { transform: translateY(-4px); border-color: var(--yellow); }
 .pcard img { height: 150px; width: auto; image-rendering: pixelated; display: block; margin: 0 auto; }

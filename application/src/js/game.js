@@ -259,12 +259,60 @@
       $('#mback').onclick = () => { G.sfx('pick'); res('back'); };
     });
   }
+  // ---------- Carrusel de personajes (SIN barras de scroll) ----------
+  // Pedido de Jose: la selección de personaje quedaba en un cuadro muy
+  // angosto y había que mover la barra de scroll, rompiendo la estética.
+  // Ahora se muestran `per` tarjetas a la vez en una ventana con overflow
+  // OCULTO (ninguna barra aparece jamás en estas pantallas) y se navega
+  // con los botones ‹ › de los lados, los puntos de posición o el teclado
+  // (←/→, ver charKeys). Las tarjetas conservan su ancho completo, así la
+  // ficha (stats/rol/habilidad) se lee entera sin apretujarse.
+  function charCarousel(ids, cardHTML, slim, onPick) {
+    const CW = slim ? 150 : 248, GAP = slim ? 10 : 12, iw = window.innerWidth || 9999;
+    const per = iw < 2 * CW + GAP + 170 ? 1 : iw < 3 * CW + 2 * GAP + 170 ? 2 : 3;
+    const node = el('div', 'car' + (slim ? ' slim' : ''));
+    const view = el('div', 'cview'); view.style.width = (per * CW + (per - 1) * GAP) + 'px';
+    const track = el('div', 'ctrack');
+    ids.forEach((id) => { const b = el('button', 'pcard', cardHTML(id)); b.dataset.id = id; b.onclick = () => onPick(id); track.appendChild(b); });
+    view.appendChild(track); node.appendChild(view);
+    const prev = el('button', 'cnav prev', '<i></i>'), next = el('button', 'cnav next', '<i></i>');
+    node.appendChild(prev); node.appendChild(next);
+    const dots = el('div', 'cdots'), dEls = [];
+    const maxPos = Math.max(0, ids.length - per);
+    for (let k = 0; k <= maxPos; k++) { const d = el('button', 'cdot'); d.onclick = () => go(k); dots.appendChild(d); dEls.push(d); }
+    let pos = 0;
+    function paint() {
+      track.style.transform = `translateX(${-pos * (CW + GAP)}px)`;
+      prev.classList.toggle('off', pos === 0); next.classList.toggle('off', pos === maxPos);
+      dEls.forEach((d, k) => d.classList.toggle('on', k === pos));
+    }
+    function go(n) { const t = Math.max(0, Math.min(maxPos, n)); if (t !== pos) { pos = t; G.sfx('pick'); } paint(); }
+    prev.onclick = () => go(pos - 1); next.onclick = () => go(pos + 1);
+    paint();
+    return { node, dots, step: (d) => go(pos + d), get pos() { return pos; }, maxPos };
+  }
+  // Teclado del carrusel mientras la pantalla vive: ←/→ mueven la vista.
+  // Se desactiva al resolver (flag + removeEventListener donde exista).
+  function charKeys(car, off) {
+    const h = (e) => { if (off()) return; if (e.code === 'ArrowLeft') car.step(-1); else if (e.code === 'ArrowRight') car.step(1); };
+    window.addEventListener('keydown', h);
+    return () => { if (window.removeEventListener) window.removeEventListener('keydown', h); };
+  }
+
   function pickCharScreen(ev) {
     return new Promise((res) => {
-      const cards = G.PLAYABLE.map((id) => { const c = G.CHARS[id]; return `<button class="pcard" data-id="${id}"><img src="${Sp.full(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small></button>`; }).join('');
-      menuShow(`<h2>${ev.title}</h2><p class="dim">¿Quién se enfrenta a ${G.CHARS[ev.boss].name}?</p><div class="pick">${cards}</div><button class="big alt" id="mback">← Lista de minijuegos</button>`);
-      overlay.querySelectorAll('.pcard').forEach((b) => (b.onclick = () => { G.sfx('ok'); res(b.dataset.id); }));
-      $('#mback').onclick = () => res(null);
+      let done = false; const off = () => done;
+      const car = charCarousel(G.PLAYABLE, (id) => { const c = G.CHARS[id]; return `<img src="${Sp.full(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small>`; }, true, (id) => finish(id));
+      const un = charKeys(car, off);
+      const modal = el('div', 'modal wide noscroll');
+      modal.appendChild(el('h2', '', ev.title));
+      modal.appendChild(el('p', 'dim', `¿Quién se enfrenta a ${G.CHARS[ev.boss].name}?`));
+      modal.appendChild(car.node); modal.appendChild(car.dots);
+      const back = el('button', 'big alt', '← Lista de minijuegos');
+      back.onclick = () => finish(null);
+      modal.appendChild(back);
+      G.menuOpen = true; overlay.innerHTML = ''; overlay.appendChild(modal); overlay.classList.add('show');
+      function finish(v) { if (done) return; done = true; un(); if (v) G.sfx('ok'); res(v); }
     });
   }
   function vsScreen(ev, who) {
@@ -342,15 +390,19 @@
   }
   function selectChar() {
     return new Promise((res) => {
-      overlay.innerHTML = `<div class="modal wide"><h2>¿A quién controlas en el minuto de recolección?</h2><div class="pick"></div><p class="dim">En el departamento estarán los 7 roomies. Durante el minuto podrás cargar hasta <b>3 partners</b> al hombro y dejarlos en el armario: ellos se quedan para toda la noche. Los demás… ya verás.</p></div>`;
-      overlay.classList.add('show');
-      G.PLAYABLE.forEach((id) => {
+      let done = false; const off = () => done;
+      const car = charCarousel(G.PLAYABLE, (id) => {
         const c = G.CHARS[id];
         const stats = Object.keys(c.stats).map((k) => `<div class="st"><span>${G.STAT_LABEL[k]}</span><i><u style="width:${c.stats[k] * 10}%"></u></i><em>${c.stats[k]}</em></div>`).join('');
-        const b = el('button', 'pcard', `<img src="${Sp.full(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small>${stats}<p class="good">✔ ${c.skill}</p><p class="bad">✖ ${c.defect}</p>`);
-        b.onclick = () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok'); res(id); };
-        overlay.querySelector('.pick').appendChild(b);
-      });
+        return `<img src="${Sp.full(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small>${stats}<p class="good">✔ ${c.skill}</p><p class="bad">✖ ${c.defect}</p>`;
+      }, false, (id) => finish(id));
+      const un = charKeys(car, off);
+      const modal = el('div', 'modal wide noscroll');
+      modal.appendChild(el('h2', '', '¿A quién controlas en el minuto de recolección?'));
+      modal.appendChild(car.node); modal.appendChild(car.dots);
+      modal.appendChild(el('p', 'dim', 'Usa los botones de los lados (o las flechas ← →) para ver a todos. En el departamento estarán los 7 roomies. Durante el minuto podrás cargar hasta <b>3 partners</b> al hombro y dejarlos en el armario: ellos se quedan para toda la noche. Los demás… ya verás.'));
+      overlay.innerHTML = ''; overlay.appendChild(modal); overlay.classList.add('show');
+      function finish(id) { if (done) return; done = true; un(); overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok'); res(id); }
     });
   }
 
@@ -546,13 +598,26 @@
     xi.say('Ya llegué… 36 horas de guardia. No siento las piernas.', 3.2); await G.wait(3.4);
     // ---- LA HUIDA: los roomies NO reclutados salen despavoridos --------
     // Pánico (expresión de sorpresa), líneas cómicas y carrera en cadena
-    // hacia la puerta con micro-retrasos. Al salir, desaparecen de la
-    // escena y de la run: home.roomies queda = la party.
+    // con micro-retrasos: pasan AL LADO de Ximena y salen por la puerta
+    // principal. Al salir, desaparecen de la escena y de la run:
+    // home.roomies queda = la party.
     if (fledActors.length) {
       const lines = ['¡Nosotros ya nos íbamos! 😅', '¡Se me quema el arroz!', '¡Mañana madrugo! ¡Chau!', '¡Uy, justo salía!', '¡Nos vemos… algún día!'];
       fledActors.forEach((a, i) => { a.expr = 'surprised'; a.emo('!!', 1.3); a.hop(170); if (i < 2) a.say(lines[i], 1.9); });
       await G.wait(0.9);
-      fledActors.forEach((a, i) => G.after(0.15 + i * 0.3, () => a.goTo(510, 706, 208 + (i % 3) * 16)));
+      // RUTA DE HUIDA: cada huido pasa AL LADO de Ximena — rozándola, ahí
+      // está la gracia y el riesgo cómico — y sale por la PUERTA PRINCIPAL
+      // (510, 706: el eje sur del pasillo por el que ella misma entró). El
+      // punto de paso se calcula con la posición de Ximena EN ESTE MOMENTO
+      // y los lados se alternan para que la envuelvan al pasar. La ruta se
+      // deja en a.fleeRoute (la cadena con micro-retrasos la activa).
+      fledActors.forEach((a, i) => {
+        const sx = xi.x + (i % 2 ? 38 : -38), sy = xi.y;
+        a.fleeRoute = W.path(a.x, a.y, sx, sy).concat([[510, 648], [510, 706]]);
+        G.after(0.15 + i * 0.3, () => { a.speed = 208 + (i % 3) * 16; a.route = a.fleeRoute; });
+      });
+      await G.wait(1.05); // los primeros ya la están rozando: su reacción
+      xi.hop(170); xi.emo('!!', 1.2);
       await G.until(() => fledActors.every((a) => a.arrived));
       fledActors.forEach((a) => { a.hidden = true; home.removeRoomie(a.id); });
       ui.system(`🏃 Los que no se quedaron (${fledActors.map((a) => G.CHARS[a.id].name).join(', ')}) salieron corriendo.`);
