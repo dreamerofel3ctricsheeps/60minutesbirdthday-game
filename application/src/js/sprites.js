@@ -272,6 +272,23 @@
     animLen(id, anim) { const m = M.chars[id]; return m && m.anims[anim] ? m.anims[anim].length : 0; },
     // alto del personaje en unidades de mundo (para colocar cosas sobre la cabeza)
     charTop(id) { const m = M.chars[id]; return m ? (m.base - m.top) * m.scale : 46; },
+    // Altura de APOYO de las manos levantadas (carrywalk_*) en unidades de
+    // mundo: donde descansa el pasajero. mkdefined la mide por frame (px de
+    // celda sobre el piso × escala), menos 4 px de AGARRE: el cuerpo se
+    // hunde un pelo entre los puños para que se lea contacto/sujeción y no
+    // equilibrio sobre las puntas de los dedos. Fallback: la coronilla.
+    carryHands(id, anim, idx) {
+      const m = M.chars[id]; if (!m) return 46;
+      const hv = (m.hands || {})[anim];
+      if (hv && hv.length) { const v = hv[((idx % hv.length) + hv.length) % hv.length]; if (v) return (v - 4) * m.scale; }
+      return this.charTop(id);
+    },
+    // Hundimiento del pasajero en unidades de mundo: las poses carried son
+    // "voladoras" y su línea base la marca una extremidad colgando, no el
+    // torso. mkdefined mide el fondo de la masa del torso y registra
+    // carriedRest (px × escala): lo que el pasajero debe bajar desde su
+    // línea base para que el TORSO apoye sobre las manos del portador.
+    carriedRest(id) { const m = M.chars[id]; return m && typeof m.carriedRest === 'number' ? m.carriedRest * m.scale : 0; },
     // frame de una animación por nombre (idle, walk_down, run_right, act, ...)
     frame(id, anim, idx, o) { o = o || {}; return frameCanvas(id, anim, idx || 0, !!o.flip, o.expr); },
     // compat: dir + frame clásico (0 idle, 1 y 2 caminata, 3 acción)

@@ -460,6 +460,29 @@ const tick = () => new Promise((r) => setImmediate(r));
     if (csc.carrying !== o) break;
     csc.p.x = W.STASH.x; csc.p.y = W.STASH.y; tap('Space'); cstep();
   }
+  // --- Anclaje del pasajero: descansa sobre las MANOS del portador ---
+  check('metadata: todo roomie registra el apoyo de manos por frame carrywalk',
+    G.PLAYABLE.every((id) => { const m = G.Sprites.META.chars[id]; return ['carrywalk_down', 'carrywalk_up', 'carrywalk_right'].every((a) => Array.isArray((m.hands || {})[a]) && m.hands[a].length === m.anims[a].length && m.hands[a].every((v) => v >= 140 && v <= 220)); }));
+  check('Sp.carryHands devuelve alturas de mundo plausibles (55–75 u; no el elev fijo 46 de antes)',
+    G.PLAYABLE.every((id) => ['carrywalk_down', 'carrywalk_up', 'carrywalk_right'].every((a) => { const v = G.Sprites.carryHands(id, a, 0); return v >= 55 && v <= 75; })));
+  check('metadata: todo roomie registra carriedRest (hundimiento del torso carried, 0–18 u)',
+    G.PLAYABLE.every((id) => { const v = G.Sprites.carriedRest(id); return v >= 0 && v <= 18; }));
+  {
+    const asc = new Sc.CollectScene('saulo', () => {});
+    asc.count = 0;
+    const an = asc.others[0];
+    asc.p.x = an.x; asc.p.y = an.y; tap('Space'); asc.update(0.016);
+    check('al cargar, el pasajero nace ya a la altura de las manos (sin viaje desde el suelo)', asc.carrying === an && an.elev > 55, 'elev=' + an.elev.toFixed(1));
+    asc.p._cw = { anim: 'carrywalk_down', idx: 0 }; // lo que draw3d registra al mostrar ese frame
+    const target = asc.p.carrySupportY() - G.Sprites.carriedRest(an.id) * (G.R.stretch || 1); // la fórmula exacta de la escena
+    an.elev = target - 30; an.sprV = 0; asc.update(0.016);
+    check('tras una perturbación, la desviación del pasajero queda clampada (±6 u)', Math.abs(an.elev - target) <= 6.5, 'dev=' + (an.elev - target).toFixed(1));
+    let maxDev = 0;
+    for (let i = 0; i < 150; i++) { asc.update(0.016); maxDev = Math.max(maxDev, Math.abs(an.elev - target)); }
+    check('el resorte asienta al pasajero sobre las manos (|desv| final < 2 u)', Math.abs(an.elev - target) < 2, 'elev=' + an.elev.toFixed(1) + ' target=' + target.toFixed(1));
+    check('el rebote del acople queda contenido (desviación máxima < 8 u en el asentamiento)', maxDev < 8, 'maxDev=' + maxDev.toFixed(1));
+  }
+
   check('se reclutan exactamente 3 partners', csc.partners.length === 3, 'partners=' + csc.partners.join(','));
   const npcExtra = csc.others.find((o) => o.state === 'free');
   goNear(npcExtra); tap('Space'); cstep();

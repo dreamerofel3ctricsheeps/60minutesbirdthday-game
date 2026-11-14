@@ -170,6 +170,57 @@ def find_eyes(cell_img, dark=False):
     return [{k: e[k] for k in ('x', 'y', 'r')}]
 
 
+def detect_hands(cell_img, base, anim):
+    """Punto de apoyo de las MANOS LEVANTADAS en un frame carrywalk_*:
+    altura en px sobre la línea de piso (base) a la que quedan las puntas
+    de los puños/palmas. Es el ancla donde descansa el pasajero (carried):
+    la escena cuelga al pasajero de este apoyo (ver Actor.carrySupportY en
+    world.js). Sin esta medida la carga usaba un elev fijo (46) que caía a
+    la altura de la CARA del portador: el pasajero se veía "detrás de la
+    cabeza" en vez de sobre las manos.
+    - frontal/espaldas: promedio de la punta de cada mano (zonas laterales
+      fuera del tercio central, que es donde está la cabeza).
+    - perfil (carrywalk_right): la mano delantera levantada (zona frontal;
+      la trasera queda tapada por el cuerpo en la mayoría de los frames)."""
+    a = np.asarray(cell_img)[..., 3] > 40
+    if not a.any(): return None
+    ys, xs = np.where(a.any(axis=1))[0], np.where(a.any(axis=0))[0]
+    x0, x1 = int(xs.min()), int(xs.max()) + 1
+    cx, w = (x0 + x1) / 2, x1 - x0
+    def topmost(sl):
+        rows = np.where(a[:, sl].any(axis=1))[0]
+        return int(rows.min()) if len(rows) else None
+    if anim == 'carrywalk_right':
+        t = topmost(slice(int(cx + w * 0.12), x1))
+        return round(base - t, 1) if t is not None else None
+    tops = [t for t in (topmost(slice(x0, int(cx - w * 0.16))),
+                        topmost(slice(int(cx + w * 0.16), x1))) if t is not None]
+    if not tops: return None
+    return round(base - sum(tops) / len(tops), 1)
+
+
+def detect_carried_rest(cell_img, base):
+    """Línea de apoyo del torso en un frame carried, en px sobre la base.
+    Las poses carried son "voladoras" (cabeza al frente, piernas atrás):
+    el píxel más bajo de la celda suele ser una pierna o un brazo colgando,
+    no el torso que el portador sujeta. La línea útil es el fondo de la
+    MASA del torso: la fila ancha (>= 50% del ancho máximo de la mitad
+    inferior de la silueta) más baja. Devuelve cuánto hay que HUNDIR el
+    frame (base - esa fila) para que el torso descanse sobre las manos
+    del portador y las extremidades cuelguen a los lados."""
+    a = np.asarray(cell_img)[..., 3] > 40
+    if not a.any(): return None
+    ys = np.where(a.any(axis=1))[0]
+    y0, y1 = int(ys.min()), int(ys.max())
+    widths = a.sum(axis=1)
+    lo = int(y0 + (y1 - y0) * 0.45)
+    seg = widths[lo:y1 + 1]
+    if not len(seg) or seg.max() == 0: return None
+    rows = np.where(seg >= 0.5 * seg.max())[0]
+    if not len(rows): return None
+    return round(base - 1 - (lo + int(rows.max())), 1)
+
+
 def skin_color(cell_img, eyes):
     a = np.asarray(cell_img)
     xs = [e['x'] for e in eyes]; ys = [e['y'] for e in eyes]; rs = [e['r'] for e in eyes]
@@ -286,6 +337,21 @@ def build_char(cid, bundle, geom, anim_names, report):
             if eng in FRONTAL and idx not in eyes:
                 eyes[idx] = avg; eyes_src[idx] = 'avg'
     cov = (sum(1 for k, v in eyes_src.items() if v in ('det', 'lens')) / frontal_n * 100) if frontal_n else 0
+    # ancla de manos de la carga (solo roomies: los únicos con carrywalk_*)
+    hands = {}
+    for eng in ('carrywalk_down', 'carrywalk_up', 'carrywalk_right'):
+        if eng in anims:
+            vals = [detect_hands(cell_imgs[ci], base, eng) for ci in anims[eng]]
+            if all(v is not None for v in vals): hands[eng] = vals
+    # hundimiento del pasajero: promedio del apoyo del torso entre los
+    # frames carried (un solo valor por personaje: el ciclo carried alterna
+    # frames y un valor por frame haría saltar el objetivo del resorte
+    # cada medio segundo; el promedio deja el torso asentado y las
+    # extremidades colgando, que es como se lee la pose).
+    carried_rest = None
+    if 'carried' in anims:
+        vals = [detect_carried_rest(cell_imgs[ci], base) for ci in anims['carried']]
+        if all(v is not None for v in vals): carried_rest = round(sum(vals) / len(vals), 1)
     idle0 = cell_imgs[anims['idle'][0]] if 'idle' in anims else cell_imgs[0]
     ib = content_bbox(idle0)
     top = ib[1] if ib else 0
@@ -296,6 +362,8 @@ def build_char(cid, bundle, geom, anim_names, report):
             'sw': sheet.width, 'sh': sheet.height, 'top': int(top), 'neck': neck,
             'skin': skin, 'lenses': cid == 'jose',
             'anims': {k: v for k, v in anims.items()},
+            **({'hands': hands} if hands else {}),
+            **({'carriedRest': carried_rest} if carried_rest is not None else {}),
             'eyes': {str(k): v for k, v in eyes.items()},
             'eyesSrc': {str(k): v for k, v in eyes_src.items()}}
     report.append(f"{cid}: {len(cells)} celdas fw={fw} fh={fh} hoja {sheet.width}x{sheet.height} "

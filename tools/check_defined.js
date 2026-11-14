@@ -15,6 +15,11 @@
    4. Ojos: >= 90% de los frames frontales (idle, walk_down, run_down, act)
       de cada humano tienen ojos registrados (detectados o cristales en
       Jose); el resto debe estar marcado como fallback 'avg'.
+   5. Manos de la carga: todo roomie registra en la metadata el apoyo de
+      sus manos levantadas (hands, px sobre el piso por frame carrywalk_*,
+      rango plausible 140–220): es el ancla donde descansa el pasajero.
+      Y su carriedRest (px que el torso carried debe hundirse desde su
+      línea base para apoyar sobre esas manos, 0–55).
 
    Uso: node tools/check_defined.js   (exit 0 = OK, 1 = fallos)
 */
@@ -83,6 +88,18 @@ for (const id of HUMANS) {
   ok(total > 0 && det / total >= 0.9, `${id}: ojos detectados en frontales ${det}/${total} (${(det / total * 100).toFixed(0)}% >= 90%)`);
   ok(avgBad === 0, `${id}: todo frontal sin detectar usa fallback 'avg' con ojos`);
 }
+// 5. ancla de manos de la carga en los 7 roomies
+for (const id of ROOMIES) {
+  const m = META.chars[id]; if (!m) continue;
+  for (const a of ['carrywalk_down', 'carrywalk_up', 'carrywalk_right']) {
+    const hv = (m.hands || {})[a];
+    ok(Array.isArray(hv) && hv.length === (m.anims[a] || []).length && hv.every((v) => v >= 140 && v <= 220),
+      `${id}: manos registradas en ${a} (${Array.isArray(hv) ? hv.join('/') : 'sin hands'})`);
+  }
+  ok(typeof m.carriedRest === 'number' && m.carriedRest >= 0 && m.carriedRest <= 55,
+    `${id}: carriedRest registrado (${m.carriedRest})`);
+}
+
 const cat = META.chars.pollito;
 if (cat) for (const a of ['idle', 'walk', 'pounce']) ok(Array.isArray(cat.anims[a]) && cat.anims[a].length >= 1, `pollito: animación ${a} con frames`);
 

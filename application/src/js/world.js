@@ -263,8 +263,9 @@
       if (this.carriedPose) {
         // Pasajero al hombro durante la recolección: pose 'carried'
         // (acostado, pateando de a ratos: 2 frames en ciclo lento). Lo
-        // posiciona la escena (x/y del portador, elev = sus hombros y un
-        // resorte de acople); aquí solo se elige el frame. Se espeja con
+        // posiciona la escena (x/y del portador; elev = apoyo de las MANOS
+        // levantadas del portador, ver carrySupportY, con un resorte de
+        // acople contenido); aquí solo se elige el frame. Se espeja con
         // la dirección del portador (personaje humano: espejo libre).
         anim = 'carried'; idx = Math.floor(this.t * 2); flip = dir === 'left';
       } else if (fo != null) {
@@ -297,8 +298,9 @@
         // medidos y van en loop directo; correr usa beats más largos
         // (≈17.1 u) acordes a la zancada de carrera.
         idx = !run && Sp.animLen(this.id, anim) === 3 ? ppIdx(cyc, 3) : cyc;
+        if (this.carryWalk) this._cw = { anim, idx };
       } else {
-        if (this.carryWalk) { anim = dir === 'up' ? 'carrywalk_up' : dir === 'down' ? 'carrywalk_down' : 'carrywalk_right'; idx = 0; flip = dir === 'left'; }
+        if (this.carryWalk) { anim = dir === 'up' ? 'carrywalk_up' : dir === 'down' ? 'carrywalk_down' : 'carrywalk_right'; idx = 0; flip = dir === 'left'; this._cw = { anim, idx }; }
         else if (dir === 'up') anim = 'idle_up';
         else if (dir === 'down') { anim = 'idle'; idx = Math.floor(this.t / 0.85); }
         else { anim = 'idle_right'; flip = dir === 'left'; }
@@ -311,6 +313,25 @@
     }
     // punto sobre la cabeza en coordenadas de la capa 2D
     head(extra) { return R.project(this.x, (this.id === 'pollito' ? 34 : Sp.charTop(this.id) + 3) * R.stretch * this.scale + this.elev + this.jy + (extra || 0), this.y); }
+    // Elev (altura de mundo) a la que debe colgar el pasajero para que su
+    // cuerpo descanse SOBRE las manos levantadas del frame carrywalk que
+    // el portador está mostrando (this._cw lo registra draw3d en cada
+    // cuadro, en movimiento y EN REPOSO — en reposo cargando se usa el
+    // frame 0 de carrywalk, nunca el idle de brazos abajo). La altura de
+    // contenido se convierte con ×stretch (el billboard se estira
+    // 1/cos(pitch) y el elev no; es la misma conversión que usa la carga
+    // de ítems sobre la cabeza) y se suma el bob de caminata del portador
+    // para que el pasajero lo acompañe en vez de rebotar contra él. El
+    // jy NO va aquí: el pasajero suma el suyo (espejo del portador) en su
+    // propio draw. Sin frame registrado aún (primer cuadro tras cargar),
+    // carryHands cae a la coronilla: una estimación cercana que el
+    // resorte corrige en un par de cuadros.
+    carrySupportY() {
+      const cw = this._cw;
+      const handsW = cw ? Sp.carryHands(this.id, cw.anim, cw.idx) : Sp.charTop(this.id);
+      const bob = this.moving ? Math.abs(Math.sin(this.step)) * 3.2 : 0;
+      return handsW * (R.stretch || 1) + bob;
+    }
   }
   G.Actor = Actor;
 

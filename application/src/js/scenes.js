@@ -74,6 +74,9 @@
       const p = this.p;
       if (this.partners.length >= 3) { this.msg = { text: '¡Ya tienes a tus 3 partners! Los demás se quedan.', t: 1.6 }; p.emo('✖', 0.8); G.sfx('bad'); return; }
       this.carrying = o; o.state = 'carried'; o.carriedPose = true; o.route = null; o.expr = 'surprised'; o.sprV = 0;
+      // Nace ya a la altura del apoyo de las manos del portador (no en el
+      // suelo): el resorte solo tiene que asentar unos pocos unidades.
+      o.elev = p.carrySupportY();
       p.carryWalk = true;
       this.msg = { text: `¡${G.CHARS[o.id].name} al hombro! Llévalo al ARMARIO`, t: 1.8 }; p.hop(120); G.sfx('pick');
     }
@@ -99,14 +102,29 @@
     }
     update(dt) {
       const p = this.p; p.update(dt); this.others.forEach((o) => o.update(dt)); this.cat.update(dt); W.updateFx(dt);
-      // Vida de los NPC: el que va al hombro se acopla al portador (con un
-      // resorte suave que le da rebote y desfase al caminar); el reclutado
+      // Vida de los NPC: el que va al hombro se acopla al portador (su
+      // elev persigue con resorte el apoyo de las manos levantadas); el reclutado
       // camina a su puesto y espera; el libre deambula por SU habitación
       // con gestos (sin pathfinding: rutas por puertas de World.path).
       this.others.forEach((o) => {
         if (o.state === 'carried') {
           o.x = p.x; o.y = p.y; o.dir = p.dir; o.jy = p.jy; o.moving = false; o.vx = o.vy = 0;
-          o.sprV += ((46 - o.elev) * 90 - o.sprV * 11) * dt; o.elev += o.sprV * dt;
+          // El pasajero descansa SOBRE las manos levantadas del portador:
+          // el objetivo del resorte es el apoyo del frame carrywalk que el
+          // portador está mostrando (p.carrySupportY: manos medidas en la
+          // metadata × stretch + bob del portador). Antes el objetivo era
+          // un elev FIJO de 46 que caía a la altura de la cara: el cuerpo
+          // quedaba cruzado "detrás de la cabeza", sin relación con las
+          // manos. Resorte casi crítico (k=140, c=22 → ζ≈0.93) y
+          // desviación máxima ±6 u: rebote contenido, el pasajero nunca se
+          // despega visualmente de las manos al caminar o correr.
+          // (menos el hundimiento del torso carried: la línea base de la
+          // pose la marca una extremidad colgando; el que apoya es el torso)
+          const target = p.carrySupportY() - Sp.carriedRest(o.id) * (R.stretch || 1);
+          o.sprV += ((target - o.elev) * 140 - o.sprV * 22) * dt; o.elev += o.sprV * dt;
+          const dev = o.elev - target;
+          if (dev > 6) { o.elev = target + 6; if (o.sprV > 0) o.sprV = 0; }
+          else if (dev < -6) { o.elev = target - 6; if (o.sprV < 0) o.sprV = 0; }
           return;
         }
         if (o.route && o.route.length) { o.follow(dt); return; }
