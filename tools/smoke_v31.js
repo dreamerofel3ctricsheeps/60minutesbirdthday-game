@@ -8,8 +8,12 @@
    B) Decoración Express: colocación atómica (acierto coloca,
       fallo NO consume, ESPACIO lejos no hace nada, Pollito puede
       tirar lo colgado y se puede volver a colgar).
-   C) Apagón: velas contra José — reparto y alcance de las 26
-      velas, prender/soplar con canalización (moverse cancela),
+   C) Apagón: velas contra José — reparto por cuarto y alcance
+      de las 26 velas con POSICIONES ALEATORIAS por partida,
+      FASE DE MEMORIA iluminada antes de la oscuridad total
+      (ambiente ~0 en juego; la luz puntual de la vela en la mano
+      sigue al jugador y José lleva su fósforo tenue),
+      prender/soplar con canalización (moverse cancela),
       la IA de José (prende; sopla solo si va perdiendo), el
       parpadeo que apaga el 25% y el resultado por conteo final.
    D) Apagón en la historia: runEvent('apagon') completo jugando
@@ -34,7 +38,10 @@
       principal (510, 706); la selección de protagonista y el
       selector de práctica usan un carrusel con botones ‹ ›,
       puntos y flechas del teclado, sin ninguna barra de scroll,
-      desde el que se alcanzan los 7 roomies.
+      desde el que se alcanzan los 7 roomies. Y el STAGING de la
+      llegada: Ximena parada en (510, 548) se ve ENTERA — ningún
+      presente en su caja de visión (|x-510| < 80 con y > 500) ni
+      a menos de 40 u de otro presente (bug: Itzel la tapaba).
    J) Spawns seguros (bug «Atrapa a Pollito»): el jugador nacía
       SOBRE la mesa de fiesta en la ronda 2 (spawn (900, 240)
       dentro de ptable) y no podía moverse en ninguna dirección.
@@ -257,6 +264,44 @@ const tick = () => new Promise((r) => setImmediate(r));
       sc0.candles.filter((c) => !reachable(c)).map((c) => c.room + '@' + c.x + ',' + c.z).join(' '));
     check('ninguna vela bloquea un umbral de puerta', sc0.candles.every((cd) => !W.OPEN.some((o) => cd.x > o.x - 6 && cd.x < o.x + o.w + 6 && cd.z > o.y - 6 && cd.z < o.y + o.h + 6)));
 
+    // --- Reparto exacto, posiciones ALEATORIAS y FASE DE MEMORIA ---
+    const perRoom = {}; sc0.candles.forEach((cd) => { perRoom[cd.room] = (perRoom[cd.room] || 0) + 1; });
+    check('el reparto por cuarto se mantiene exacto (cocina 6, sala 9, cuarto 5, pasillo 3, xroom 3)',
+      perRoom.cocina === 6 && perRoom.sala === 9 && perRoom.cuarto === 5 && perRoom.pasillo === 3 && perRoom.xroom === 3,
+      JSON.stringify(perRoom));
+    const setKey = (s) => s.candles.map((cd) => cd.x + ',' + cd.z).sort().join('|');
+    const sets = new Set([setKey(sc0)]);
+    for (let i = 0; i < 4; i++) sets.add(setKey(new Sc.CandleGame('natalia', () => {})));
+    check('las posiciones son ALEATORIAS: 5 partidas no dan el mismo set de velas', sets.size >= 2, 'sets distintos=' + sets.size);
+    const sm = new Sc.CandleGame('natalia', () => {});
+    const flow = [sm.st];
+    { let i = 0; while (sm.st !== 'play' && i++ < 400) { const prev = sm.st; sm.update(0.05); if (sm.st !== prev) flow.push(sm.st); } }
+    check('flujo de fases: intro → memory → play (la MEMORIA va antes del juego)', flow.join('>') === 'intro>memory>play', flow.join('>'));
+    check('el reloj de 75 s NO corre durante la fase de memoria', sm.timeLeft === 75, 'timeLeft=' + sm.timeLeft);
+
+    // --- OSCURIDAD TOTAL y las luces que acompañan ---
+    {
+      const sd = new Sc.CandleGame('natalia', () => {});
+      let capLight = null;
+      const realRender = W.render;
+      W.render = (opts) => { capLight = opts && opts.light; };
+      try {
+        sd.st = 'memory'; sd.surgeK = 1; sd.draw(0.05);
+        check('en la fase de MEMORIA la casa va ILUMINADA (ambiente > 0,4)', !!capLight && capLight.amb.every((v) => v > 0.4),
+          capLight && capLight.amb.map((v) => v.toFixed(2)).join(','));
+        sd.st = 'play'; sd.surgeK = 0; sd.surgeState = 'idle'; sd.draw(0.05);
+        check('en juego la oscuridad es TOTAL: ambiente ≤ 0,05 fuera de los halos', !!capLight && capLight.amb.every((v) => v <= 0.05),
+          capLight && capLight.amb.map((v) => v.toFixed(3)).join(','));
+        const pl = capLight && capLight.points[0], jl = capLight && capLight.points[1];
+        check('la 1ª luz puntual es la VELA EN LA MANO del jugador (en su posición, radio 150)',
+          !!pl && pl.x === sd.p.x && pl.z === sd.p.y && pl.r === 150, pl && (pl.x + ',' + pl.z + ' r' + pl.r));
+        check('José lleva su FÓSFORO tenue (luz propia en su posición, radio menor: 95)',
+          !!jl && jl.x === sd.jose.x && jl.z === sd.jose.y && jl.r === 95, jl && (jl.x + ',' + jl.z + ' r' + jl.r));
+        sd.p.x += 120; sd.p.y += 60; sd.draw(0.05);
+        check('la luz del jugador se MUEVE con él', capLight.points[0].x === sd.p.x && capLight.points[0].z === sd.p.y);
+      } finally { W.render = realRender; }
+    }
+
     // --- Prender (canalización) y su cancelación al moverse ---
     {
       const s = new Sc.CandleGame('natalia', () => {}); s.joseActive = false; s.nextSurge = 1e9; toPlay(s);
@@ -267,6 +312,21 @@ const tick = () => new Promise((r) => setImmediate(r));
       key('Space', true); step(s, 4); // 0,2 s de canalización (necesita 0,6)
       key('ArrowRight', true); step(s, 2); key('ArrowRight', false); key('Space', false);
       check('prender: moverse a mitad de la canalización la CANCELA (la vela sigue apagada)', cd2.owner === null && !s.chan);
+    }
+    {
+      // REGRESIÓN (pares sobre el mismo mueble): con dos velas a ≤36 u
+      // entre sí, prender la más cercana NO puede bloquear a la otra —
+      // la vela propia ya prendida no cuenta como objetivo.
+      const s = new Sc.CandleGame('natalia', () => {}); s.joseActive = false; s.nextSurge = 1e9; toPlay(s);
+      const a = s.candles[0], b = s.candles[1];
+      a.x = 500; a.z = 400; a.y = 0; b.x = 524; b.z = 400; b.y = 0; a.owner = null; b.owner = null;
+      s.p.x = 500; s.p.y = 414; // a 14 u de a y a ~28 u de b: ambas al alcance, a más cerca
+      key('Space', true);
+      let i = 0; while (a.owner !== 'p' && i++ < 60) s.update(0.05);
+      let j = 0; while (b.owner !== 'p' && j++ < 60) s.update(0.05); // SIN moverse ni soltar ESPACIO
+      key('Space', false);
+      check('prender: una vela propia prendida NO tapa a la vecina (se prende sin moverse)', a.owner === 'p' && b.owner === 'p',
+        'a=' + a.owner + ' b=' + b.owner);
     }
     // --- Soplar una vela de José ---
     {
@@ -365,7 +425,7 @@ const tick = () => new Promise((r) => setImmediate(r));
   }
 
   // ================= E) Dibujo: caminos de draw() sin excepciones ==========
-  console.log('\nE) Dibujo — draw() de Velas (intro, juego, canalización, parpadeo, final) y de DecoDuel');
+  console.log('\nE) Dibujo — draw() de Velas (intro, memoria, juego, canalización, parpadeo, final) y de DecoDuel');
   if (Sc.CandleGame) {
     const realRender = W.render, realProject = G.R.project;
     const ctx2d = new FakeCtx();
@@ -375,6 +435,9 @@ const tick = () => new Promise((r) => setImmediate(r));
       const sc = new Sc.CandleGame('natalia', () => {});
       sc.draw(0.016); // intro
       check('draw sin errores: intro de Velas', true);
+      sc.st = 'memory'; sc.surgeK = 1; sc.draw(0.016); // casa iluminada + banner «MEMORIZA…»
+      check('draw sin errores: fase de MEMORIA de Velas', true);
+      sc.surgeK = 0;
       sc.st = 'play';
       sc.candles[0].owner = 'p'; sc.candles[1].owner = 'j'; // una vela prendida por cada uno
       sc.draw(0.016);
@@ -633,6 +696,16 @@ const tick = () => new Promise((r) => setImmediate(r));
     S.fled.every((id) => { const r = fledById[id] && fledById[id].fleeRoute; return r && r[r.length - 1][0] === 510 && r[r.length - 1][1] === 706; }),
     S.fled.map((id) => { const r = fledById[id] && fledById[id].fleeRoute; return r ? r[r.length - 1].join(',') : 'sin ruta'; }).join(' | '));
   check('huida: la escena queda SOLO con la party (4 actores)', G.home.roomies.length === 4 && G.home.roomies.every((r) => S.party.includes(r.id)), G.home.roomies.map((r) => r.id).join(','));
+  // STAGING DE LA LLEGADA (playtest de Jose: Itzel tapaba a Ximena):
+  // Ximena se queda parada en (510, 548) diciendo sus líneas y la
+  // cámara mira desde el sur — en la prueba no corre el bucle de
+  // frames, así que los roomies conservan su posición de staging.
+  check('llegada: ningún presente queda DELANTE de Ximena en su caja de visión (|x-510| < 80 con y > 500)',
+    !G.home.roomies.some((r) => Math.abs(r.x - 510) < 80 && r.y > 500),
+    G.home.roomies.map((r) => r.id + '@' + r.x + ',' + r.y).join(' '));
+  { let minPair = Infinity; const rs = G.home.roomies;
+    for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) minPair = Math.min(minPair, Math.hypot(rs[i].x - rs[j].x, rs[i].y - rs[j].y));
+    check('llegada: los presentes quedan separados entre sí (≥40 u: ningún sprite solapa a otro)', minPair >= 40, 'mín=' + minPair.toFixed(0) + ' u'); }
 
   // --- Asignaciones posteriores: solo la party ---
   let settledW = false, cardCount = -1;

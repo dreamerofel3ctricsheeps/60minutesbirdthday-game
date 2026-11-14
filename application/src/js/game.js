@@ -232,7 +232,7 @@
     decoracion: 'Cuelga la decoración en su zona antes de que Pollito la tire.',
     pollito: 'Persigue al gato por la sala y recupera lo que robó.',
     mensajes: 'Duelo de tipeo: responde los mensajes antes que José.',
-    apagon: 'Prende más velas que José por toda la casa antes de que vuelva la luz; ojo con los parpadeos, apagan velas.',
+    apagon: 'Juego de memoria en la oscuridad: memoriza dónde están las velas, prende más que José guiándote por la vela en tu mano; ojo con los parpadeos, apagan velas.',
     pizza: 'Baja la pizza por la escalera cuidando el equilibrio.',
     sonambula: 'Llega hasta Ximena sonámbula antes que José.',
     memoria: 'Da vuelta las cajas y junta más parejas que José.',
@@ -570,11 +570,20 @@
     // huida, la escena se queda solo con la party (removeRoomie).
     const home = (G.home = new Sc.HomeScene(G.PLAYABLE));
     home.setLight('dia', true);
-    const me = home.actor(S.player); me.x = res.x; me.y = res.y; me.carry = res.inHand.slice();
-    // La party espera cerca de la puerta; los que van a huir están
-    // repartidos por el departamento, viviendo su último minuto ahí.
-    S.partners.map((id) => home.actor(id)).filter(Boolean).forEach((a, i) => { const sp = [[452, 528], [568, 528], [510, 556]][i]; a.x = sp[0]; a.y = sp[1]; a.dir = 'down'; });
-    const fledSpots = [[300, 150], [700, 220], [180, 470], [820, 180], [420, 516], [240, 244]];
+    const me = home.actor(S.player); me.carry = res.inHand.slice();
+    // STAGING DE LA LLEGADA (corrección de playtest de Jose, 2026-11-14):
+    // Ximena entra y se queda parada en (510, 548) diciendo sus líneas;
+    // la cámara la mira desde el sur, así que NADIE presente puede
+    // quedar en su línea de visión ni solapar su sprite (antes un
+    // partner en (510, 556) quedaba pegado DELANTE de ella y la tapaba
+    // entera — el caso reportado fue Itzel). La party espera en las
+    // ESQUINAS del pasillo, con |dx| ≥ 95 de su eje: el jugador al SE
+    // (605, 568) y los partners en (415, 505), (605, 505) y (415, 568).
+    // Al terminar la escena cada quien sigue a su sitio normal (la
+    // casa pasa a modo wander / control del jugador).
+    me.x = 605; me.y = 568; me.dir = 'down';
+    S.partners.map((id) => home.actor(id)).filter(Boolean).forEach((a, i) => { const sp = [[415, 505], [605, 505], [415, 568]][i]; a.x = sp[0]; a.y = sp[1]; a.dir = 'down'; });
+    const fledSpots = [[300, 150], [700, 220], [180, 470], [820, 180], [368, 430], [240, 244]];
     const fledActors = S.fled.map((id) => home.actor(id)).filter(Boolean);
     fledActors.forEach((a, i) => { const sp = fledSpots[i % fledSpots.length]; a.x = sp[0]; a.y = sp[1]; a.dir = 'down'; });
     res.inHand.forEach((id) => (S.inv[id] = true)); ui.refreshInv();

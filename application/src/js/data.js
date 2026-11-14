@@ -162,8 +162,8 @@
         { who: 'majo', text: '¿Perdón? Si alguien prende las velas de esta casa, somos nosotros. ¡A correr por toda la casa: quien tenga más velas prendidas cuando vuelva la luz, gana!' },
         { who: 'itzel', text: 'Y sin hacer ruido, que Ximena duerme en su cuarto. Las velas de ahí, con cuidado.' },
       ],
-      intro: 'Toda la casa quedó a oscuras, con 26 velas apagadas repartidas por las habitaciones. Corre y mantén ESPACIO junto a una vela para prenderla (0,6 s; si te mueves, se cancela). Junto a una vela de José (llama verdosa), mantén ESPACIO para soplarla (0,9 s). José recorre la casa prendiendo las suyas… y sopla las tuyas si va perdiendo. Cada 10–15 s la luz parpadea y vuelve un instante: al cortarse, la sobretensión apaga 1 de cada 4 velas prendidas. En el cuarto de Ximena todo toma más tiempo: hay que prender en silencio.',
-      goal: 'Ten más velas prendidas que José cuando vuelva la luz (75 s).',
+      intro: 'Al cortarse la luz, la casa se ve unos segundos: MEMORIZA dónde están las 26 velas (cambian de lugar en cada partida). Después, oscuridad total: solo te alumbra la vela que llevas en la mano y las que vayas prendiendo. Corre y mantén ESPACIO junto a una vela para prenderla (0,6 s; si te mueves, se cancela). Junto a una vela de José (llama verdosa), mantén ESPACIO para soplarla (0,9 s); su fósforo tenue lo delata en la oscuridad. José recorre la casa prendiendo las suyas… y sopla las tuyas si va perdiendo. Cada 10–15 s la luz parpadea y vuelve un instante: al cortarse, la sobretensión apaga 1 de cada 4 velas prendidas. En el cuarto de Ximena todo toma más tiempo: hay que prender en silencio.',
+      goal: 'Memoriza las velas y ten más prendidas que José cuando vuelva la luz (75 s).',
     },
 
     pollito: {

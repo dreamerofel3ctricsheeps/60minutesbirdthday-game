@@ -1546,8 +1546,31 @@
   // sostenido la SOPLA (~0,9 s) y queda apagada para cualquiera.
   // Llamas distinguibles de un vistazo: la del jugador es cálida
   // (ámbar) y la de José es verdosa. Cada vela prendida ilumina su
-  // rincón (decal de resplandor + las 6 luces puntuales más cercanas
-  // a la cámara; el shader admite 8 puntos en total).
+  // rincón (decal de resplandor + luces puntuales; el shader admite
+  // 8 puntos en total).
+  // JUEGO DE MEMORIA Y OSCURIDAD TOTAL (corrección de playtest de
+  // Jose, 2026-11-14): esto no es correr a ciegas con todo visible.
+  // Tras la intro hay una FASE DE MEMORIA (CANDLE_MEMO_T = 4,5 s)
+  // con la casa ILUMINADA y las 26 velas de ESTA partida a la vista
+  // («MEMORIZA DÓNDE ESTÁN LAS VELAS»): hay que aprenderse el mapa.
+  // Al cortarse la luz, el ambiente del duelo cae a ~0 (oscuridad
+  // prácticamente total) y las velas APAGADAS no se ven (su sprite
+  // va casi todo a luz de escena, factor lit 0,92: sin una luz
+  // cerca, son negras). Las únicas fuentes de luz en juego son:
+  // (a) LA VELA QUE LLEVA EL JUGADOR en la mano — llama dibujada
+  // junto a él y luz puntual cálida de radio 150 que lo acompaña:
+  // se ve él y su entorno inmediato, media habitación a lo sumo;
+  // (b) las velas ya prendidas, con su halo y su luz puntual;
+  // (c) el FÓSFORO DE JOSÉ: luz puntual verdosa tenue (radio 95) y
+  // llamita pequeña y semitransparente — se le INTUYE más que se le
+  // ve. Los parpadeos quedan como el respiro que revela la casa.
+  // POSICIONES ALEATORIAS: cada partida elige las 26 velas al azar
+  // entre los puntos CANDIDATOS de cada habitación (CANDLE_CANDIDATES:
+  // 46 puntos validados — interacción alcanzable ≤36 u, nunca sobre
+  // umbrales de puerta, nunca dentro de muebles sólidos), manteniendo
+  // el reparto por cuarto (cocina 6, sala 9, cuarto 5, pasillo 3,
+  // cuarto de Ximena 3). Dos partidas seguidas no repiten el set
+  // salvo azar remoto: memorizar sirve una sola vez.
   // PARPADEOS: cada 10–15 s la luz VUELVE 1,5–2,5 s (con aviso previo
   // de 1 s e ícono de alerta propio): la casa se ilumina entera, las
   // velas apagadas destellan como pista de dónde quedan y, al
@@ -1573,24 +1596,47 @@
   // (game.js). HUD sin emoticones: marcador con velas dibujadas por
   // código e íconos propios (trofeo/empate/alerta/luna).
   // =========================================================
-  const CANDLE_SPOTS = [
-    // cocina (6)
-    { x: 80, z: 56, y: 40, room: 'cocina' }, { x: 200, z: 56, y: 40, room: 'cocina' },
-    { x: 140, z: 202, y: 34, room: 'cocina' }, { x: 228, z: 142, y: 34, room: 'cocina' },
-    { x: 70, z: 235, y: 0, room: 'cocina' }, { x: 290, z: 110, y: 0, room: 'cocina' },
-    // sala (9)
-    { x: 400, z: 52, y: 88, room: 'sala' }, { x: 610, z: 55, y: 26, room: 'sala' }, { x: 665, z: 55, y: 26, room: 'sala' },
-    { x: 620, z: 124, y: 16, room: 'sala' }, { x: 655, z: 124, y: 16, room: 'sala' },
-    { x: 840, z: 222, y: 34, room: 'sala' }, { x: 900, z: 222, y: 34, room: 'sala' },
-    { x: 798, z: 90, y: 0, room: 'sala' }, { x: 734, z: 135, y: 28, room: 'sala' },
-    // cuarto de los roomies (5)
-    { x: 260, z: 330, y: 36, room: 'cuarto' }, { x: 305, z: 330, y: 36, room: 'cuarto' },
-    { x: 280, z: 530, y: 48, room: 'cuarto' }, { x: 185, z: 470, y: 0, room: 'cuarto' }, { x: 95, z: 520, y: 0, room: 'cuarto' },
-    // pasillo (3)
-    { x: 395, z: 318, y: 27, room: 'pasillo' }, { x: 370, z: 545, y: 28, room: 'pasillo' }, { x: 520, z: 470, y: 0, room: 'pasillo' },
-    // cuarto de Ximena (3): zona sensible, prender toma más tiempo
-    { x: 839, z: 346, y: 24, room: 'xroom' }, { x: 720, z: 330, y: 36, room: 'xroom' }, { x: 790, z: 500, y: 0, room: 'xroom' },
+  // Puntos CANDIDATOS por habitación (46): sobre muebles (y = altura
+  // de su tapa) o en el piso (y = 0). TODOS validados contra el mundo
+  // real: existe piso libre a ≤36 u de su ancla (distancia de
+  // interacción), ninguno cae sobre un umbral de puerta y los de piso
+  // no están dentro de muebles sólidos. En cada partida se eligen al
+  // azar CANDLE_PER_ROOM de cada cuarto (ver cabecera).
+  const CANDLE_CANDIDATES = [
+    // cocina (11 candidatos → 6)
+    { x: 80, z: 56, y: 40, room: 'cocina' }, { x: 150, z: 56, y: 40, room: 'cocina' }, { x: 200, z: 56, y: 40, room: 'cocina' }, { x: 240, z: 60, y: 40, room: 'cocina' },
+    { x: 120, z: 160, y: 34, room: 'cocina' }, { x: 140, z: 202, y: 34, room: 'cocina' }, { x: 228, z: 142, y: 34, room: 'cocina' },
+    { x: 70, z: 235, y: 0, room: 'cocina' }, { x: 100, z: 100, y: 0, room: 'cocina' }, { x: 290, z: 110, y: 0, room: 'cocina' }, { x: 300, z: 240, y: 0, room: 'cocina' },
+    // sala (15 candidatos → 9)
+    { x: 400, z: 52, y: 88, room: 'sala' }, { x: 430, z: 52, y: 88, room: 'sala' },
+    { x: 590, z: 55, y: 26, room: 'sala' }, { x: 610, z: 55, y: 26, room: 'sala' }, { x: 665, z: 55, y: 26, room: 'sala' },
+    { x: 600, z: 130, y: 16, room: 'sala' }, { x: 620, z: 124, y: 16, room: 'sala' }, { x: 655, z: 124, y: 16, room: 'sala' },
+    { x: 840, z: 222, y: 34, room: 'sala' }, { x: 865, z: 222, y: 34, room: 'sala' }, { x: 900, z: 222, y: 34, room: 'sala' },
+    { x: 734, z: 135, y: 28, room: 'sala' }, { x: 480, z: 120, y: 0, room: 'sala' }, { x: 798, z: 90, y: 0, room: 'sala' }, { x: 880, z: 130, y: 0, room: 'sala' },
+    // cuarto de los roomies (9 candidatos → 5)
+    { x: 238, z: 340, y: 36, room: 'cuarto' }, { x: 260, z: 330, y: 36, room: 'cuarto' }, { x: 305, z: 330, y: 36, room: 'cuarto' },
+    { x: 280, z: 530, y: 48, room: 'cuarto' }, { x: 296, z: 524, y: 48, room: 'cuarto' },
+    { x: 95, z: 520, y: 0, room: 'cuarto' }, { x: 150, z: 350, y: 0, room: 'cuarto' }, { x: 185, z: 470, y: 0, room: 'cuarto' }, { x: 300, z: 440, y: 0, room: 'cuarto' },
+    // pasillo (6 candidatos → 3)
+    { x: 395, z: 318, y: 27, room: 'pasillo' }, { x: 420, z: 318, y: 27, room: 'pasillo' }, { x: 370, z: 545, y: 28, room: 'pasillo' },
+    { x: 520, z: 470, y: 0, room: 'pasillo' }, { x: 520, z: 545, y: 0, room: 'pasillo' }, { x: 610, z: 470, y: 0, room: 'pasillo' },
+    // cuarto de Ximena (5 candidatos → 3): zona sensible, prender toma más tiempo
+    { x: 839, z: 346, y: 24, room: 'xroom' }, { x: 720, z: 330, y: 36, room: 'xroom' }, { x: 760, z: 330, y: 36, room: 'xroom' },
+    { x: 700, z: 470, y: 0, room: 'xroom' }, { x: 790, z: 500, y: 0, room: 'xroom' },
   ];
+  const CANDLE_PER_ROOM = { cocina: 6, sala: 9, cuarto: 5, pasillo: 3, xroom: 3 };
+  // El set de ESTA partida: por cada habitación, sus candidatos
+  // barajados y los primeros N. Sin semilla fija: Math.random del
+  // motor (cada construcción de la escena = una partida nueva).
+  function pickCandleSpots() {
+    const out = [];
+    for (const room of Object.keys(CANDLE_PER_ROOM)) {
+      const pool = shuffle(CANDLE_CANDIDATES.filter((s) => s.room === room));
+      out.push(...pool.slice(0, CANDLE_PER_ROOM[room]));
+    }
+    return out;
+  }
+  const CANDLE_MEMO_T = 4.5;                 // fase de memoria con la casa iluminada (s)
   const CANDLE_TIME = 75;                    // duración de la ronda (s)
   const CANDLE_LIGHT_T = 0.6, CANDLE_BLOW_T = 0.9;   // canalización del jugador
   const JOSE_LIGHT_T = 0.85, JOSE_BLOW_T = 1.1;      // canalización de José
@@ -1643,7 +1689,7 @@
       // En el cuarto de Ximena se prende con cuidado: la canalización
       // tarda más, y el Sigilo del personaje lo compensa en parte.
       this.xroomMult = Math.max(1.15, 1.7 - stat(who, 'sigilo') * 0.06);
-      this.candles = CANDLE_SPOTS.map((s, i) => ({ ...s, i, owner: null }));
+      this.candles = pickCandleSpots().map((s, i) => ({ ...s, i, owner: null }));
       this.cam = { x: this.p.x, y: 0, z: this.p.y, dist: 560, pitch: 0.78, fov: 34 };
       this.st = 'intro'; this.stT = 3.6; this.T = 0;
       this.timeLeft = CANDLE_TIME;
@@ -1658,16 +1704,20 @@
     }
     say(text, color, secs) { this.msg = { text, c: color || '#fff', t: secs || 1.4 }; }
     counts() { let p = 0, j = 0; for (const c of this.candles) { if (c.owner === 'p') p++; else if (c.owner === 'j') j++; } return { p, j }; }
-    nearCandle(a, maxD) {
+    nearCandle(a, maxD, skipOwner) {
       let best = null, bd = maxD || 36;
-      for (const c of this.candles) { const d = Math.hypot(a.x - c.x, a.y - c.z); if (d < bd) { bd = d; best = c; } }
+      for (const c of this.candles) { if (skipOwner && c.owner === skipOwner) continue; const d = Math.hypot(a.x - c.x, a.y - c.z); if (d < bd) { bd = d; best = c; } }
       return best;
     }
     // --- Jugador: canalización con ESPACIO sostenido ----------------
     updatePlayer(dt) {
       const p = this.p, ax = G.input.axis();
-      const near = this.nearCandle(p, 36);
-      const target = near && near.owner !== 'p' ? near : null;
+      // objetivo = la vela ACCIONABLE más cercana (apagada o de
+      // José): una vela PROPIA ya prendida NO puede tapar a otra que
+      // esté al lado — con los pares sobre el mismo mueble (escritorio,
+      // encimera), la prendida quedaba «más cerca» y la otra se volvía
+      // imposible de prender desde ese sitio (bug cazado en la humo)
+      const target = this.nearCandle(p, 36, 'p');
       // la canalización se cancela al moverse, soltar la tecla o
       // cambiar de vela objetivo (hay que observar el anillo entero)
       if (this.chan && (this.chan.c !== target || !G.input.held('action') || ax.x || ax.y)) { this.chan = null; p.frameOverride = null; }
@@ -1741,7 +1791,9 @@
     }
     // --- Parpadeos de luz -------------------------------------------
     updateSurge(dt) {
-      const target = this.st === 'over' ? 1 : this.surgeState === 'on' ? 1 : this.surgeState === 'warn' ? 0.22 : 0;
+      // la fase de MEMORIA va con la casa iluminada (objetivo 1, como
+      // el panel final); en juego manda el parpadeo; el resto, oscuro
+      const target = (this.st === 'over' || this.st === 'memory') ? 1 : this.surgeState === 'on' ? 1 : this.surgeState === 'warn' ? 0.22 : 0;
       this.surgeK += (target - this.surgeK) * Math.min(1, dt * (this.surgeState === 'on' || this.st === 'over' ? 9 : 5));
       if (this.st !== 'play') return;
       if (this.surgeState === 'warn') { if ((this.surgeT -= dt) <= 0) { this.surgeState = 'on'; this.surgeT = this.surgeDur; G.sfx('bell'); } }
@@ -1772,7 +1824,12 @@
       if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
       W.camLerp(this.cam, p.x, p.y - 20, dt, 5);
       this.updateSurge(dt);
-      if (this.st === 'intro') { G.input.flush(); p.walk(0, 0, 0, dt); j.moving = false; if ((this.stT -= dt) <= 0) this.st = 'play'; return; }
+      if (this.st === 'intro') { G.input.flush(); p.walk(0, 0, 0, dt); j.moving = false; if ((this.stT -= dt) <= 0) { this.st = 'memory'; this.stT = CANDLE_MEMO_T; } return; }
+      // FASE DE MEMORIA: la casa iluminada y quieta; el reloj de los
+      // 75 s AÚN no corre. Al agotarse, la luz se corta (el fundido lo
+      // hace surgeK al caer su objetivo a 0) y arranca la partida; el
+      // primer parpadeo se reprograma desde el inicio del juego.
+      if (this.st === 'memory') { G.input.flush(); p.walk(0, 0, 0, dt); j.moving = false; j.vx = j.vy = 0; if ((this.stT -= dt) <= 0) { this.st = 'play'; this.nextSurge = this.T + 11; G.sfx('door'); } return; }
       if (this.st === 'over') {
         p.walk(0, 0, 0, dt); j.moving = false; j.vx = j.vy = 0;
         if ((this.stT -= dt) <= 0 && !this.doneFired) { this.doneFired = true; this.done(this.result); }
@@ -1786,7 +1843,11 @@
     drawCandles(t) {
       for (const cd of this.candles) {
         if (cd.y === 0) R.shadow(cd.x, cd.z, 6, 0.5);
-        R.sprite(candleBodyCv(), cd.x, cd.y, cd.z, { feet: 0, lit: cd.owner ? 0.55 : 0.12 });
+        // APAGADA: lit 0,92 = casi toda su iluminación viene de la
+        // ESCENA (en la oscuridad total es negra; solo se revela si
+        // una luz —la vela en la mano, un parpadeo— la alcanza).
+        // Antes iba a 0,12 y se veía siempre: el bug reportado.
+        R.sprite(candleBodyCv(), cd.x, cd.y, cd.z, { feet: 0, lit: cd.owner ? 0.55 : 0.92 });
         if (cd.owner) {
           const fl = 1 + Math.sin(t * 11 + cd.i * 1.7) * 0.15;
           R.flat(R.glowTex, cd.x, cd.y + 2, cd.z, 40 * fl, { tint: cd.owner === 'p' ? [1, 0.62, 0.22] : [0.25, 0.95, 0.65], alpha: 0.34 });
@@ -1796,6 +1857,19 @@
           // instante: la pista visual de dónde quedan por prender
           R.flat(R.glowTex, cd.x, cd.y + 2, cd.z, 22 + Math.sin(t * 14 + cd.i * 2.3) * 6, { tint: [0.9, 0.9, 1], alpha: 0.3 });
         }
+      }
+      // EN JUEGO: la vela que el jugador lleva EN LA MANO (cuerpo +
+      // llama ámbar, con su vaivén) y el fósforo de José (llama
+      // verdosa más chica y semitransparente: se intuye, no se ve).
+      // Sus luces puntuales acompañantes se arman en draw().
+      if (this.st === 'play') {
+        const p = this.p, j = this.jose, bob = Math.sin(t * 9) * 0.7;
+        const hx = p.x + (p.dir === 'left' ? -11 : 11), hz = p.y + 3;
+        R.sprite(candleBodyCv(), hx, 15, hz, { feet: 0, lit: 0.5, sx: 0.75, sy: 0.75 });
+        R.sprite(flameCv('p'), hx, 15 + 10 + bob, hz, { feet: 0, lit: 0.9, sx: 0.8, sy: 0.8 });
+        const jx = j.x + (j.dir === 'left' ? -10 : 10), jz = j.y + 3;
+        R.sprite(candleBodyCv(), jx, 14, jz, { feet: 0, lit: 0.75, sx: 0.6, sy: 0.6 });
+        R.sprite(flameCv('j'), jx, 14 + 8 + Math.sin(t * 10 + 2) * 0.6, jz, { feet: 0, lit: 0.85, sx: 0.62, sy: 0.62, alpha: 0.6 });
       }
     }
     ringOver(c, cd, frac, color) {
@@ -1852,16 +1926,24 @@
         }
         if (this.jState === 'chan' && this.jTarget) this.ringOver(c, this.jTarget, this.jT / this.jNeed, '#3fe0b0');
       }
+      if (this.st === 'memory') {
+        // banner de la fase de memoria: la casa está iluminada y las
+        // velas de esta partida, a la vista — hay que aprendérselas
+        panel(c, 158, 118, 324, 56);
+        candleGlyph(c, 320, 134, 17, 'p');
+        G.text(c, 'MEMORIZA DÓNDE ESTÁN LAS VELAS', 320, 152, { size: 12.5, color: '#ffd23f' });
+        G.text(c, `La luz se corta en ${Math.max(1, Math.ceil(this.stT))} s: luego solo tu vela en la mano te alumbra`, 320, 166, { size: 8.5, color: '#ffe9a8', stroke: false });
+      }
       if (this.st === 'intro') {
         c.fillStyle = 'rgba(12,10,20,.84)'; c.fillRect(66, 60, 508, 228);
         panel(c, 66, 60, 508, 228, '#221c33');
         c.drawImage(candleBodyCv(), 88, 76, 15, 22); c.drawImage(flameCv('p'), 92, 66, 9, 13);
         G.text(c, 'APAGÓN: VELAS CONTRA JOSÉ', 330, 86, { size: 16, color: '#ffd23f' });
-        wrap(c, 'Se fue la luz y José apareció con fósforos: jura que SU ambiente a velas salva la fiesta. Corre por TODA la casa y prende más velas que él antes de que vuelva la luz (75 s).', 96, 116, 448, 10, '#fff');
-        wrap(c, 'Mantén ESPACIO junto a una vela para prenderla (0,6 s; si te mueves, se cancela). Junto a una vela de José (llama verdosa), mantén ESPACIO para soplarla (0,9 s).', 96, 152, 448, 10, '#bfe0ff');
-        wrap(c, 'José sopla las tuyas solo si va perdiendo. Y ojo con los parpadeos: cuando la luz vuelve un instante, la sobretensión apaga 1 de cada 4 velas prendidas.', 96, 188, 448, 10, '#ffd9ec');
-        wrap(c, 'En el cuarto de Ximena (duerme ahí) prende con cuidado: la canalización toma más tiempo.', 96, 224, 448, 10, '#ffe9a8');
-        G.text(c, 'Gana quien tenga más velas prendidas cuando vuelva la luz', 320, 262, { size: 10.5, color: '#7dff8a', stroke: false });
+        wrap(c, 'Se fue la luz y José apareció con fósforos: jura que SU ambiente a velas salva la fiesta. Corre por TODA la casa y prende más velas que él antes de que vuelva la luz (75 s).', 96, 112, 448, 10, '#fff');
+        wrap(c, 'Al empezar, la casa se ve unos segundos: MEMORIZA dónde están las velas (cambian de lugar en cada partida). Después, oscuridad total: llevas una vela prendida en la mano que alumbra a tu alrededor, y cada vela que prendas suma su luz.', 96, 145, 448, 10, '#ffe9a8');
+        wrap(c, 'Mantén ESPACIO junto a una vela para prenderla (0,6 s; si te mueves, se cancela). Junto a una vela de José (llama verdosa), mantén ESPACIO para soplarla (0,9 s). José lleva su fósforo: su llamita tenue lo delata en la oscuridad.', 96, 186, 448, 10, '#bfe0ff');
+        wrap(c, 'José sopla las tuyas solo si va perdiendo. Ojo con los parpadeos: cuando la luz vuelve un instante, la sobretensión apaga 1 de cada 4 velas prendidas. En el cuarto de Ximena, prende con cuidado: toma más tiempo.', 96, 227, 448, 10, '#ffd9ec');
+        G.text(c, 'Gana quien tenga más velas prendidas cuando vuelva la luz', 320, 272, { size: 10.5, color: '#7dff8a', stroke: false });
       }
       if (this.st === 'over' && this.result) {
         const r = this.result;
@@ -1879,18 +1961,31 @@
       }
     }
     draw(dt) {
-      const p = this.p;
+      const p = this.p, j = this.jose;
       let k = this.surgeK;
       if (this.surgeState === 'warn') k *= 0.75 + Math.random() * 0.5; // tembleque de aviso
       else if (this.surgeState === 'on') k *= 0.93 + Math.random() * 0.07;
-      const amb = [0.12 + 0.5 * k, 0.11 + 0.47 * k, 0.19 + 0.36 * k];
-      const sun = [0.02 + 0.38 * k, 0.02 + 0.36 * k, 0.05 + 0.28 * k];
-      // luces puntuales: la luna por la ventana + las velas prendidas
-      // más cercanas a la cámara (el shader admite 8 puntos en total)
+      // OSCURIDAD TOTAL (k=0): el ambiente cae a ~0 (0,02) — fuera de
+      // los halos de las luces puntuales, la casa es prácticamente
+      // negra. Con k=1 (memoria, parpadeo, final) vuelve la luz plena.
+      const amb = [0.02 + 0.58 * k, 0.018 + 0.55 * k, 0.03 + 0.47 * k];
+      const sun = [0.01 + 0.39 * k, 0.01 + 0.37 * k, 0.02 + 0.3 * k];
+      // Luces puntuales (el shader admite 8 en total), en orden de
+      // importancia: (1) la vela EN LA MANO del jugador — cálida,
+      // radio 150, con su parpadeo de llama —; (2) el fósforo de
+      // José — verdoso y tenue, radio 95: se le intuye —; (3) fuera
+      // de juego, la luna por la ventana (en juego no: la oscuridad
+      // es total salvo las velas); (4) las velas prendidas más
+      // cercanas a la cámara, hasta agotar el presupuesto.
+      const flick = 0.92 + 0.08 * Math.sin(this.T * 13);
+      const pts = [
+        { x: p.x, y: 34, z: p.y, r: 150, c: [0.55 * flick, 0.36 * flick, 0.13 * flick] },
+        { x: j.x, y: 30, z: j.y, r: 95, c: [0.1, 0.26, 0.18] },
+      ];
+      if (this.st !== 'play') pts.push({ x: 825, y: 66, z: 80, r: 260, c: [0.14 + 0.2 * k, 0.17 + 0.2 * k, 0.3 + 0.15 * k] });
       const lit = this.candles.filter((cd) => cd.owner);
       lit.sort((a, b) => Math.hypot(a.x - this.cam.x, a.z - this.cam.z) - Math.hypot(b.x - this.cam.x, b.z - this.cam.z));
-      const pts = [{ x: 825, y: 66, z: 80, r: 260, c: [0.14 + 0.2 * k, 0.17 + 0.2 * k, 0.3 + 0.15 * k] }];
-      for (const cd of lit.slice(0, 6)) pts.push({ x: cd.x, y: cd.y + 16, z: cd.z, r: 130, c: cd.owner === 'p' ? [0.5, 0.34, 0.13] : [0.13, 0.42, 0.3] });
+      for (const cd of lit.slice(0, 8 - pts.length)) pts.push({ x: cd.x, y: cd.y + 16, z: cd.z, r: 130, c: cd.owner === 'p' ? [0.5, 0.34, 0.13] : [0.13, 0.42, 0.3] });
       W.render({
         cam: this.cam, dt, actors: [p, this.jose], focusZ: p.y,
         light: { amb, sun, sky: k > 0.5 ? '#231c2e' : '#07060c', points: pts },
