@@ -813,49 +813,264 @@
   }
 
   // =========================================================
-  // 10. SALTO DE REPISAS — carrera hacia arriba vs Pollito
+  // 10. SALTO DE REPISAS — ESCALADA INFINITA vs Pollito
+  // Rediseño (2026-11-14, pedido de Jose): antes era una carrera a una
+  // meta fija de 14 repisas y la pared terminaba en la meta, así que la
+  // "siguiente" repisa recién aparecía al saltar la anterior. Ahora NO
+  // HAY TECHO: las repisas se generan de forma procedural y
+  // determinista hacia arriba, sin fin — el lado de cada repisa sale
+  // de un hash del índice (sideOf, con ventana cacheada y podada) —,
+  // siempre se ven las
+  // siguientes 3–5 y las de abajo dejan de dibujarse al salir de la
+  // banda visible: el set dibujado es acotado (~30 repisas) suba el
+  // jugador a 10 m o a 10 000 m.
+  // GANA EL QUE MÁS ESCALÓ: una sola ronda de 60 s y cuenta la ALTURA
+  // MÁXIMA alcanzada. Conversión: 25 unidades de mundo = 1 m (cada
+  // repisa está a 27 u ≈ 1,1 m). Equivocarse de lado = resbalar y CAER
+  // a la repisa anterior (sin muerte ni fin del duelo: la altura
+  // máxima no se pierde). Al agotarse el tiempo: más alto gana (win),
+  // empate (tie), Pollito más alto (lose) — el mismo mapeo win/tie/lose
+  // de siempre vía endRound, con extra() = las alturas en metros para
+  // los textos de data.js.
+  // ZONAS por altura (elev en unidades de mundo): el librero interior
+  // → EL TECHO (378 u ≈ 15 m: el librero lo ATRAVIESA, con escombros,
+  // antena/chimenea/tanque en la azotea y el banner "¡SALISTE DEL
+  // TECHO! 😱") → cielo con nubes y pájaros → estratósfera (estrellas
+  // tenues, la luna) → ESPACIO (≥5000 u ≈ 200 m: estrellas, un satélite
+  // que cruza, el planeta brillando abajo y FLOTACIÓN: subir y bajar
+  // se vuelve lento y los actores quedan suspendidos con un vaivén —
+  // gag físico de ingravidez). El fondo (cielo y luz) interpola suave
+  // entre zonas según la altura de la cámara, y cada zona se anuncia
+  // una sola vez al cruzarla con la altura máxima.
+  // CÁMARA: sigue al jugador en vertical con suavidad — sube ágil
+  // (4,5/s) y baja lenta (2,0/s) para no marear con las caídas — y
+  // nunca baja del nivel del suelo. La altura máxima se siente
+  // conquistada porque el marcador ▲ y los hitos son de la MÁXIMA.
+  // POLLITO: escala en su propia columna con el ritmo de siempre
+  // (cstep con jitter y distracciones; pollitoOfendido lo acelera y el
+  // stat velocidad del jugador lo ajusta como antes). Su salto se ve
+  // con pounce (jy > 2 en Actor.draw3d, automático al place()) y
+  // jamás se espeja en vistas frontales: place() solo le pone dir de
+  // perfil al saltar, como en el resto del juego.
   // =========================================================
-  const STEPS = 14, SH = 27;
+  const SH = 27, U_PER_M = 25, CLIMB_TIME = 60;
+  const TECHO_E = 14 * SH, AZOTEA_E = 750, CIELO_E = 2250, ESPACIO_E = 5000;
+  // Lado CRUDO de la repisa k-ésima (k = saltos dados): hash
+  // determinista del índice, O(1) y sin memoria para cualquier k. El
+  // lado JUGABLE lo deriva ClimbDuel.sideOf con una regla
+  // anti-monotonía sobre la secuencia de SALIDA (nunca 4 seguidas del
+  // mismo lado: la 4.ª se voltea) — ojo, la regla debe mirar la
+  // salida y no el crudo: un crudo volteado seguido de crudos del
+  // signo volteado armaría igual una racha de 4 (lo cazó la humo).
+  function climbHash(k) { const s = Math.sin(k * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+  function climbRaw(k) { return climbHash(k) < 0.5 ? -1 : 1; }
+  const CLIMB_ZONES = [
+    { e: 0, name: 'El librero' },
+    { e: TECHO_E, name: '¡La azotea!' },
+    { e: AZOTEA_E, name: 'El cielo' },
+    { e: CIELO_E, name: 'La estratósfera' },
+    { e: ESPACIO_E, name: '¡El espacio!' },
+  ];
+  function climbZone(e) { let z = 0; for (let i = 1; i < CLIMB_ZONES.length; i++) if (e >= CLIMB_ZONES[i].e) z = i; return z; }
+  const hexRgb = (h) => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+  const rgbHex = (v) => '#' + v.map((x) => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, '0')).join('');
+  // Claves de luz/cielo por altura de cámara: [elev, sky, amb, sun].
+  // El fondo transiciona SUAVE entre zonas (interpolación por tramo).
+  const CLIMB_LIGHT = [
+    [0, '#15121f', [0.56, 0.52, 0.60], [0.34, 0.30, 0.30]],
+    [TECHO_E, '#2b2140', [0.58, 0.52, 0.62], [0.40, 0.33, 0.30]],
+    [AZOTEA_E, '#1d2c50', [0.55, 0.58, 0.72], [0.30, 0.34, 0.45]],
+    [CIELO_E, '#0e1734', [0.44, 0.48, 0.64], [0.22, 0.26, 0.40]],
+    [ESPACIO_E, '#030309', [0.36, 0.40, 0.56], [0.18, 0.22, 0.38]],
+  ];
+  function climbLight(y) {
+    let i = 0; while (i < CLIMB_LIGHT.length - 2 && y >= CLIMB_LIGHT[i + 1][0]) i++;
+    const a = CLIMB_LIGHT[i], b = CLIMB_LIGHT[i + 1], k = Math.max(0, Math.min(1, (y - a[0]) / (b[0] - a[0])));
+    const L = (u, v) => u.map((x, j) => x + (v[j] - x) * k);
+    return { amb: L(a[2], b[2]), sun: L(a[3], b[3]), sky: rgbHex(L(hexRgb(a[1]), hexRgb(b[1]))), points: [{ x: 0, y: y + 40, z: 80, r: 340, c: [0.45, 0.36, 0.22] }] };
+  }
   class ClimbDuel extends Duel {
     constructor(who, done) {
-      super(who, 'pollito', done, { title: 'SALTO DE REPISAS', hint: 'Presiona ← o → según el lado de la siguiente repisa · Si fallas, resbalas' });
+      super(who, 'pollito', done, { rounds: 1, need: 1, time: CLIMB_TIME, label: 'ESCALADA', title: 'SALTO DE REPISAS', hint: '← o → según la siguiente repisa · Si fallas, caes una repisa · Gana la mayor altura en 60 s' });
+      this.quietRend = true; // el cierre usa su propio panel con las alturas (ver endOverlay)
       this.p = new Actor(who, -70, 12); this.cat = new Actor('pollito', 70, 12); this.cam = { x: 0, y: 50, z: 0, dist: 380, pitch: 0.3, fov: 34 }; this.begin();
     }
-    setup(n) { this.seq = Array.from({ length: STEPS }, () => (Math.random() < 0.5 ? -1 : 1)); this.pi = 0; this.ci = 0; this.stun = 0; this.ct = 1; this.cstep = (0.56 - n * 0.055) * (G.S.flags.pollitoOfendido ? 0.93 : 1) + (10 - stat(this.who, 'velocidad')) * -0.004; this.place(this.p, -70, 0, true); this.place(this.cat, 70, 0, true); }
-    pos(base, i) { return i === 0 ? { x: base, e: 0 } : { x: base + this.seq[i - 1] * 28, e: i * SH }; }
-    place(a, base, i, snap) { const q = this.pos(base, i); a.tx = q.x; a.te = q.e; if (snap) { a.x = q.x; a.elev = q.e; } else a.hop(120); a.dir = i && this.seq[i - 1] < 0 ? 'left' : 'right'; }
+    setup(n) {
+      this.pi = 0; this.ci = 0; this.pMax = 0; this.cMax = 0; // repisa actual y MÁXIMA de cada uno
+      this.stun = 0; this.ct = 1; this.banner = null; this.debris = []; this.zoneSeen = 0; this.catZone = 0;
+      this._sb = 0; this._sv = []; // ventana de lados generados desde el índice _sb (se poda: ver pruneSides)
+      this.cstep = 0.44 * (G.S.flags.pollitoOfendido ? 0.93 : 1) + (10 - stat(this.who, 'velocidad')) * -0.004;
+      this.place(this.p, -70, 0, true); this.place(this.cat, 70, 0, true);
+    }
+    // Lado jugable de la repisa k-ésima: determinista (misma secuencia
+    // en toda instancia) y sin rachas de 4. Se genera hacia adelante y
+    // se cachea SOLO una ventana alrededor de la zona de juego.
+    sideOf(k) {
+      while (this._sb + this._sv.length <= k) {
+        const r = climbRaw(this._sb + this._sv.length), n = this._sv.length;
+        const flip = n >= 3 && this._sv[n - 1] === r && this._sv[n - 2] === r && this._sv[n - 3] === r;
+        this._sv.push(flip ? -r : r);
+      }
+      return this._sv[k - this._sb];
+    }
+    // Descarta los lados muy por debajo de lo visible/jugable: la
+    // ventana queda acotada por la distancia entre escaladores y la
+    // banda visible, nunca por la altura absoluta alcanzada.
+    pruneSides(minK) { const cut = Math.max(0, minK - 3 - this._sb); if (cut > 0) { this._sv.splice(0, cut); this._sb += cut; } }
+    // Generador procedural: la repisa i (i ≥ 1) existe para CUALQUIER i.
+    shelfAt(base, i) { return i === 0 ? { x: base, e: 0 } : { x: base + this.sideOf(i - 1) * 28, e: i * SH }; }
+    place(a, base, i, snap) { const q = this.shelfAt(base, i); a.tx = q.x; a.te = q.e; if (snap) { a.x = q.x; a.elev = q.e; } else a.hop(120); a.dir = i && this.sideOf(i - 1) < 0 ? 'left' : 'right'; }
+    meters(i) { return Math.round((i * SH) / U_PER_M); }
+    extra() { return { pMeters: this.meters(this.pMax), cMeters: this.meters(this.cMax), zone: CLIMB_ZONES[climbZone(this.pMax * SH)].name }; }
+    zoneBanner(z) {
+      const B = [null,
+        { a: '¡SALISTE DEL TECHO! 😱', b: 'El librero sigue… ¿hasta dónde llega?' },
+        { a: '¡YA SE VE TODO LIMA! 🌃', b: 'Las nubes quedan abajo' },
+        { a: 'ESTRATÓSFERA 🌌', b: 'El cielo se oscurece…' },
+        { a: '¡FUERA DEL PLANETA! 🚀', b: 'Pollito también flota. Nadie entiende nada.' }][z];
+      if (B) this.banner = { a: B.a, b: B.b, t: 0, d: 3 };
+    }
     update(dt) {
       const p = this.p, cat = this.cat;
-      [p, cat].forEach((a) => { a.update(dt); const k = Math.min(1, dt * 16); a.x += (a.tx - a.x) * k; a.elev += (a.te - a.elev) * k; });
-      this.cam.y += (Math.max(50, p.elev + 40) - this.cam.y) * Math.min(1, dt * 5);
+      [p, cat].forEach((a) => {
+        a.update(dt);
+        const rising = a.te > a.elev + 0.5, space = a.elev >= ESPACIO_E;
+        // en el espacio todo flota: subir y bajar se vuelve leeeento
+        const k = Math.min(1, dt * (space ? (rising ? 6.5 : 5) : (rising ? 17 : 13)));
+        a.x += (a.tx - a.x) * Math.min(1, dt * 16); a.elev += (a.te - a.elev) * k;
+        if (space && Math.abs(a.elev - a.te) < 1.5 && a.jy <= 0.01) a.jy = 2.2 + Math.sin(this.T * 2.2 + (a === cat ? 1.7 : 0)) * 2.2; // vaivén de ingravidez
+      });
+      if (this.banner && (this.banner.t += dt) > this.banner.d) this.banner = null;
+      this.debris = this.debris.filter((d) => { d.vy -= 500 * dt; d.y += d.vy * dt; return d.y > TECHO_E - 190; });
+      // cámara vertical suave: sube ágil, baja lenta (no marear), nunca bajo el suelo
+      const ty = Math.max(50, p.elev + 40);
+      this.cam.y += (ty - this.cam.y) * Math.min(1, dt * (ty > this.cam.y ? 4.5 : 2));
+      this.pruneSides(Math.min(this.pi, this.ci, Math.max(0, Math.floor((this.cam.y - 220) / SH)))); // la ventana de lados no crece con la altura
       if (!this.tick(dt)) return;
+      // hitos de zona según la altura MÁXIMA del jugador (una vez por zona)
+      const pz = climbZone(this.pMax * SH);
+      if (pz > this.zoneSeen) {
+        this.zoneSeen = pz; this.zoneBanner(pz);
+        if (pz === 1) { p.emo('😱', 1.4); for (let i = 0; i < 7; i++) this.debris.push({ x: p.x + rnd(-46, 46), y: TECHO_E + rnd(0, 10), z: -14 + rnd(-6, 6), vy: rnd(-30, 10), s: rnd(4, 9) }); }
+      }
+      const cz = climbZone(this.cMax * SH);
+      if (cz > this.catZone) { this.catZone = cz; if (cz === 1) cat.emo('😼', 1.2); }
       if (this.stun > 0) this.stun -= dt;
-      else { const k = G.input.hit('left') ? -1 : G.input.hit('right') ? 1 : 0; if (k) { if (k === this.seq[this.pi]) { this.pi++; this.place(p, -70, this.pi); G.sfx('pick'); } else { this.stun = 0.6; p.spin = 0.5; p.emo('💦', 0.7); G.sfx('bad'); G.addNoise(2); } } }
-      if ((this.ct -= dt) <= 0) { this.ct = this.cstep + rnd(-0.1, 0.12) + (Math.random() < 0.1 ? 0.5 : 0); this.ci++; this.place(cat, 70, this.ci); }
-      if (this.pi >= STEPS || this.ci >= STEPS) { const w = this.pi >= STEPS; (w ? p : cat).emo(w ? '🕯' : '😼', 1.5); this.endRound(w ? 'p' : 'b', w ? '¡Llegaste a las velas!' : 'Pollito llegó primero'); }
+      else {
+        const k = G.input.hit('left') ? -1 : G.input.hit('right') ? 1 : 0;
+        if (k) {
+          if (k === this.sideOf(this.pi)) { this.pi++; if (this.pi > this.pMax) this.pMax = this.pi; this.place(p, -70, this.pi); G.sfx('pick'); }
+          else { // resbalón: CAES a la repisa anterior (la máxima queda)
+            this.stun = 0.38; p.spin = 0.5; p.emo('💦', 0.7); G.sfx('bad'); G.addNoise(2);
+            if (this.pi > 0) { this.pi--; this.place(p, -70, this.pi); }
+          }
+        }
+      }
+      if ((this.ct -= dt) <= 0) { this.ct = this.cstep + rnd(-0.08, 0.1) + (Math.random() < 0.1 ? 0.5 : 0); this.ci++; if (this.ci > this.cMax) this.cMax = this.ci; this.place(cat, 70, this.ci); }
+      if (this.time <= 0) { // se acabó el tiempo: decide la ALTURA MÁXIMA
+        const w = this.pMax > this.cMax ? 'p' : this.cMax > this.pMax ? 'b' : 'tie';
+        if (w === 'tie') { p.emo('🤝', 1.5); cat.emo('🤝', 1.5); } else (w === 'p' ? p : cat).emo('🏆', 1.5);
+        this.endRound(w, `Altura final: tú ${this.meters(this.pMax)} m · Pollito ${this.meters(this.cMax)} m`);
+      }
+    }
+    // Mundo procedural por BANDA VISIBLE: solo se construye lo que la
+    // cámara puede ver (de cam.y-200 a cam.y+220). Las repisas existen
+    // como función (shelfAt) y se materializan solo en la ventana; el
+    // nº de cajas es ~constante a cualquier altura (reciclaje total).
+    drawWorld(mb) {
+      const cy = this.cam.y, lo = cy - 200, hi = cy + 220, t = this.T, zone = climbZone(cy);
+      if (lo < 30) mb.flat(-400, -200, 800, 500, 0, '#c99b66'); // suelo del departamento
+      // pared del librero (interior): paneles por tramos, SOLO bajo el techo
+      for (let y = Math.max(0, Math.floor(lo / 54) * 54); y < Math.min(hi, TECHO_E); y += 54) mb.box(-262, y, -40, 524, 54, 20, '#3a3348', { s: '#4a405c' });
+      if (lo < TECHO_E + 200 && hi > TECHO_E - 60) {
+        // EL TECHO: dos losas con un hueco sobre las columnas y el borde
+        // roto con escombros colgando: el librero lo atravesó.
+        mb.box(-460, TECHO_E, -46, 300, 10, 56, '#6b5a4a', { top: '#8a755c' }); mb.box(160, TECHO_E, -46, 300, 10, 56, '#6b5a4a', { top: '#8a755c' });
+        mb.box(-160, TECHO_E - 3, -46, 26, 7, 56, '#5a4c3e'); mb.box(134, TECHO_E - 5, -46, 26, 9, 56, '#5a4c3e');
+        mb.box(-96, TECHO_E - 12, -30, 10, 12, 8, '#6b5a4a'); mb.box(60, TECHO_E - 16, -36, 8, 16, 6, '#5a4c3e');
+        // utilería de AZOTEA anclada al techo: antena con luz, chimenea, tanque
+        mb.cyl(-308, TECHO_E + 10, -70, 3, 120, '#8b93a8'); mb.box(-338, TECHO_E + 104, -72, 60, 4, 4, '#8b93a8'); mb.box(-326, TECHO_E + 84, -72, 36, 4, 4, '#8b93a8');
+        if (Math.sin(t * 3) > 0) mb.box(-311, TECHO_E + 126, -73, 6, 6, 2, '#ff5f6b', { emit: true });
+        mb.box(268, TECHO_E + 10, -64, 34, 52, 30, '#9a5a48', { top: '#b06a54' }); mb.box(262, TECHO_E + 62, -68, 46, 8, 38, '#7c4636');
+        mb.cyl(330, TECHO_E + 10, -110, 30, 44, '#5f7d99', { top: '#7492ad' });
+      }
+      // NUBES (sobre el techo): terrones nocturnos por tramo de 150 u, con deriva
+      for (let c0 = Math.floor(lo / 150); c0 * 150 < hi; c0++) {
+        const h1 = climbHash(c0 * 3.7 + 40), h2 = climbHash(c0 * 9.13 + 7), cyy = c0 * 150 + h1 * 80;
+        if (h1 < 0.45 || cyy < TECHO_E + 30) continue;
+        const cx = -360 + h2 * 720 + Math.sin(t * 0.13 + c0) * 14, cz = -150 - h2 * 60;
+        mb.box(cx - 70, cyy, cz, 140, 7, 34, '#54648c'); mb.box(cx - 40, cyy + 6, cz + 4, 76, 6, 28, '#61719c');
+      }
+      // PÁJAROS nocturnos cruzando la banda del cielo
+      if (zone === 2) for (let k = 0; k < 3; k++) {
+        const bx = -470 + ((t * 26 + k * 310) % 940), by = cy + 55 + k * 47;
+        mb.box(bx, by, -120, 13, 2.5, 4, '#0c0e18'); mb.box(bx + (k % 2 ? 10 : -10), by + 2.5, -120, 10, 2.5, 4, '#0c0e18');
+      }
+      // ESTRELLAS (estratósfera tenues, espacio densas): por tramo de 90 u
+      if (zone >= 3) for (let c0 = Math.floor(lo / 90); c0 * 90 < hi; c0++) {
+        const n = zone === 3 ? 3 : 6;
+        for (let k = 0; k < n; k++) {
+          if (Math.sin(t * 2 + k * 2.4 + c0 * 1.3) < -0.8) continue; // titileo
+          mb.box(-390 + climbHash(c0 * 31 + k * 7.7) * 780, c0 * 90 + climbHash(c0 * 17 + k * 3.3) * 90, -300, 2.4, 2.4, 1, ['#8fa3e8', '#e8ecff', '#5a6ca6'][k % 3], { emit: true });
+        }
+      }
+      // SATÉLITE cruzando el espacio, con su luz roja parpadeante
+      if (zone >= 4) {
+        const sx = -430 + ((t * 30) % 860), sy = cy + 150;
+        mb.box(sx, sy, -160, 26, 9, 9, '#c9cedd'); mb.box(sx - 34, sy + 2, -160, 30, 1.5, 13, '#3f6fd8'); mb.box(sx + 30, sy + 2, -160, 30, 1.5, 13, '#3f6fd8');
+        if (Math.sin(t * 6) > 0) mb.box(sx + 11, sy + 9, -160, 3, 3, 3, '#ff5f6b', { emit: true });
+      }
+      // escombros del momento del techo, cayendo
+      this.debris.forEach((d) => mb.box(d.x, d.y, d.z, d.s, d.s * 0.7, d.s, '#7a6752'));
+      // columnas: rieles por tramos + repisas de la ventana visible
+      [-70, 70].forEach((bx, cix) => {
+        const idx = cix ? this.ci : this.pi;
+        for (let y = Math.max(0, Math.floor(lo / 90) * 90); y < hi; y += 90) {
+          mb.box(bx - 52, y, -20, 4, 90, 20, '#74502f'); mb.box(bx + 48, y, -20, 4, 90, 20, '#74502f'); mb.box(bx - 52, y, -20, 104, 90, 2, '#5a3f28');
+        }
+        const i0 = Math.max(1, Math.floor(lo / SH)), i1 = Math.ceil(hi / SH);
+        for (let i = i0; i <= i1; i++) {
+          const sx = bx + this.sideOf(i - 1) * 28, next = i === idx + 1 && this.st === 'play';
+          mb.box(sx - 22, i * SH - 4, -18, 44, 4, 26, next ? (cix ? '#ffb0b8' : '#b5f5bd') : '#b98a55', { top: next ? (cix ? '#ffd0d6' : '#d9ffe0') : '#c99a66', emit: next && !cix });
+          if (i % 3 === 0) mb.box(sx - this.sideOf(i - 1) * 8 - 5, i * SH, -14, 10, 12, 6, ['#e23b4e', '#3fa0f0', '#58c46a'][i % 3]); // un libro cada 3 repisas
+        }
+      });
+    }
+    endOverlay(c) {
+      const w = this.result.win, pM = this.meters(this.pMax), cM = this.meters(this.cMax);
+      c.fillStyle = 'rgba(16,12,26,.85)'; c.fillRect(0, 0, 640, 360);
+      G.text(c, w === 'win' ? '¡GANASTE!' : w === 'tie' ? 'EMPATE' : 'GANÓ POLLITO', 320, 138, { size: 40, color: w === 'win' ? '#7dff8a' : w === 'tie' ? '#ffd23f' : '#ff6b7a', lw: 9 });
+      G.text(c, `Tú: ${pM} m   ·   Pollito: ${cM} m`, 320, 182, { size: 17, lw: 6 });
+      G.text(c, `Llegaste hasta: ${CLIMB_ZONES[climbZone(this.pMax * SH)].name}`, 320, 208, { size: 11, color: '#b7a8e8' });
+      G.text(c, w === 'win' ? 'Pollito fue derrotado' : w === 'tie' ? 'Mismo techo. O mismo espacio.' : 'Habrá consecuencias…', 320, 232, { size: 11 });
     }
     draw(dt) {
+      const pM = this.meters(this.pMax), cM = this.meters(this.cMax), cy = this.cam.y;
       W.render({
         cam: this.cam, dt, mesh: null, actors: [this.p, this.cat], noApartment: true,
-        light: { amb: [0.56, 0.52, 0.6], sun: [0.34, 0.3, 0.3], sky: '#15121f', points: [{ x: 0, y: this.cam.y + 30, z: 80, r: 320, c: [0.45, 0.36, 0.22] }] },
-        boxes: (mb) => {
-          mb.flat(-400, -200, 800, 500, 0, '#c99b66'); mb.box(-260, 0, -40, 520, STEPS * SH + 140, 20, '#3a3348', { s: '#ecd8b4' }); mb.box(-260, 0, -20.5, 520, 24, 1, '#c9ae82');
-          [-70, 70].forEach((bx, t) => {
-            mb.box(bx - 52, 0, -20, 4, STEPS * SH + 40, 20, '#74502f'); mb.box(bx + 48, 0, -20, 4, STEPS * SH + 40, 20, '#74502f'); mb.box(bx - 52, 0, -20, 104, STEPS * SH + 40, 2, '#5a3f28');
-            const idx = t ? this.ci : this.pi;
-            for (let i = 1; i <= STEPS; i++) { const sx = bx + this.seq[i - 1] * 28, next = i === idx + 1 && this.st === 'play'; mb.box(sx - 22, i * SH - 4, -18, 44, 4, 26, i === STEPS ? '#ffd23f' : next ? (t ? '#ffb0b8' : '#b5f5bd') : '#b98a55', { top: i === STEPS ? '#ffe58a' : next ? (t ? '#ffd0d6' : '#d9ffe0') : '#c99a66', emit: next && !t }); if (i % 3 === 0 && i < STEPS) mb.box(sx + this.seq[i - 1] * -8 - 5, i * SH, -14, 10, 12, 6, ['#e23b4e', '#3fa0f0', '#58c46a'][i % 3]); }
-          });
+        light: climbLight(cy),
+        boxes: (mb) => this.drawWorld(mb),
+        sprites: () => {
+          const z = climbZone(cy);
+          if (z >= 3) R.flat(R.glowTex, 305, cy + 175, -390, 58, { tint: [0.92, 0.96, 1], alpha: 0.95 }); // la luna
+          if (z >= 4) R.flat(R.glowTex, -30, cy - 320, -280, 330, { tint: [0.30, 0.50, 1], alpha: 0.5 }); // el planeta, brillando abajo
         },
-        sprites: (t) => { R.sprite(Sp.item('velas'), -70 + this.seq[STEPS - 1] * 28, STEPS * SH + 2 + Math.sin(t * 4) * 2, -6, { feet: 5, lit: 0.3 }); },
         over: (c, t) => {
-          this.hud(c, t, `${this.pi}/${STEPS}`, `${this.ci}/${STEPS}`);
-          if (this.st !== 'play') return;
-          const h = this.p.head(22), dir = this.seq[this.pi];
-          if (this.stun > 0) G.text(c, '¡Resbalaste!', h.x, h.y, { size: 10, color: '#ff6b7a' }); else G.prompt(c, dir < 0 ? '←' : '→', h.x + dir * 30, h.y);
+          if (this.st === 'over') { this.endOverlay(c); return; }
+          this.hud(c, t, `▲ ${pM} m`, `▲ ${cM} m`);
+          if (this.st === 'play') {
+            const d = pM - cM;
+            G.text(c, d > 0 ? `🏆 VAS GANANDO POR ${d} m` : d < 0 ? `Pollito va ${-d} m más alto 😼` : '¡EMPATADOS EN ALTURA!', 320, 66, { size: 10, color: d > 0 ? '#7dff8a' : d < 0 ? '#ff9db0' : '#ffd23f' });
+            const h = this.p.head(22);
+            if (this.stun > 0) G.text(c, '¡Resbalaste!', h.x, h.y, { size: 10, color: '#ff6b7a' });
+            else { const dir = this.sideOf(this.pi); G.prompt(c, dir < 0 ? '←' : '→', h.x + dir * 30, h.y); }
+          }
+          if (this.banner) { const b = this.banner, a = Math.min(1, b.t * 3, (b.d - b.t) * 1.5); c.globalAlpha = Math.max(0, a); c.fillStyle = 'rgba(20,16,30,.78)'; c.fillRect(0, 128, 640, 92); G.text(c, b.a, 320, 158, { size: 24, color: '#ffd23f', lw: 7 }); G.text(c, b.b, 320, 192, { size: 11 }); c.globalAlpha = 1; }
         },
       });
     }
   }
+  ClimbDuel.SHELF_H = SH; // expuesto para la prueba de humo (los lados se piden a una instancia: sideOf)
 
   // =========================================================
   // 11. APAGÓN: ¿FANTASMA O DISFRAZ? — minijuego de observación

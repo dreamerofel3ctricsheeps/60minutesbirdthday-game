@@ -298,11 +298,12 @@
         { who: 'natalia', text: 'En la boca de Pollito. Y Pollito está subiendo por el librero.' },
         { who: 'saulo', text: 'Siempre quiso llegar más alto que nosotros. Emocional y literalmente.' },
       ],
-      intro: 'Carrera hacia lo más alto del librero. La siguiente repisa aparece a la izquierda o a la derecha: presiona ← o → según corresponda. Si te equivocas, resbalas y pierdes tiempo.',
-      goal: 'Llega arriba antes que Pollito en 2 de 3 rondas.',
+      intro: 'El librero de la sala NO TIENE TECHO: sigue por la azotea, el cielo y quién sabe hasta dónde, y Pollito ya va subiendo con las velas en la boca. Presiona ← o → según el lado de la siguiente repisa. Si te equivocas, resbalas y caes a la repisa anterior (tu altura máxima no se pierde).',
+      goal: 'Escalada infinita: gana quien suba más alto en 60 segundos.',
       results: {
-        win: { effects: { quality: 5 }, reply: (who) => [{ who, text: 'Velas recuperadas. Una tiene marcas de colmillo, pero prende.', mood: 'happy' }, { who: 'pollito', text: '😾' }] },
-        lose: { effects: { quality: -3, noise: 8 }, reply: () => [{ who: 'sistema', text: 'Pollito tira las velas desde lo más alto. Caen una por una.' }, { who: 'fatima', text: 'Usaremos fósforos largos. Nadie diga nada.' }] },
+        win: { effects: { quality: 5 }, reply: (who, res) => [{ who, text: `¡${res && res.pMeters != null ? res.pMeters : 'Un montón de'} metros! Bajé con las velas, con vértigo y con una historia que nadie va a creer.`, mood: 'happy' }, { who: 'pollito', text: '😾' }] },
+        tie: { effects: { quality: 1 }, reply: (who, res) => [{ who: 'saulo', text: `Empate a ${res && res.cMeters != null ? res.cMeters : '?'} metros. El gato y tú comparten techo. O espacio.` }, { who: 'pollito', text: '😼' }] },
+        lose: { effects: { quality: -3, noise: 8 }, reply: (who, res) => [{ who: 'sistema', text: `Pollito llegó a ${res && res.cMeters != null ? res.cMeters : 'lo más alto'} metros y tiró las velas desde ahí. Caen una por una.` }, { who: 'fatima', text: 'Usaremos fósforos largos. Nadie diga nada.' }] },
       },
     },
 

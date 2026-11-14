@@ -225,7 +225,7 @@
     sonambula: 'Llega hasta Ximena sonámbula antes que José.',
     memoria: 'Da vuelta las cajas y junta más parejas que José.',
     cactus: 'Esquiva los cactus rodantes y sobrevive la ronda.',
-    repisas: 'Salta de repisa en repisa y llega arriba antes que Pollito.',
+    repisas: 'Escalada infinita por el librero sin techo: gana quien suba más alto en 60 s.',
     pisoton: 'Cambia de cojín y esquiva los pisotones de Pollito.',
     azotea: 'Esquiva las pasadas del dron sobre la azotea.',
   };
@@ -421,7 +421,7 @@
     },
     memoria: { stats: ['logica'], Scene: () => Sc.MemoryDuel, note: () => 'Más lógica = José recuerda menos', setup() {} },
     cactus: { stats: ['velocidad'], Scene: () => Sc.SpikeDuel, note: () => 'Velocidad para esquivar', setup() {} },
-    repisas: { stats: ['velocidad'], Scene: () => Sc.ClimbDuel, note: () => 'Reflejos: ← y →', setup() {} },
+    repisas: { stats: ['velocidad'], Scene: () => Sc.ClimbDuel, note: () => 'La altura máxima manda: ← y →', setup() {} },
     pisoton: { stats: ['velocidad'], Scene: () => Sc.StompDuel, note: () => 'Velocidad para cambiar de cojín', setup() {} },
     azotea: { stats: ['velocidad'], Scene: () => Sc.DroneDuel, note: () => 'Velocidad lateral', setup() {} },
     apagon: {

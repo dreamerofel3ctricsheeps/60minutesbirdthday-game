@@ -12,6 +12,10 @@
       todo mal y partida mixta: salidas del diseño de Jose.
    D) Apagón en la historia: runEvent('apagon') completo con
       respuestas correctas: efectos y flags aplicados.
+   F) Salto de repisas: escalada infinita — generación procedural
+      sin fin y determinista, set dibujado acotado a cualquier
+      altura, caída de una repisa al fallar (la máxima no se
+      pierde) y resultado por altura máxima (win/tie/lose).
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -297,6 +301,96 @@ const tick = () => new Promise((r) => setImmediate(r));
     } catch (e) {
       check('draw sin errores (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
     } finally { W.render = realRender; G.R.project = realProject; }
+  }
+
+  // ================= F) Repisas: escalada infinita ========================
+  console.log('\nF) Salto de repisas — escalada infinita');
+  if (!Sc.ClimbDuel) { check('existe la escena ClimbDuel', false); }
+  else {
+    const gen1 = new Sc.ClimbDuel('natalia', () => {}), gen2 = new Sc.ClimbDuel('alan', () => {});
+    const sideAt = (k) => gen1.sideOf(k), SHF = Sc.ClimbDuel.SHELF_H;
+    // F1) generación procedural: determinista entre instancias, sin fin, sin rachas de 4
+    let genOk = true, runLen = 1, prevSide = 0;
+    for (let k = 0; k <= 20000 && genOk; k++) {
+      const s = sideAt(k);
+      if (s !== -1 && s !== 1) genOk = false;
+      runLen = s === prevSide ? runLen + 1 : 1; prevSide = s;
+      if (runLen > 3) genOk = false; // nunca 4 seguidas del mismo lado
+    }
+    for (const k of [0, 1, 2, 3, 10, 999, 20000]) if (gen2.sideOf(k) !== sideAt(k)) genOk = false; // otra instancia, misma secuencia
+    check('generación: lados válidos y deterministas hasta k=20000, sin rachas de 4', genOk);
+    const probe = new Sc.ClimbDuel('natalia', () => {});
+    let shelfOk = true;
+    for (const i of [1, 2, 3, 50, 1000, 100000]) {
+      const q = probe.shelfAt(-70, i);
+      if (q.e !== i * SHF || Math.abs(q.x + 70) !== 28) shelfOk = false;
+    }
+    check('generación: la repisa i existe a i·27 u para cualquier i (hasta 100 000)', shelfOk);
+
+    // F2) set activo acotado: dibujar a 300 u o a 135 000 u cuesta lo mismo
+    {
+      const realRender = W.render, realProject = G.R.project;
+      const ctx2d = new FakeCtx();
+      let verts = 0;
+      W.render = (opts) => { if (opts.boxes) { const mb = new G.R.MB(); opts.boxes(mb); verts = mb.a.length; } if (opts.sprites) opts.sprites(0); if (opts.over) opts.over(ctx2d, 0); };
+      G.R.project = () => ({ x: 320, y: 180, ok: true });
+      try {
+        const d = new Sc.ClimbDuel('natalia', () => {});
+        d.cam.y = 300; d.draw(0.016); const vLow = verts;
+        d.cam.y = 135000; d.draw(0.016); const vHigh = verts; // 5000 repisas arriba: espacio profundo
+        console.log(`  · vértices dibujados: a 300 u = ${vLow}, a 135 000 u = ${vHigh}`);
+        check('el set dibujado NO crece con la altura (reciclaje por banda visible)', vHigh < vLow * 1.6 && vHigh < 90000, `bajo=${vLow} alto=${vHigh}`);
+        d.st = 'play'; d.time = 42; d.draw(0.016);
+        check('draw sin errores: HUD de escalada en juego', true);
+        d.st = 'over'; d.result = { win: 'win' }; d.draw(0.016);
+        check('draw sin errores: panel final con alturas', true);
+      } catch (e) {
+        check('draw sin errores en ClimbDuel (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
+      } finally { W.render = realRender; G.R.project = realProject; }
+    }
+
+    // F3) caes una repisa al fallar, pero la altura MÁXIMA no se pierde
+    {
+      const d = new Sc.ClimbDuel('natalia', () => {});
+      d.st = 'play'; d.time = 1e9; d.cstep = 1e9; d.ct = 1e9; // Pollito congelado
+      const press = (dir) => { tap(dir < 0 ? 'ArrowLeft' : 'ArrowRight'); d.update(0.05); };
+      for (let i = 0; i < 5; i++) press(sideAt(d.pi));
+      const upOk = d.pi === 5 && d.pMax === 5;
+      press(-sideAt(d.pi)); // tecla equivocada a propósito
+      check('subir 5 y fallar: caes a la anterior (pi=4) y la máxima queda (pMax=5)', upOk && d.pi === 4 && d.pMax === 5, `pi=${d.pi} pMax=${d.pMax}`);
+    }
+
+    // F4) el resultado lo decide la ALTURA MÁXIMA al agotarse el tiempo
+    const driveClimb = (setupFn, pressOk) => {
+      let result = null;
+      const d = new Sc.ClimbDuel('natalia', (r) => { result = r; });
+      if (setupFn) setupFn(d);
+      let it = 0;
+      while (!result && it++ < 6000) {
+        if (pressOk && d.st === 'play') tap(sideAt(d.pi) < 0 ? 'ArrowLeft' : 'ArrowRight');
+        d.update(0.05);
+      }
+      return { d, result };
+    };
+    const winRun = driveClimb((d) => { d.cstep = 1e9; d.ct = 1e9; }, true);
+    check('victoria: jugador escalando sin parar le gana a Pollito quieto', winRun.result && winRun.result.win === 'win', winRun.result && winRun.result.win);
+    // la ventana de lados se poda por debajo del escalador más bajo y de
+    // la cámara: NO depende de la altura absoluta, sino de la distancia
+    // entre ambos (con Pollito congelado en el 0, como en la victoria de
+    // arriba, la ventana cubre legítimamente todo el trayecto hasta él)
+    {
+      let result = null;
+      const d = new Sc.ClimbDuel('natalia', (r) => { result = r; });
+      let it = 0;
+      while (!result && it++ < 6000) { if (d.st === 'play' && it % 4 === 0) tap(sideAt(d.pi) < 0 ? 'ArrowLeft' : 'ArrowRight'); d.update(0.05); }
+      check('ventana de lados acotada con ambos escalando (se poda desde abajo)', d.pMax > 200 && d._sb > 50 && d._sv.length < 300, `pMax=${d.pMax} base=${d._sb} ventana=${d._sv.length}`);
+    }
+    check('victoria: extra() trae las alturas y el jugador llegó AL ESPACIO (>200 m, zonas 0→4)', winRun.result && winRun.result.pMeters > winRun.result.cMeters && winRun.result.pMeters > 200 && winRun.d.zoneSeen === 4,
+      winRun.result && `p=${winRun.result.pMeters} m c=${winRun.result.cMeters} m zona=${winRun.d.zoneSeen}`);
+    const loseRun = driveClimb((d) => { d.cstep = 0.05; d.ct = 0.01; }, false);
+    check('derrota: Pollito escalando sin parar gana por altura', loseRun.result && loseRun.result.win === 'lose' && loseRun.result.cMeters > loseRun.result.pMeters, loseRun.result && loseRun.result.win);
+    const tieRun = driveClimb((d) => { d.cstep = 1e9; d.ct = 1e9; }, false);
+    check('empate: nadie se mueve, misma altura máxima (0 m)', tieRun.result && tieRun.result.win === 'tie' && tieRun.result.pMeters === 0 && tieRun.result.cMeters === 0, tieRun.result && tieRun.result.win);
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
