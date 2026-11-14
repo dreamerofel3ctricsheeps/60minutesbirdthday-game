@@ -186,28 +186,64 @@
       let sy = (1 - sq * 0.16 + breathe + (this.jy > 4 ? 0.06 : 0)) * sc, sx = (1 + sq * 0.14 - breathe) * sc;
       const fl = this.flash > 0 && Math.floor(this.flash * 20) % 2 ? [0.9, 0.9, 0.9] : null;
       if (this.id === 'pollito') {
-        const fast = this.spd > 130;
-        const pose = this.jy > 2 ? 'run1' : this.moving ? (fast ? 'run' : 'walk') + (Math.floor(this.step * (fast ? 0.9 : 1.3)) % 2) : 'sit';
+        // Pollito es el gato calicó REAL (hoja definida): idle sentado, prowl
+        // al moverse (ciclo de 3 frames) y pounce en el aire. NUNCA se espeja:
+        // su mancha naranja va en el cachete izquierdo.
+        let anim, idx;
+        if (this.jy > 2) { anim = 'pounce'; idx = this.jy > 26 ? 1 : 0; }
+        else if (this.moving) { anim = 'walk'; idx = Math.floor(this.step / (Math.PI / 2)); }
+        else { anim = 'idle'; idx = Math.floor(this.t / 0.9); }
         if (this.spin > 0) roll = this.spin * 14;
-        R.sprite(Sp.cat(pose, this.dir === 'left'), this.x, E + this.jy + (this.moving ? walkBob * 0.5 : 0), this.y, { feet: 5, roll, sx: sx * 1.15, sy: sy * 1.15, flash: fl });
+        R.sprite(Sp.catAnim(anim, idx), this.x, E + this.jy + (this.moving ? walkBob * 0.5 : 0), this.y, { feet: 5, roll, sx: sx * 1.15, sy: sy * 1.15, flash: fl });
         if (this.carry && this.carry.length) R.sprite(Sp.item(this.carry[0]), this.x + (this.dir === 'left' ? -14 : 14), E + this.jy + 16, this.y + 0.6, { feet: 4, sx: 0.8, sy: 0.8 });
         return;
       }
-      let frame = this.frameOverride != null ? this.frameOverride : this.moving ? [1, 0, 2, 0][Math.floor(this.step / (Math.PI / 2)) % 4] : 0;
-      if (this.jy > 6 && this.frameOverride == null) frame = 3;
+      /* Máquina de animación sobre los sprites definidos:
+         - idle: ciclo lento de 2 frames con personalidad (o vista fija según
+           dirección: idle_up / idle_right son el frame 0 de la caminata).
+         - caminar: ciclos reales por dirección (walk_down/up/right; izquierda
+           = espejo de right). El índice avanza con la distancia (this.step),
+           así los pies acompañan el desplazamiento y no desliza.
+         - correr: ciclos run_* al superar RUN_SPD (dash, persecuciones);
+           ciclo más rápido por distancia que al caminar.
+         - act: frames action al interactuar, en el aire (saltos) y cuando un
+           duelo fija frameOverride ('act', 'celebrate', ...).
+         - animSet (p. ej. 'sneak' de Jose) reemplaza el ciclo de locomoción.
+         Las expresiones se repintan solo en frames frontales (los que tienen
+         ojos en la metadata); en espalda/perfil no se pintan. */
+      const RUN_SPD = 178;
       let expr = this.expr;
       if (!expr && this.blink < 0) expr = 'sleep';
       let dir = this.dir, shear = 0;
       if (this.spin > 0) { dir = ['down', 'left', 'up', 'right'][Math.floor(this.spin * 14) % 4]; roll = 0; }
       else if (this.moving && (dir === 'left' || dir === 'right')) shear = (dir === 'left' ? -1 : 1) * 3.5 * Math.min(1, this.spd / 90);   // se inclina hacia donde corre
-      R.sprite(Sp.char(this.id, dir, frame, expr), this.x, E + this.jy + walkBob, this.y, { feet: 2.6, roll, sx, sy, flash: fl, shear });
+      let anim, idx = 0, flip = false;
+      const fo = this.frameOverride;
+      if (fo != null) {
+        anim = typeof fo === 'string' ? fo : 'act';
+        idx = Math.floor(this.t * 4);
+      } else if (this.jy > 6) {
+        anim = 'act'; idx = this.jy > 26 ? 1 : 0;
+      } else if (this.moving && this.spin <= 0) {
+        const run = this.spd > RUN_SPD, cyc = Math.floor(this.step / (run ? Math.PI / 1.15 : Math.PI / 2));
+        idx = cyc;
+        if (this.animSet) { anim = this.animSet; flip = dir === 'left'; }
+        else if (dir === 'up') anim = run && Sp.hasAnim(this.id, 'run_up') ? 'run_up' : 'walk_up';
+        else if (dir === 'down') anim = run && Sp.hasAnim(this.id, 'run_down') ? 'run_down' : 'walk_down';
+        else { anim = run && Sp.hasAnim(this.id, 'run_right') ? 'run_right' : 'walk_right'; flip = dir === 'left'; }
+      } else {
+        if (dir === 'up') anim = 'idle_up';
+        else if (dir === 'down') { anim = 'idle'; idx = Math.floor(this.t / 0.85); }
+        else { anim = 'idle_right'; flip = dir === 'left'; }
+      }
+      R.sprite(Sp.frame(this.id, anim, idx, { flip, expr }), this.x, E + this.jy + walkBob, this.y, { feet: 2.6, roll, sx, sy, flash: fl, shear });
       if (this.carry && this.carry.length) {
         const top = (Sp.charTop(this.id) - 3) * R.stretch * sy + E + this.jy + walkBob, tilt = this.carryTilt || 0;
         this.carry.forEach((it, i) => R.sprite(Sp.item(it), this.x + (i ? 12 : this.carry.length > 1 ? -12 : 0) + tilt * 14, top + Math.sin(this.t * 9 + i) * (this.moving ? 1.5 : 0), this.y + 0.5, { feet: 6, roll: tilt * 0.5 + (this.moving ? Math.sin(this.step + i) * 0.06 : 0) }));
       }
     }
     // punto sobre la cabeza en coordenadas de la capa 2D
-    head(extra) { return R.project(this.x, (this.id === 'pollito' ? 34 : Sp.charTop(this.id) + 3) * R.stretch * this.scale + this.elev + this.jy + (extra || 0), this.y); }
+    head(extra) { return R.project(this.x, (this.id === 'pollito' ? 42 : Sp.charTop(this.id) + 3) * R.stretch * this.scale + this.elev + this.jy + (extra || 0), this.y); }
   }
   G.Actor = Actor;
 

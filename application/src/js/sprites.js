@@ -1,8 +1,11 @@
 /* ============================================================
-   1 MINUTO PARA LA FIESTA — Generador de sprites pixel art
-   Todo el arte se dibuja por código sobre buffers de píxeles
-   (frames de 64x64, estilo chibi con borde blanco, GDD §10).
-   Los diseños parten de los borradores en assets/drafts/v1.2.
+   1 MINUTO PARA LA FIESTA — Sprites
+   Los PERSONAJES usan las hojas DEFINIDAS generadas por
+   tools/mkdefined.py desde los bundles de assets/new-sprites
+   (js/defined-sheets.js): celdas uniformes por personaje, borde
+   blanco Paper Mario horneado y ojos detectados por frame para
+   el sistema de expresiones. Los OBJETOS se siguen dibujando
+   por código sobre buffers de píxeles (32x32, borde blanco).
    ============================================================ */
 (function (root) {
   'use strict';
@@ -93,43 +96,6 @@
 
   const INK = '#2b1d24';
   const WHITE = '#ffffff';
-
-  // ---------- Pollito, el gato calicó ----------
-  // pose: 'walk0' | 'walk1' | 'sit' | 'run0' | 'run1'
-  function drawCat(pose) {
-    const b = new Buf(64, 64);
-    const W = '#f7f2e8', O = '#e58a2f', K = '#2b2530', P = '#f2a0a8', WD = '#d9d2c4';
-    if (pose === 'sit') {
-      b.ell(32, 51, 8, 7, W); b.ell(27, 52, 3, 4, O); b.ell(38, 49, 3, 3, K);
-      b.rect(27, 56, 4, 2, W); b.rect(33, 56, 4, 2, W); b.rect(27, 58, 10, 1, WD);
-      for (let i = 0; i < 8; i++) b.rect(40 + (i > 4 ? 1 : 0), 56 - i, 3, 1, i < 3 ? K : O); // cola
-      b.ell(32, 40, 8, 6, W);
-      b.rect(24, 33, 5, 3, O); b.rect(25, 31, 3, 2, O); b.rect(35, 33, 5, 3, K); b.rect(36, 31, 3, 2, K);
-      b.ell(27, 37, 3, 2, O); b.ell(37, 37, 3, 2, K);
-      b.rect(28, 40, 2, 3, '#3b7d3a'); b.rect(34, 40, 2, 3, '#3b7d3a'); b.set(28, 41, K); b.set(35, 41, K);
-      b.rect(31, 43, 2, 1, P); b.set(30, 44, K); b.set(33, 44, K);
-    } else {
-      const run = pose[0] === 'r', f = pose.endsWith('1');
-      const by = run ? 49 : 48;
-      // cola
-      if (run) b.line(19, by - 1, 10, by - 3, O), b.line(19, by, 10, by - 2, O), b.rect(9, by - 4, 3, 3, K);
-      else { b.line(19, by - 1, 15, by - 9, O); b.line(20, by - 1, 16, by - 9, O); b.rect(14, by - 12, 3, 4, K); }
-      b.ell(30, by, 11, 5, W);
-      b.ell(26, by - 2, 5, 3, O); b.ell(21, by + 1, 3, 3, K); b.ell(34, by + 2, 3, 2, O);
-      // patas
-      const legs = run ? (f ? [[20, -3], [24, 2], [35, -2], [39, 3]] : [[23, 1], [26, -1], [34, 2], [37, -1]]) : (f ? [[22, 0], [26, 1], [34, 1], [38, 0]] : [[23, 1], [27, 0], [35, 0], [37, 1]]);
-      legs.forEach(([x, d], i) => { const h = run ? 4 : 5; b.rect(x + (run ? d : 0), by + 4, 3, h - (run ? 0 : d), i === 1 ? O : W); });
-      // cabeza
-      const hx = run ? 43 : 42, hy = by - 6;
-      b.ell(hx, hy, 6, 5, W);
-      b.rect(hx - 5, hy - 7, 3, 3, O); b.set(hx - 4, hy - 8, O); b.rect(hx + 2, hy - 7, 3, 3, K); b.set(hx + 3, hy - 8, K);
-      b.ell(hx - 3, hy - 3, 3, 2, O); b.ell(hx + 3, hy - 3, 2, 2, K);
-      b.rect(hx + 1, hy - 1, 2, 3, '#3b7d3a'); b.set(hx + 2, hy, K);
-      b.set(hx + 5, hy + 1, P); b.set(hx + 4, hy + 2, K);
-    }
-    b.outline(INK).outline(WHITE, true);
-    return b;
-  }
 
   // ---------- Objetos (32x32) ----------
   const ITEM_ART = {
@@ -238,18 +204,26 @@
     const x = c.getContext('2d'); x.translate(src.width, 0); x.scale(-1, 1); x.drawImage(src, 0, 0); return c;
   }
 
-  // ---------- Personajes: hojas generadas desde los borradores (js/sheets.js) ----------
-  const M = root.G.SHEET_META, CHAR_SCALE = 0.33, imgs = {};
-  const FRAME = { idle: 0, walkA: 1, walkB: 2, act: 3, backIdle: 4, backA: 5, backB: 6 };
+  // ---------- Personajes: hojas DEFINIDAS (js/defined-sheets.js) ----------
+  // Cada personaje tiene su hoja de celdas uniformes (fw x fh propios, base y
+  // escala en su metadata) con las animaciones reales de sus bundles:
+  // idle / idle_up / idle_right / walk_* / run_* / act (+ sneak y celebrate
+  // en Jose; idle / walk / pounce en el gato). Pollito usa la hoja del gato
+  // calicó real y NUNCA se espeja (su mancha va en el cachete izquierdo).
+  const M = root.G.DEFINED_META, CHAR_SCALE = 0.33, imgs = {};
   const INKC = [43, 29, 36];
-  const ready = typeof Image === 'undefined' ? Promise.resolve() : Promise.all(Object.keys(root.G.SHEET_DATA).map((id) => new Promise((res) => { const im = new Image(); im.onload = () => { imgs[id] = im; res(); }; im.onerror = res; im.src = root.G.SHEET_DATA[id]; })));
+  const ready = typeof Image === 'undefined' ? Promise.resolve() : Promise.all(Object.keys(root.G.DEFINED_DATA).map((id) => new Promise((res) => { const im = new Image(); im.onload = () => { imgs[id] = im; res(); }; im.onerror = res; im.src = root.G.DEFINED_DATA[id]; })));
 
-  // repinta los ojos para cada expresión usando la posición detectada en el borrador
-  function paintExpr(ctx, id, expr) {
-    const meta = M.chars[id]; if (!meta.eyes.length || !expr || expr === 'neutral') return;
-    const im = ctx.getImageData(0, 0, M.fw, M.fh), d = im.data, skin = meta.skin;
-    const put = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (x < 0 || y < 0 || x >= M.fw || y >= M.fh) return; const i = (y * M.fw + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; };
-    meta.eyes.forEach((e, k) => {
+  // Repinta los ojos DEL FRAME ACTUAL para cada expresión, usando los ojos
+  // detectados por frame en mkdefined.py. En frames de espalda/perfil no hay
+  // ojos registrados y no se pinta nada; en Jose (lentes oscuros) tampoco,
+  // para no borrarle los lentes que son su identidad.
+  function paintExpr(ctx, meta, cell, expr) {
+    const es = (meta.eyes || {})[cell];
+    if (!es || !es.length || meta.lenses || !expr || expr === 'neutral') return;
+    const im = ctx.getImageData(0, 0, meta.fw, meta.fh), d = im.data, skin = meta.skin;
+    const put = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (x < 0 || y < 0 || x >= meta.fw || y >= meta.fh) return; const i = (y * meta.fw + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; };
+    es.forEach((e, k) => {
       const r = e.r, s = k === 0 ? 1 : -1;
       const disc = (rad, c, test) => { for (let y = -Math.ceil(rad); y <= rad; y++) for (let x = -Math.ceil(rad); x <= rad; x++) if (x * x + y * y <= rad * rad && (!test || test(x, y))) put(e.x + x, e.y + y, c); };
       if (expr === 'sleep' || expr === 'happy') {
@@ -270,29 +244,54 @@
   }
 
   const cache = {};
+  // Canvas de UNA celda de la hoja definida, con expresión repintada si el
+  // frame tiene ojos registrados. flip espeja la celda (solo humanos: el
+  // gato calicó nunca se espeja).
+  const blankC = typeof document !== 'undefined' ? (() => { const c = document.createElement('canvas'); c.width = c.height = 4; c._scale = 0.33; return c; })() : null;
+  function frameCanvas(id, anim, idx, flip, expr) {
+    const meta = M.chars[id]; if (!meta) return blankC;
+    let cells = meta.anims[anim];
+    if (!cells || !cells.length) cells = meta.anims.idle;   // fallback seguro: nunca devolver null al render
+    if (!cells || !cells.length) return blankC;
+    const cell = cells[((idx % cells.length) + cells.length) % cells.length];
+    const key = `f:${id}:${cell}:${flip ? 1 : 0}:${expr || ''}`;
+    if (!cache[key]) {
+      const c = document.createElement('canvas'); c.width = meta.fw; c.height = meta.fh; c._scale = meta.scale;
+      const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+      if (imgs[id]) x.drawImage(imgs[id], (cell % meta.cols) * meta.fw, Math.floor(cell / meta.cols) * meta.fh, meta.fw, meta.fh, 0, 0, meta.fw, meta.fh);
+      if (expr) paintExpr(x, meta, cell, expr);
+      cache[key] = flip ? flipCanvas(c) : c;
+    }
+    return cache[key];
+  }
   const Sprites = {
-    Buf, drawCat, drawItem, ready, CHAR_SCALE, META: M,
+    Buf, drawItem, ready, CHAR_SCALE, META: M,
+    frameCanvas,
+    hasAnim(id, anim) { const m = M.chars[id]; return !!(m && m.anims[anim] && m.anims[anim].length); },
+    animLen(id, anim) { const m = M.chars[id]; return m && m.anims[anim] ? m.anims[anim].length : 0; },
     // alto del personaje en unidades de mundo (para colocar cosas sobre la cabeza)
-    charTop(id) { const m = M.chars[id]; return m ? (M.base - m.top) * CHAR_SCALE : 46; },
-    // dir: 'down' | 'up' | 'left' | 'right'.  frame: 0 idle, 1 y 2 caminata, 3 acción
+    charTop(id) { const m = M.chars[id]; return m ? (m.base - m.top) * m.scale : 46; },
+    // frame de una animación por nombre (idle, walk_down, run_right, act, ...)
+    frame(id, anim, idx, o) { o = o || {}; return frameCanvas(id, anim, idx || 0, !!o.flip, o.expr); },
+    // compat: dir + frame clásico (0 idle, 1 y 2 caminata, 3 acción)
     char(id, dir, frame, expr) {
-      const back = dir === 'up', fi = back ? [4, 5, 6, 4][frame] : frame, ex = back ? '' : expr || '';
-      const key = `c:${id}:${fi}:${ex}:${dir === 'left' ? 1 : 0}`;
-      if (!cache[key]) {
-        if (dir === 'left') cache[key] = flipCanvas(this.char(id, 'right', frame, expr));
-        else {
-          const c = document.createElement('canvas'); c.width = M.fw; c.height = M.fh; c._scale = CHAR_SCALE;
-          const x = c.getContext('2d'); if (imgs[id]) x.drawImage(imgs[id], fi * M.fw, 0, M.fw, M.fh, 0, 0, M.fw, M.fh);
-          if (ex) paintExpr(x, id, ex);
-          cache[key] = c;
-        }
+      if (frame === 3) return frameCanvas(id, 'act', 0, false, expr);
+      if (frame === 1 || frame === 2) {
+        const anim = dir === 'up' ? 'walk_up' : dir === 'down' ? 'walk_down' : 'walk_right';
+        return frameCanvas(id, anim, frame - 1, dir === 'left', expr);
       }
-      return cache[key];
+      const anim = dir === 'up' ? 'idle_up' : dir === 'down' ? 'idle' : 'idle_right';
+      return frameCanvas(id, anim, 0, dir === 'left', expr);
     },
-    cat(pose, left) {
-      const key = `cat:${pose}:${left ? 1 : 0}`;
-      if (!cache[key]) { let b = drawCat(pose); if (left) b = b.flipX(); cache[key] = toCanvas(b.scale2x(), 0.5); }
-      return cache[key];
+    // El gato real de Jose: anim = 'idle' | 'walk' (prowl) | 'pounce'. Sin flip, nunca.
+    catAnim(anim, idx) { return frameCanvas('pollito', anim, idx || 0, false, null); },
+    // compat con las poses del gato dibujado por código que usaba la v3.1
+    cat(pose) {
+      if (pose === 'sit') return this.catAnim('idle', 0);
+      if (pose === 'walk0') return this.catAnim('walk', 0);
+      if (pose === 'walk1') return this.catAnim('walk', 1);
+      if (pose === 'run0') return this.catAnim('walk', 2);
+      return this.catAnim('pounce', 1);
     },
     item(id) {
       const key = 'i:' + id;
@@ -305,8 +304,8 @@
       if (!cache[key]) {
         const c = document.createElement('canvas'); c.width = 96; c.height = 96;
         const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
-        if (id === 'pollito') x.drawImage(this.cat('sit'), 32, 52, 64, 64, 0, 0, 96, 96);
-        else { const m = M.chars[id], h = m.neck - m.top, s = Math.max(64, Math.min(96, h * 0.82)); const cy = m.eyes.length ? m.eyes[0].y : m.top + h * 0.6; x.drawImage(this.char(id, 'down', 0, expr), M.fw / 2 - s / 2, cy - s * 0.5, s, s, 0, 0, 96, 96); }
+        if (id === 'pollito') { const m = M.chars.pollito, cc = this.catAnim('idle', 0); if (cc) x.drawImage(cc, m.fw * 0.28, 0, m.fw * 0.72, m.fh * 0.82, 0, 0, 96, 96); }
+        else { const m = M.chars[id], h = m.neck - m.top, s = Math.max(64, Math.min(96, h * 0.82)); const e0 = (m.eyes || {})[m.anims.idle[0]]; const cy = e0 && e0.length ? e0[0].y : m.top + h * 0.6; x.drawImage(this.char(id, 'down', 0, expr), m.fw / 2 - s / 2, cy - s * 0.5, s, s, 0, 0, 96, 96); }
         cache[key] = c;
       }
       return cache[key];
@@ -314,7 +313,7 @@
     // cabeza suelta como sprite (Ximena dormida)
     headC(id, expr) {
       const key = `h:${id}:${expr || ''}`;
-      if (!cache[key]) { const m = M.chars[id], h = m.neck - m.top + 8; const c = document.createElement('canvas'); c.width = M.fw; c.height = h; c._scale = CHAR_SCALE; c.getContext('2d').drawImage(this.char(id, 'down', 0, expr), 0, m.top - 4, M.fw, h, 0, 0, M.fw, h); cache[key] = c; }
+      if (!cache[key]) { const m = M.chars[id], h = m.neck - m.top + 8; const c = document.createElement('canvas'); c.width = m.fw; c.height = h; c._scale = m.scale; c.getContext('2d').drawImage(this.char(id, 'down', 0, expr), 0, m.top - 4, m.fw, h, 0, 0, m.fw, h); cache[key] = c; }
       return cache[key];
     },
     portrait(id, expr) {
@@ -322,7 +321,7 @@
       if (!cache[key]) cache[key] = this.portraitC(id, expr).toDataURL();
       return cache[key];
     },
-    full(id, expr) { const key = `f:${id}:${expr || ''}`; if (!cache[key]) cache[key] = (id === 'pollito' ? this.cat('sit') : this.char(id, 'down', 0, expr)).toDataURL(); return cache[key]; },
+    full(id, expr) { const key = `f:${id}:${expr || ''}`; if (!cache[key]) cache[key] = (id === 'pollito' ? this.catAnim('idle', 0) : this.char(id, 'down', 0, expr)).toDataURL(); return cache[key]; },
     itemURL(id) {
       const key = 'iu:' + id;
       if (!cache[key]) cache[key] = this.item(id).toDataURL();

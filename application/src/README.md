@@ -8,7 +8,7 @@ Abre `index.html` con doble clic en un navegador de escritorio (Chrome, Edge o F
 - `index.html?low` — 3D a mitad de resolución · `index.html?nofx` — sin posproceso (equipos lentos).
 
 ## Qué hay en la v3
-- **Sprites desde los borradores.** `tools/mksprites.py` recorta cada personaje de `assets/drafts/v1.2`, baja los brazos de la pose en T, genera caminata, pose de acción y vista de espalda, y detecta los ojos para pintar expresiones. El resultado queda en `web/assets/sprites/*.png` y embebido en `web/js/sheets.js`.
+- **Sprites definidos (v3.1+).** Los personajes usan los bundles definidos de `assets/new-sprites/` (idle con personalidad, caminatas y carreras reales por dirección, acción; Jose con sneak/celebrate y Pollito es el gato calicó real). `tools/mkdefined.py` los normaliza a celdas uniformes, les hornea el borde blanco Paper Mario y detecta los ojos por frame para pintar expresiones sobre el frame actual. El resultado queda en `assets/sprites/defined/*.png` y embebido en `js/defined-sheets.js`. (El pipeline anterior desde la pose en T, `tools/mksprites.py`, queda como herramienta histórica: el juego ya no lo usa.)
 - **Duelos por rondas.** Cada minijuego es al mejor de 3 rondas contra un jefe (Batalla de mensajes: primero en ganar 3 de 5).
 - **10 duelos:**
 
@@ -30,16 +30,16 @@ Abre `index.html` con doble clic en un navegador de escritorio (Chrome, Edge o F
 
 ## Regenerar sprites
 ```
-python3 tools/mksprites.py web/assets/sprites   # requiere numpy, scipy y Pillow
-mv web/assets/sprites/sheets.js web/js/sheets.js
+python3 tools/mkdefined.py     # requiere numpy, scipy y Pillow
+node tools/check_defined.js    # verifica hojas, animaciones y ojos por frame
 ```
-Ajustes por personaje en el diccionario `CFG` de `tools/mksprites.py`.
+`mkdefined.py` lee los bundles de `assets/new-sprites/` y regenera `js/defined-sheets.js` + `assets/sprites/defined/*.png`. Los strips nuevos generados por IA se procesan antes con `tools/keystrip.py` (clave magenta + segmentación + manifest).
 
 ## Estructura
 | Archivo | Contenido |
 |---|---|
-| `js/sheets.js` | Hojas de sprites embebidas (generado). |
-| `js/sprites.js` | Carga de hojas, expresiones, Pollito y objetos (pixel art por código). |
+| `js/defined-sheets.js` | Hojas de los sprites definidos embebidas (generado por `tools/mkdefined.py`). |
+| `js/sprites.js` | Carga de hojas definidas, expresiones por frame, Pollito y objetos (pixel art por código). |
 | `js/data.js` | Personajes, objetos, **eventos**, orden de la historia y finales. |
 | `js/gl3d.js` | Render WebGL propio: mallas, billboards, luces y posproceso. |
 | `js/world.js` | Departamento 3D, colisiones, actores animados. |
