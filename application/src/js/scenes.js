@@ -1441,373 +1441,372 @@
   ClimbDuel.galaxiesAt = climbGalaxies; // ídem: el campo de galaxias visible a una altura de cámara
 
   // =========================================================
-  // 11. APAGÓN: ¿FANTASMA O DISFRAZ? — minijuego de observación
-  // (diseño de Jose, 2026-11-14: diseno-minijuego-apagon.md).
-  // Reemplaza la resolución del evento del apagón (antes: mandar a un
-  // roomie a arreglarlo con una tirada de dados). No es un duelo contra
-  // un jefe: el "jefe" nominal del evento es Pollito por sus falsas
-  // alarmas. 10 apariciones en la sala a oscuras; en cada una el jugador
-  // OBSERVA las pistas y responde:
-  //   ← FANTASMA · → PERSONA DISFRAZADA · ↑ PERSONAJE ESPECIAL
-  // (los botones se dibujan con el arte propio del juego — el fantasma
-  // y la sábana en miniatura y el ícono de luna —, sin emoticones.)
-  // La opción ESPECIAL solo aparece (tras 1,2 s de observación) en las
-  // apariciones especiales: Ximena sonámbula y Pollito con una sábana.
-  // PISTAS — fantasma real: flota sobre el piso, NO proyecta sombra,
-  // brilla de forma antinatural, atraviesa la maceta, se desvanece un
-  // instante y reaparece más alto. Persona disfrazada: sprite definido
-  // bajo una sábana dibujada por código (con agujeros para los ojos a la
-  // altura de los ojos detectados de su frame idle): se le ven los
-  // ZAPATOS bajo el dobladillo, tiene sombra, tropieza con la maceta,
-  // se le cae un accesorio y en fase 2+ la sábana RESPIRA. Ximena: su
-  // frame de sonámbula (act), murmura de su guardia. Pollito: el gato
-  // real bajo una sábana mini, le quedan las patas y la cola fuera y
-  // maúlla. En fase 1 las pistas traen caption de aprendizaje.
-  // ACIERTO: +16% de REPARACIÓN ELÉCTRICA (+12% en especiales) con
-  // justificación rotando (fusible, batería, tablero…). ERROR: sube el
-  // RIESGO de despertar (medidor propio 0–10), hace ruido y en fase 2+
-  // puede dañar la decoración. Sin respuesta a tiempo: la figura se
-  // esfuma (error leve, ambigüedad intacta). NUNCA hay game over.
-  // FASES: 1 (rondas 1–3, ventana 6 s, pistas claras con caption) ·
-  // 2 (4–7, 5 s, pistas tardías, especiales) · 3 (8–10, 3,5 s, luz que
-  // parpadea y una sombra pasajera de ambiente que NO se responde).
-  // Si la reparación llega a 100% la luz vuelve, pero se juegan las 10
-  // apariciones igual: hay que asegurar la casa entera.
-  // SALIDAS (done): { win, blackoutFixed, score, repair, awakeRisk,
-  // ghostsConfirmed, fakeGhostsFound, pollitoEvent, sleepwalkerFound,
-  // decoDamage, correct, errors } — el mapeo a los efectos reales del
-  // evento vive en MG.apagon.resolve (game.js). Duración ≈ 2 min.
-  // REGLA DEL GATO: Pollito se dibuja con Sp.catAnim('idle') frontal,
-  // jamás espejado; su sábana tampoco.
+  // 11. APAGÓN: VELAS CONTRA JOSÉ — adaptación de Lit Potato /
+  // Candlelight (diseño aprobado por Jose, 2026-11-14). Reemplaza
+  // POR COMPLETO al minijuego anterior del apagón («¿Fantasma o
+  // disfraz?»): de él no queda nada — ni la escena, ni sus flags
+  // (fantasmas, ruta paranormal, daño), ni sus textos.
+  // LA CASA ENTERA queda a oscuras, con 26 velas apagadas repartidas
+  // por las 5 habitaciones. El jugador y JOSÉ (el rival, no Pollito)
+  // corren prendiendo velas: mantener ESPACIO junto a una vela la
+  // prende tras ~0,6 s de canalización (anillo de progreso; moverse
+  // o soltar la tecla lo cancela). Junto a una vela DE JOSÉ, ESPACIO
+  // sostenido la SOPLA (~0,9 s) y queda apagada para cualquiera.
+  // Llamas distinguibles de un vistazo: la del jugador es cálida
+  // (ámbar) y la de José es verdosa. Cada vela prendida ilumina su
+  // rincón (decal de resplandor + las 6 luces puntuales más cercanas
+  // a la cámara; el shader admite 8 puntos en total).
+  // PARPADEOS: cada 10–15 s la luz VUELVE 1,5–2,5 s (con aviso previo
+  // de 1 s e ícono de alerta propio): la casa se ilumina entera, las
+  // velas apagadas destellan como pista de dónde quedan y, al
+  // cortarse, la sobretensión apaga el 25% de las velas prendidas
+  // (al azar, de ambos). El parpadeo no pausa a nadie.
+  // CUARTO DE XIMENA: es jugable (su puerta queda abierta durante el
+  // minijuego y se restaura al terminar) y está marcado como zona
+  // sensible (ícono de luna sobre su cama): prender ahí toma más
+  // tiempo (multiplicador según el Sigilo del personaje), porque
+  // hay que hacerlo en silencio, junto a ella dormida.
+  // REGLA DE SOPLADO DE JOSÉ (justa y documentada): José solo sopla
+  // velas del jugador si va PERDIENDO (menos velas prendidas que el
+  // jugador), con probabilidad 0,55 por decisión; si ya no quedan
+  // velas apagadas, sopla siempre que no vaya ganando. Yendo ganando
+  // jamás sopla: prefiere prender las suyas. Su objetivo es siempre
+  // la vela (apagada o del jugador) más cercana: "la que le queda de
+  // camino". Prende en 0,85 s y sopla en 1,1 s (el jugador: 0,6/0,9).
+  // DURACIÓN: 75 s. Al final vuelve la luz y gana quien tenga MÁS
+  // velas prendidas en ese instante → win/tie/lose.
+  // SALIDAS (done): { win, candlesPlayer, candlesJose,
+  // blownByPlayer, blownByJose, surges, score } — el mapeo a los
+  // efectos del evento y a S.flags.apagon vive en MG.apagon.resolve
+  // (game.js). HUD sin emoticones: marcador con velas dibujadas por
+  // código e íconos propios (trofeo/empate/alerta/luna).
   // =========================================================
-  const BO_STAGES = [{ x: 468, z: 118 }, { x: 655, z: 102 }, { x: 850, z: 130 }, { x: 540, z: 230 }, { x: 782, z: 220 }];
-  const BO_WINDOWS = [6, 5, 3.5];
-  const BO_ENTER = 1.15, BO_REVEAL = 1.7;
-  const BO_REPAIR = ['Recuperaron un fusible', 'Apareció una batería', 'Ubicaron el tablero eléctrico', 'Salió la linterna buena', 'Recuperaron el destornillador perdido', 'Falsa alarma descartada: tiempo ganado'];
-  const BO_DROPS = ['control', 'flores', 'velas', 'ovillo', 'bolsas'];
-  let boGhostCv = null; const boSheetCache = {}; let boMiniSheetCv = null;
-  function ghostCanvasArt() {
-    if (boGhostCv) return boGhostCv;
-    const cv = document.createElement('canvas'); cv.width = 96; cv.height = 112; cv._scale = 0.42;
+  const CANDLE_SPOTS = [
+    // cocina (6)
+    { x: 80, z: 56, y: 40, room: 'cocina' }, { x: 200, z: 56, y: 40, room: 'cocina' },
+    { x: 140, z: 202, y: 34, room: 'cocina' }, { x: 228, z: 142, y: 34, room: 'cocina' },
+    { x: 70, z: 235, y: 0, room: 'cocina' }, { x: 290, z: 110, y: 0, room: 'cocina' },
+    // sala (9)
+    { x: 400, z: 52, y: 88, room: 'sala' }, { x: 610, z: 55, y: 26, room: 'sala' }, { x: 665, z: 55, y: 26, room: 'sala' },
+    { x: 620, z: 124, y: 16, room: 'sala' }, { x: 655, z: 124, y: 16, room: 'sala' },
+    { x: 840, z: 222, y: 34, room: 'sala' }, { x: 900, z: 222, y: 34, room: 'sala' },
+    { x: 798, z: 90, y: 0, room: 'sala' }, { x: 734, z: 135, y: 28, room: 'sala' },
+    // cuarto de los roomies (5)
+    { x: 260, z: 330, y: 36, room: 'cuarto' }, { x: 305, z: 330, y: 36, room: 'cuarto' },
+    { x: 280, z: 530, y: 48, room: 'cuarto' }, { x: 185, z: 470, y: 0, room: 'cuarto' }, { x: 95, z: 520, y: 0, room: 'cuarto' },
+    // pasillo (3)
+    { x: 395, z: 318, y: 27, room: 'pasillo' }, { x: 370, z: 545, y: 28, room: 'pasillo' }, { x: 520, z: 470, y: 0, room: 'pasillo' },
+    // cuarto de Ximena (3): zona sensible, prender toma más tiempo
+    { x: 839, z: 346, y: 24, room: 'xroom' }, { x: 720, z: 330, y: 36, room: 'xroom' }, { x: 790, z: 500, y: 0, room: 'xroom' },
+  ];
+  const CANDLE_TIME = 75;                    // duración de la ronda (s)
+  const CANDLE_LIGHT_T = 0.6, CANDLE_BLOW_T = 0.9;   // canalización del jugador
+  const JOSE_LIGHT_T = 0.85, JOSE_BLOW_T = 1.1;      // canalización de José
+  let candleBody = null; const flameCvs = {};
+  function candleBodyCv() {
+    if (candleBody) return candleBody;
+    const cv = document.createElement('canvas'); cv.width = 26; cv.height = 38; cv._scale = 0.42;
     const x = cv.getContext('2d');
-    const grd = x.createLinearGradient(0, 6, 0, 106);
-    grd.addColorStop(0, 'rgba(235,242,255,.96)'); grd.addColorStop(1, 'rgba(168,186,255,.88)');
-    x.beginPath();
-    x.moveTo(16, 104);
-    x.quadraticCurveTo(10, 40, 30, 18); x.quadraticCurveTo(48, 2, 66, 18); x.quadraticCurveTo(86, 40, 80, 104);
-    for (let i = 1; i <= 4; i++) { const px = 80 - i * 16; x.quadraticCurveTo(px + 8, 96 + (i % 2 ? 10 : 2), px, 104); }
-    x.closePath(); x.fillStyle = grd; x.fill();
-    x.strokeStyle = 'rgba(255,255,255,.85)'; x.lineWidth = 2; x.stroke();
-    x.fillStyle = '#2c2a4a'; // ojos huecos y boca "o": terror de utilería, más tierno que miedo
-    x.beginPath(); x.ellipse(36, 46, 5.5, 8, 0, 0, 6.3); x.fill();
-    x.beginPath(); x.ellipse(60, 46, 5.5, 8, 0, 0, 6.3); x.fill();
-    x.beginPath(); x.ellipse(48, 62, 4, 5.5, 0, 0, 6.3); x.fill();
-    x.fillStyle = 'rgba(240,140,190,.4)';
-    x.beginPath(); x.ellipse(26, 60, 6, 4, 0, 0, 6.3); x.fill();
-    x.beginPath(); x.ellipse(70, 60, 6, 4, 0, 0, 6.3); x.fill();
-    boGhostCv = cv; return cv;
+    x.fillStyle = '#8a6a4f'; x.fillRect(2, 33, 22, 3);                       // platito
+    x.fillStyle = '#a88262'; x.fillRect(4, 31.5, 18, 2);
+    x.fillStyle = '#f4efe2'; x.fillRect(8, 12, 10, 20);                      // cuerpo de cera
+    x.fillStyle = '#e8dfc8'; x.fillRect(8, 12, 3, 20);
+    x.fillStyle = '#fbf7ec'; x.fillRect(9, 10, 8, 4); x.fillRect(15, 10, 3, 8); x.fillRect(10, 10, 2.5, 6); // cera derretida
+    x.fillStyle = '#3a3230'; x.fillRect(12.2, 6.5, 1.6, 4);                  // mecha
+    candleBody = cv; return cv;
   }
-  // Sábana de disfraz para un personaje: cúpula que sigue su silueta con
-  // el dobladillo SOBRE los zapatos (los zapatos visibles son LA pista) y
-  // agujeros para los ojos recortados a la altura de los ojos detectados
-  // del frame idle de su hoja definida.
-  function sheetCanvasFor(id) {
-    if (boSheetCache[id]) return boSheetCache[id];
-    const meta = Sp.META.chars[id];
-    const cv = document.createElement('canvas'); cv.width = meta.fw; cv.height = meta.fh; cv._scale = meta.scale;
+  function flameCv(owner) {
+    if (flameCvs[owner]) return flameCvs[owner];
+    const cv = document.createElement('canvas'); cv.width = 16; cv.height = 22; cv._scale = 0.42;
     const x = cv.getContext('2d');
-    const cx = meta.fw / 2, top = Math.max(4, meta.top - 10), hem = meta.base - 14, wT = meta.fw * 0.26, wB = meta.fw * 0.40;
-    x.beginPath();
-    x.moveTo(cx - wB, hem);
-    x.quadraticCurveTo(cx - wB - 4, top + (hem - top) * 0.45, cx - wT, top + 16);
-    x.quadraticCurveTo(cx - wT, top - 6, cx, top - 6);
-    x.quadraticCurveTo(cx + wT, top - 6, cx + wT, top + 16);
-    x.quadraticCurveTo(cx + wB + 4, top + (hem - top) * 0.45, cx + wB, hem);
-    for (let i = 1; i <= 6; i++) { const px = cx + wB - (i * 2 * wB) / 6, mx = cx + wB - ((i - 0.5) * 2 * wB) / 6; x.quadraticCurveTo(mx, hem + (i % 2 ? 7 : -2), px, hem); }
-    x.closePath(); x.fillStyle = '#f3efe3'; x.fill();
-    x.strokeStyle = 'rgba(110,100,80,.5)'; x.lineWidth = 2; x.stroke();
-    x.fillStyle = 'rgba(120,110,90,.18)'; x.fillRect(cx - wB * 0.7, hem - 16, wB * 1.4, 10); // desgaste inferior
-    const es = (meta.eyes || {})[meta.anims.idle[0]];
-    if (es && es.length) {
-      x.globalCompositeOperation = 'destination-out';
-      es.forEach((e) => { x.beginPath(); x.ellipse(e.x, e.y + 3, Math.max(5, e.r * 0.72), Math.max(4, e.r * 0.55), 0, 0, 6.3); x.fill(); });
-      x.globalCompositeOperation = 'source-over';
-    }
-    boSheetCache[id] = cv; return cv;
+    const col = owner === 'p' ? '#ffa03c' : '#3fe0b0', core = owner === 'p' ? '#fff3c4' : '#d8fff2';
+    x.fillStyle = col;
+    x.beginPath(); x.moveTo(8, 0.5);
+    x.quadraticCurveTo(13.5, 9, 12, 14.5); x.quadraticCurveTo(10.8, 20, 8, 20.5);
+    x.quadraticCurveTo(5.2, 20, 4, 14.5); x.quadraticCurveTo(2.5, 9, 8, 0.5);
+    x.fill();
+    x.fillStyle = core; x.beginPath(); x.ellipse(8, 14.5, 2.6, 4.2, 0, 0, 6.3); x.fill();
+    flameCvs[owner] = cv; return cv;
   }
-  function miniSheetCanvas() {
-    if (boMiniSheetCv) return boMiniSheetCv;
-    const cv = document.createElement('canvas'); cv.width = 150; cv.height = 150; cv._scale = 0.25;
-    const x = cv.getContext('2d');
-    x.beginPath();
-    x.moveTo(28, 112);
-    x.quadraticCurveTo(24, 52, 48, 30); x.quadraticCurveTo(75, 12, 102, 30); x.quadraticCurveTo(126, 52, 122, 112);
-    for (let i = 1; i <= 4; i++) { const px = 122 - i * 23.5; x.quadraticCurveTo(px + 11.75, 112 + (i % 2 ? 6 : -2), px, 112); }
-    x.closePath(); x.fillStyle = '#f3efe3'; x.fill();
-    x.strokeStyle = 'rgba(110,100,80,.5)'; x.lineWidth = 2.5; x.stroke();
-    boMiniSheetCv = cv; return cv;
+  // Vela miniatura 2D para el HUD (marcador): cuerpo crema y, si está
+  // prendida, la llama del color de su dueño; apagada, solo la mecha.
+  function candleGlyph(c, x, y, s, owner) {
+    c.fillStyle = '#f4efe2'; c.fillRect(x - s * 0.16, y - s * 0.1, s * 0.32, s * 0.55);
+    c.fillStyle = '#d9c9a8'; c.fillRect(x - s * 0.22, y + s * 0.42, s * 0.44, s * 0.08);
+    if (owner) {
+      c.fillStyle = owner === 'p' ? '#ffa03c' : '#3fe0b0';
+      c.beginPath(); c.ellipse(x, y - s * 0.28, s * 0.13, s * 0.22, 0, 0, 6.3); c.fill();
+      c.fillStyle = '#fff6d8'; c.beginPath(); c.ellipse(x, y - s * 0.22, s * 0.06, s * 0.1, 0, 0, 6.3); c.fill();
+    } else { c.fillStyle = '#8a8296'; c.fillRect(x - 0.75, y - s * 0.2, 1.5, s * 0.12); }
   }
-  function buildBoLineup() {
-    const chars = shuffle(['natalia', 'itzel', 'alan', 'majo', 'saulo', 'fatima', 'samantha', 'jose'].slice());
-    const kinds = shuffle(['ghost', 'ghost', 'ghost', 'ghost', 'person', 'person', 'person', 'person']);
-    const lineup = kinds.map((k, i) => (k === 'person' ? { kind: 'person', charId: chars[i] } : { kind: 'ghost' }));
-    if (lineup[0].kind !== 'person') { const j = lineup.findIndex((f) => f.kind === 'person'); [lineup[0], lineup[j]] = [lineup[j], lineup[0]]; } // la 1ª aparición es un disfraz: la lectura más fácil
-    const xiAt = 3 + ((Math.random() * 3) | 0); // 3..5: nunca en la fase 1
-    lineup.splice(xiAt, 0, { kind: 'ximena' });
-    const cand = [4, 5, 6, 7].filter((i) => Math.abs(i - xiAt) >= 2);
-    lineup.splice(cand[(Math.random() * cand.length) | 0], 0, { kind: 'pollito' });
-    return lineup;
-  }
-  class BlackoutGame {
+  class CandleGame {
     constructor(who, done) {
-      this.who = who; this.done = done; this.isBlackout = true;
-      this.p = new Actor(who, 655, 258); this.p.dir = 'up';
-      this.cam = { x: 655, y: 0, z: 165, dist: 700, pitch: 0.88, fov: 34 };
-      this.lineup = buildBoLineup();
-      this.round = 0; this.phase = 1; this.st = 'intro'; this.stT = 3.4; this.T = 0;
-      this.repair = 0; this.risk = 0; this.score = 0; this.correct = 0; this.errors = 0;
-      this.ghosts = 0; this.fakes = 0; this.decoDamage = 0;
-      this.pollitoEvt = false; this.sleepwalkerFound = false; this.lightsBack = false;
-      this.fig = null; this.lastRes = null; this.repLine = ''; this.banner = null; this.decoy = null;
-      this.obsT = 0; this.obsWin = BO_WINDOWS[0]; this.specReady = false;
-      this.result = null; this.doneFired = false;
+      this.who = who; this.done = done; this.isCandles = true;
+      this.p = new Actor(who, 520, 230); fixSpawn(this.p);
+      this.jose = new Actor('jose', 500, 470); fixSpawn(this.jose);
+      this.speed = speedOf(who);
+      const jf = G.S.flags && G.S.flags.jose;
+      this.joseSpeed = 118 * (jf === 'aliado' ? 0.9 : jf === 'desconfia' ? 1.07 : 1);
+      this.joseActive = true; // gancho para la prueba de humo: permite congelar a José y aislar la mecánica del jugador
+      // En el cuarto de Ximena se prende con cuidado: la canalización
+      // tarda más, y el Sigilo del personaje lo compensa en parte.
+      this.xroomMult = Math.max(1.15, 1.7 - stat(who, 'sigilo') * 0.06);
+      this.candles = CANDLE_SPOTS.map((s, i) => ({ ...s, i, owner: null }));
+      this.cam = { x: this.p.x, y: 0, z: this.p.y, dist: 560, pitch: 0.78, fov: 34 };
+      this.st = 'intro'; this.stT = 3.6; this.T = 0;
+      this.timeLeft = CANDLE_TIME;
+      this.chan = null; this.near = null;
+      this.jState = 'seek'; this.jTarget = null; this.jKind = 'light'; this.jT = 0; this.jNeed = 0; this.jThink = 0.5;
+      this.blownP = 0; this.blownJ = 0; this.surges = 0;
+      this.surgeState = 'idle'; this.surgeT = 0; this.surgeDur = 0; this.surgeK = 0; this.nextSurge = 11;
+      this.msg = null; this.result = null; this.doneFired = false;
+      // El cuarto de Ximena es jugable: su puerta queda abierta durante
+      // el minijuego y se restaura a su estado anterior al terminar.
+      this.prevDoor = W.xDoorOpen; W.xDoorOpen = true;
     }
-    startRound(n) {
-      this.round = n; this.phase = n <= 2 ? 1 : n <= 6 ? 2 : 3;
-      const stage = BO_STAGES[n % BO_STAGES.length], fromLeft = Math.random() < 0.5;
-      const f = (this.fig = { ...this.lineup[n], stageX: stage.x + rnd(-14, 14), stageZ: stage.z + rnd(-8, 8), x: 0, z: 0, bubble: null, caption: null, stumbleT: 0, dropped: false, dropItem: null, vanishOff: 0, vanishT: 0, phaseT: 0, clues: [] });
-      f.z = f.stageZ; f.fromX = fromLeft ? 358 : 952; f.x = f.fromX;
-      f.answerKey = f.kind === 'ghost' ? 'ghost' : f.kind === 'person' ? 'person' : 'special';
-      f.clues = this.buildClues(f);
-      this.st = 'enter'; this.stT = BO_ENTER; this.obsT = 0; this.specReady = false;
-      G.input.flush();
+    say(text, color, secs) { this.msg = { text, c: color || '#fff', t: secs || 1.4 }; }
+    counts() { let p = 0, j = 0; for (const c of this.candles) { if (c.owner === 'p') p++; else if (c.owner === 'j') j++; } return { p, j }; }
+    nearCandle(a, maxD) {
+      let best = null, bd = maxD || 36;
+      for (const c of this.candles) { const d = Math.hypot(a.x - c.x, a.y - c.z); if (d < bd) { bd = d; best = c; } }
+      return best;
     }
-    buildClues(f) {
-      const P = this.phase, C = [];
-      if (f.kind === 'ghost') {
-        C.push({ at: P === 1 ? 0.45 : P === 2 ? 0.55 : 0.6, type: 'phase' });
-        if (P >= 2) C.push({ at: 0.82, type: 'vanish' });
-      } else if (f.kind === 'person') {
-        if (P === 1) { C.push({ at: 0.3, type: 'stumble' }); C.push({ at: 0.62, type: 'drop' }); }
-        else C.push({ at: P === 2 ? 0.5 : 0.65, type: Math.random() < 0.5 ? 'stumble' : 'drop' });
-      } else if (f.kind === 'ximena') { C.push({ at: 0.18, type: 'murmur', text: '…mi guardia…' }); C.push({ at: 0.55, type: 'murmur', text: '…zzz… anatomía…' }); }
-      else if (f.kind === 'pollito') C.push({ at: 0.5, type: 'meow' });
-      return C;
-    }
-    passiveCaption() {
-      const f = this.fig; if (!f || this.phase !== 1) return;
-      if (f.kind === 'ghost') f.caption = { text: 'Flota sobre el piso… y no proyecta sombra.', t: 2.6 };
-      else if (f.kind === 'person') f.caption = { text: 'Se le ven los zapatos bajo la sábana. Y tiene sombra.', t: 2.6 };
-    }
-    answer(kind) {
-      if (this.st !== 'observe' || !this.fig) return;
-      if (kind === 'special' && !this.specReady) return; // la opción especial aparece a los 1,2 s en las apariciones especiales
-      this.resolveRound(kind);
-    }
-    resolveRound(kind) {
-      const f = this.fig, ok = kind !== null && kind === f.answerKey;
-      let gain = 0;
-      if (ok) {
-        this.correct++; gain = f.answerKey === 'special' ? 12 : 16;
-        this.repair = Math.min(100, this.repair + gain);
-        this.score += 100 + (this.phase === 3 ? 25 : 0);
-        if (f.kind === 'ghost') this.ghosts++;
-        else if (f.kind === 'person') this.fakes++;
-        else if (f.kind === 'ximena') { this.sleepwalkerFound = true; this.risk = Math.max(0, this.risk - 3); }
-        else if (f.kind === 'pollito') this.pollitoEvt = true;
-        this.repLine = BO_REPAIR[(this.correct - 1) % BO_REPAIR.length];
-        G.sfx('ok');
-        if (f.kind === 'ghost') W.puff(f.x, f.z, 6, true);
-      } else {
-        this.errors++; this.score = Math.max(0, this.score - 30);
-        this.risk = Math.min(10, this.risk + (kind === null ? 1 : f.kind === 'ximena' ? 4 : 2));
-        if (kind !== null) G.addNoise(f.kind === 'ximena' ? 5 : 3);
-        if (this.phase >= 2 && kind !== null && f.kind !== 'ximena' && this.decoDamage < 3 && Math.random() < 0.5) this.decoDamage++;
-        G.sfx('bad');
+    // --- Jugador: canalización con ESPACIO sostenido ----------------
+    updatePlayer(dt) {
+      const p = this.p, ax = G.input.axis();
+      const near = this.nearCandle(p, 36);
+      const target = near && near.owner !== 'p' ? near : null;
+      // la canalización se cancela al moverse, soltar la tecla o
+      // cambiar de vela objetivo (hay que observar el anillo entero)
+      if (this.chan && (this.chan.c !== target || !G.input.held('action') || ax.x || ax.y)) { this.chan = null; p.frameOverride = null; }
+      if (!this.chan && target && G.input.held('action') && !ax.x && !ax.y) {
+        const kind = target.owner === 'j' ? 'blow' : 'light';
+        this.chan = { c: target, kind, t: 0, need: kind === 'blow' ? CANDLE_BLOW_T : CANDLE_LIGHT_T * (target.room === 'xroom' ? this.xroomMult : 1) };
       }
-      if (!this.lightsBack && this.repair >= 100) { this.lightsBack = true; this.banner = { text: '¡LA LUZ VOLVIÓ! …pero siguen apareciendo figuras. A asegurar la casa.', t: 2.6 }; G.sfx('party'); }
-      this.lastRes = { ok, kind, gain, line: this.revealLine(f, kind, ok) };
-      this.st = 'reveal'; this.stT = BO_REVEAL;
+      if (this.chan) {
+        p.walk(0, 0, 0, dt); p.frameOverride = 'act';
+        const dx = this.chan.c.x - p.x, dy = this.chan.c.z - p.y;
+        if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left'; else p.dir = dy > 0 ? 'down' : 'up';
+        if ((this.chan.t += dt) >= this.chan.need) {
+          const { c, kind } = this.chan;
+          if (kind === 'light') { c.owner = 'p'; G.sfx('ok'); W.puff(c.x, c.z, 3, true); p.hop(90); }
+          else { c.owner = null; this.blownP++; G.sfx('pick'); W.puff(c.x, c.z, 4); this.say('¡Soplaste una vela de José!', '#7dff8a', 1.1); }
+          this.chan = null; p.frameOverride = null;
+        }
+      } else p.walk(ax.x, ax.y, this.speed, dt);
+      this.near = target;
     }
-    revealLine(f, kind, ok) {
-      if (kind === null) return 'La figura se esfumó antes del veredicto. ¿Fantasma? ¿Roomie veloz? Nadie lo sabrá nunca.';
-      if (f.kind === 'ghost') return ok ? 'Atravesó la maceta, la pared y dos leyes de la física. El grupo decide no hablar nunca de esto.' : 'Dijiste "persona"… y la figura se desvaneció ATRAVESANDO el piso. Silencio incómodo en la sala.';
-      if (f.kind === 'person') return ok ? (f.charId === 'jose' ? '¡Era JOSÉ con una sábana! Dice que "venía a ayudar". Nadie le cree.' : `¡Era ${G.CHARS[f.charId].name} bajo la sábana! Disfraz de emergencia nivel: tendedero.`) : `No era un fantasma: era ${G.CHARS[f.charId].name}, que ahora exige disculpas formales por escrito.`;
-      if (f.kind === 'ximena') return ok ? '¡Es Ximena, SONÁMBULA! La guían de vuelta a su cama en silencio total. Uf.' : '¡Era Ximena sonámbula! Casi la despiertan del susto: solo murmuró algo y siguió, con el sueño más ligero.';
-      return ok ? '¡Era POLLITO bajo una sábana! El caos tiene cuatro patas, bigotes y cero vergüenza.' : 'No era eso: era Pollito. Se va ofendido, arrastrando la sábana como una capa.';
+    // --- José: IA rival por las rutas de la casa --------------------
+    pickJoseTarget() {
+      const j = this.jose, { p: cp, j: cj } = this.counts();
+      const unlit = this.candles.filter((c) => c.owner === null);
+      const mine = this.candles.filter((c) => c.owner === 'p');
+      let kind = 'light', pool = unlit;
+      // REGLA DE SOPLADO (ver cabecera): solo si va perdiendo (55%), o
+      // si ya no quedan velas apagadas y no va ganando. Ganando, jamás.
+      if (mine.length && ((cp > cj && (Math.random() < 0.55 || !unlit.length)) || (!unlit.length && cp >= cj))) { kind = 'blow'; pool = mine; }
+      if (!pool.length) { this.jTarget = null; return; }
+      let best = null, bd = 1e9;
+      for (const c of pool) { const d = Math.hypot(j.x - c.x, j.y - c.z); if (d < bd) { bd = d; best = c; } }
+      this.jTarget = best; this.jKind = kind;
+      // la vela puede estar SOBRE un mueble: José se para en el piso
+      // libre más cercano a su ancla, no encima del mueble
+      const stand = W.nearestFree(best.x, best.z + 14);
+      j.goTo(stand[0], stand[1], this.joseSpeed);
+    }
+    updateJose(dt) {
+      const j = this.jose;
+      if (this.jState === 'chan') {
+        j.moving = false; j.vx = j.vy = 0; j.frameOverride = 'act';
+        const c = this.jTarget, valid = c && (this.jKind === 'light' ? c.owner === null : c.owner === 'p');
+        if (!valid) { this.jState = 'seek'; this.jTarget = null; this.jThink = 0.2; j.frameOverride = null; return; }
+        if ((this.jT += dt) >= this.jNeed) {
+          if (this.jKind === 'light') { c.owner = 'j'; G.sfx('msg'); }
+          else { c.owner = null; this.blownJ++; this.say('¡José sopló una de tus velas!', '#ff6b7a', 1.2); G.sfx('bad'); }
+          W.puff(c.x, c.z, 3);
+          this.jState = 'seek'; this.jTarget = null; this.jThink = rnd(0.2, 0.45); j.frameOverride = null;
+        }
+        return;
+      }
+      j.frameOverride = null;
+      if (this.jTarget) {
+        const c = this.jTarget, valid = this.jKind === 'light' ? c.owner === null : c.owner === 'p';
+        if (!valid) { this.jTarget = null; j.route = null; }
+        else if (Math.hypot(j.x - c.x, j.y - c.z) < 36) {
+          j.route = null; j.moving = false; j.vx = j.vy = 0;
+          const dx = c.x - j.x, dy = c.z - j.y;
+          if (Math.abs(dx) > Math.abs(dy)) j.dir = dx > 0 ? 'right' : 'left'; else j.dir = dy > 0 ? 'down' : 'up';
+          this.jState = 'chan'; this.jT = 0; this.jNeed = this.jKind === 'light' ? JOSE_LIGHT_T : JOSE_BLOW_T;
+          return;
+        }
+      }
+      if (!this.jTarget) {
+        if ((this.jThink -= dt) > 0) { j.follow(dt); return; }
+        this.pickJoseTarget();
+        if (!this.jTarget) { this.jThink = 0.6; j.follow(dt); return; }
+      }
+      j.follow(dt);
+    }
+    // --- Parpadeos de luz -------------------------------------------
+    updateSurge(dt) {
+      const target = this.st === 'over' ? 1 : this.surgeState === 'on' ? 1 : this.surgeState === 'warn' ? 0.22 : 0;
+      this.surgeK += (target - this.surgeK) * Math.min(1, dt * (this.surgeState === 'on' || this.st === 'over' ? 9 : 5));
+      if (this.st !== 'play') return;
+      if (this.surgeState === 'warn') { if ((this.surgeT -= dt) <= 0) { this.surgeState = 'on'; this.surgeT = this.surgeDur; G.sfx('bell'); } }
+      else if (this.surgeState === 'on') { if ((this.surgeT -= dt) <= 0) { this.surgeState = 'idle'; this.blowout(); this.nextSurge = this.T + rnd(10, 15); } }
+      else if (this.T >= this.nextSurge && this.timeLeft > 6) { this.surgeState = 'warn'; this.surgeT = 1.0; this.surgeDur = rnd(1.5, 2.5); G.sfx('msg'); }
+    }
+    forceSurge() { if (this.surgeState === 'idle') { this.surgeState = 'warn'; this.surgeT = 0.01; this.surgeDur = 1.5; } } // gancho para la prueba de humo
+    blowout() {
+      const lit = shuffle(this.candles.filter((c) => c.owner));
+      const n = Math.round(lit.length * 0.25);
+      for (let i = 0; i < n; i++) { lit[i].owner = null; W.puff(lit[i].x, lit[i].z, 3); }
+      this.surges++;
+      if (n) { this.say(`¡La sobretensión apagó ${n} vela${n > 1 ? 's' : ''}!`, '#ffd23f', 1.6); G.sfx('door'); }
     }
     finish() {
-      const fixed = this.repair >= 100;
-      const win = fixed && this.errors === 0 ? 'win' : fixed ? 'tie' : 'lose';
-      const awakeRisk = Math.max(-1, Math.min(2, (this.risk >= 7 ? 2 : this.risk >= 4 ? 1 : 0) - (this.sleepwalkerFound ? 1 : 0)));
-      this.result = { win, blackoutFixed: fixed, score: this.score + this.repair + (win === 'win' ? 200 : 0), repair: this.repair, awakeRisk, ghostsConfirmed: this.ghosts, fakeGhostsFound: this.fakes, pollitoEvent: this.pollitoEvt, sleepwalkerFound: this.sleepwalkerFound, decoDamage: this.decoDamage, correct: this.correct, errors: this.errors };
-      this.st = 'over'; this.stT = 3.2;
-      G.sfx(fixed ? 'party' : 'bad');
+      const { p, j } = this.counts();
+      const win = p > j ? 'win' : j > p ? 'lose' : 'tie';
+      this.result = { win, candlesPlayer: p, candlesJose: j, blownByPlayer: this.blownP, blownByJose: this.blownJ, surges: this.surges, score: p * 100 + this.blownP * 40 };
+      this.st = 'over'; this.stT = 3.4;
+      this.chan = null; this.p.frameOverride = null; this.jose.frameOverride = null;
+      W.xDoorOpen = this.prevDoor; // la puerta de Ximena vuelve a su estado
+      G.sfx(win === 'win' ? 'party' : win === 'tie' ? 'ok' : 'bad');
     }
     update(dt) {
-      this.T += dt; W.updateFx(dt); this.p.update(dt);
-      if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
-      if (this.decoy) { this.decoy.x += 62 * dt; if (this.decoy.x > 950) this.decoy = null; }
-      const f = this.fig;
-      if (f) {
-        if (f.bubble && (f.bubble.t -= dt) <= 0) f.bubble = null;
-        if (f.caption && (f.caption.t -= dt) <= 0) f.caption = null;
-        if (f.stumbleT > 0) f.stumbleT -= dt;
-        if (f.phaseT) f.phaseT += dt;
-        if (f.vanishT > 0) { f.vanishT -= dt; if (f.vanishT <= 0) f.vanishOff = 9; }
-      }
-      if (this.st === 'intro') { G.input.flush(); if ((this.stT -= dt) <= 0) this.startRound(0); }
-      else if (this.st === 'enter') {
-        G.input.flush();
-        const prog = 1 - this.stT / BO_ENTER, e = 1 - Math.pow(1 - prog, 2);
-        f.x = f.fromX + (f.stageX - f.fromX) * e;
-        if ((this.stT -= dt) <= 0) { f.x = f.stageX; this.st = 'observe'; this.obsT = 0; this.obsWin = BO_WINDOWS[this.phase - 1]; this.passiveCaption(); }
-      } else if (this.st === 'observe') {
-        this.obsT += dt;
-        this.specReady = (f.kind === 'ximena' || f.kind === 'pollito') && this.obsT >= 1.2;
-        for (const cl of f.clues) {
-          if (cl.fired || this.obsT < cl.at * this.obsWin) continue;
-          cl.fired = true;
-          if (cl.type === 'stumble') { f.stumbleT = 0.5; f.bubble = { text: '¡ay!', t: 0.9 }; W.puff(f.x, f.z, 2); G.sfx('door'); if (this.phase === 1) f.caption = { text: '¡Tropezó con la maceta! Los fantasmas no tropiezan.', t: 2.4 }; }
-          else if (cl.type === 'drop') { f.dropped = true; f.dropItem = BO_DROPS[(Math.random() * BO_DROPS.length) | 0]; G.sfx('pick'); if (this.phase === 1) f.caption = { text: 'Se le cayó algo al piso. Muy poco fantasmal.', t: 2.4 }; }
-          else if (cl.type === 'phase') { f.phaseT = 0.0001; if (this.phase === 1) f.caption = { text: '¡Atravesó la maceta como si no existiera!', t: 2.4 }; }
-          else if (cl.type === 'vanish') { f.vanishT = 0.42; G.sfx('msg'); }
-          else if (cl.type === 'murmur') f.bubble = { text: cl.text, t: 1.6 };
-          else if (cl.type === 'meow') { f.bubble = { text: '¡miau!', t: 1.2 }; G.sfx('meow'); }
-        }
-        if (this.phase === 3 && !this.decoy && Math.random() < dt * 0.22) this.decoy = { x: 366, z: 96 };
-        if (G.input.hit('left')) this.answer('ghost');
-        else if (G.input.hit('right')) this.answer('person');
-        else if (G.input.hit('up')) this.answer('special');
-        if (this.st === 'observe' && this.obsT >= this.obsWin) this.resolveRound(null);
-      } else if (this.st === 'reveal') {
-        if (f && f.kind === 'ximena') f.x += 10 * dt; // sigue su camino, dormida
-        if ((this.stT -= dt) <= 0) { const n = this.round + 1; if (n >= this.lineup.length) this.finish(); else this.startRound(n); }
-      } else if (this.st === 'over') {
+      this.T += dt; W.updateFx(dt);
+      const p = this.p, j = this.jose;
+      p.update(dt); j.update(dt);
+      if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
+      W.camLerp(this.cam, p.x, p.y - 20, dt, 5);
+      this.updateSurge(dt);
+      if (this.st === 'intro') { G.input.flush(); p.walk(0, 0, 0, dt); j.moving = false; if ((this.stT -= dt) <= 0) this.st = 'play'; return; }
+      if (this.st === 'over') {
+        p.walk(0, 0, 0, dt); j.moving = false; j.vx = j.vy = 0;
         if ((this.stT -= dt) <= 0 && !this.doneFired) { this.doneFired = true; this.done(this.result); }
+        return;
+      }
+      this.timeLeft -= dt;
+      this.updatePlayer(dt);
+      if (this.joseActive) this.updateJose(dt); else { j.moving = false; j.vx = j.vy = 0; }
+      if (this.timeLeft <= 0) this.finish();
+    }
+    drawCandles(t) {
+      for (const cd of this.candles) {
+        if (cd.y === 0) R.shadow(cd.x, cd.z, 6, 0.5);
+        R.sprite(candleBodyCv(), cd.x, cd.y, cd.z, { feet: 0, lit: cd.owner ? 0.55 : 0.12 });
+        if (cd.owner) {
+          const fl = 1 + Math.sin(t * 11 + cd.i * 1.7) * 0.15;
+          R.flat(R.glowTex, cd.x, cd.y + 2, cd.z, 40 * fl, { tint: cd.owner === 'p' ? [1, 0.62, 0.22] : [0.25, 0.95, 0.65], alpha: 0.34 });
+          R.sprite(flameCv(cd.owner), cd.x, cd.y + 13 + Math.sin(t * 9 + cd.i) * 0.8, cd.z, { feet: 0, lit: 0.9 });
+        } else if (this.surgeState === 'on') {
+          // con la luz de vuelta, las velas AÚN APAGADAS destellan un
+          // instante: la pista visual de dónde quedan por prender
+          R.flat(R.glowTex, cd.x, cd.y + 2, cd.z, 22 + Math.sin(t * 14 + cd.i * 2.3) * 6, { tint: [0.9, 0.9, 1], alpha: 0.3 });
+        }
       }
     }
-    drawFigure(t) {
-      const f = this.fig; if (!f || this.st === 'intro' || this.st === 'over') return;
-      const T = this.T, reveal = this.st === 'reveal', pr = reveal ? 1 - this.stT / BO_REVEAL : 0;
-      let rx = f.x, elev = 0, alpha = 1;
-      if (f.stumbleT > 0) rx += Math.sin(T * 70) * 2 * f.stumbleT;
-      if (f.kind !== 'ghost') R.shadow(rx, f.z, f.kind === 'pollito' ? 9 : 13, 0.72); // el fantasma NO tiene sombra: es LA pista
-      if (f.kind === 'ghost') {
-        if (f.vanishT > 0) return; // se desvaneció por un instante (pista de fase 2+)
-        elev = 13 + Math.sin(T * 2.2) * 3.5 + f.vanishOff;
-        alpha = 0.86 + Math.sin(T * 7) * 0.09; // brillo antinatural
-        if (f.phaseT) { const p = Math.min(1, f.phaseT / 1.15), s = Math.sin(p * Math.PI); rx += s * (f.stageX + 48 - f.x); alpha *= 1 - 0.5 * s; } // atraviesa la maceta y vuelve
-        if (reveal) { elev += pr * 30; alpha *= 1 - pr * 0.75; }
-        R.sprite(ghostCanvasArt(), rx, elev, f.z, { feet: 0, alpha, lit: 0.15 });
-      } else if (f.kind === 'person') {
-        if (reveal) {
-          R.sprite(Sp.frame(f.charId, 'idle', 0, { expr: this.lastRes && this.lastRes.ok ? 'surprised' : 'angry' }), rx, 0, f.z, { feet: 2.6 });
-          R.sprite(sheetCanvasFor(f.charId), rx, 0.5 - 30 * pr, f.z + 0.3, { feet: 2.6, alpha: 0.94 * (1 - pr * 0.85) }); // la sábana cae
-        } else {
-          R.sprite(Sp.frame(f.charId, 'walk_down', Math.floor(T * 2.4)), rx, 0, f.z, { feet: 2.6 });
-          const breath = this.phase >= 2 ? 1 + Math.sin(T * 2.9) * 0.018 : 1; // la sábana respira (pista de fase 2+)
-          R.sprite(sheetCanvasFor(f.charId), rx, 0.5, f.z + 0.3, { feet: 2.6, alpha: 0.94, sy: breath });
-        }
-      } else if (f.kind === 'ximena') {
-        R.sprite(Sp.frame('ximena', 'act', Math.floor(T * 1.7) % 2, { expr: 'sleep' }), rx, 0, f.z, { feet: 2.6, roll: Math.sin(T * 1.3) * 0.03 });
-      } else if (f.kind === 'pollito') {
-        if (reveal) {
-          R.sprite(Sp.catAnim('pounce', pr < 0.5 ? 0 : 1), rx, Math.sin(pr * Math.PI) * 9, f.z, { feet: 2.5 });
-          R.sprite(miniSheetCanvas(), rx, 3 - 26 * pr, f.z + 0.3, { feet: 2, alpha: 0.95 * (1 - pr * 0.8) });
-        } else {
-          R.sprite(Sp.catAnim('idle', Math.floor(T * 0.9) % 2), rx, 0, f.z, { feet: 2.5 }); // frontal, jamás espejado
-          R.sprite(miniSheetCanvas(), rx, 3, f.z + 0.3, { feet: 2, alpha: 0.95 });
-        }
-      }
-      if (f.dropped) R.sprite(Sp.item(f.dropItem), f.x + 12, 1.5, f.z + 9, { feet: 4, sx: 0.9, sy: 0.9 });
-      if (this.decoy) R.sprite(Sp.frame('saulo', 'walk_right', Math.floor(T * 6) % 4), this.decoy.x, 0, this.decoy.z, { feet: 2.6, alpha: 0.32, lit: 0.1 }); // sombra de ambiente (fase 3): no se responde
+    ringOver(c, cd, frac, color) {
+      const q = R.project(cd.x, cd.y + 27, cd.z); if (!q.ok) return;
+      c.strokeStyle = 'rgba(20,16,30,.85)'; c.lineWidth = 4.5;
+      c.beginPath(); c.arc(q.x, q.y, 9, 0, 6.3); c.stroke();
+      c.strokeStyle = color; c.lineWidth = 3;
+      c.beginPath(); c.arc(q.x, q.y, 9, -Math.PI / 2, -Math.PI / 2 + Math.max(0, Math.min(1, frac)) * 6.283); c.stroke();
     }
     hudDraw(c, t) {
-      const f = this.fig;
-      panel(c, 8, 8, 150, 40);
-      G.text(c, `APARICIÓN ${Math.min(this.round + 1, 10)}/10`, 83, 20, { size: 10, stroke: false });
-      G.text(c, ['FASE 1 · APRENDIENDO', 'FASE 2 · CONFUSIÓN', 'FASE 3 · CAOS'][this.phase - 1], 83, 36, { size: 7.5, color: '#b9b0d6', stroke: false });
-      panel(c, 196, 8, 248, 40);
-      G.text(c, 'REPARACIÓN ELÉCTRICA', 320, 18, { size: 8, color: '#ffd23f', stroke: false });
-      c.fillStyle = '#1c1826'; c.fillRect(226, 26, 188, 10);
-      c.fillStyle = this.repair >= 100 ? '#7dff8a' : '#ffd23f'; c.fillRect(226, 26, 188 * (this.repair / 100), 10);
-      G.text(c, this.repair + '%', 320, 31, { size: 9, color: '#1c1826', stroke: false });
-      panel(c, 482, 8, 150, 40, '#40243a');
-      G.icon(c, 'luna', 499, 18, 13); // el riesgo de despertar lleva el ícono propio de luna
-      G.text(c, 'RIESGO DE DESPERTAR', 566, 18, { size: 7.5, color: '#ffb0b8', stroke: false });
-      c.fillStyle = '#1c1826'; c.fillRect(497, 25, 120, 8);
-      c.fillStyle = '#ff6b7a'; c.fillRect(497, 25, 120 * (this.risk / 10), 8);
-      G.text(c, 'Puntos: ' + this.score, 557, 41, { size: 8, stroke: false });
-      if (this.banner) G.text(c, this.banner.text, 320, 66, { size: 10.5, color: '#7dff8a' });
-      if (this.st === 'observe') {
-        c.fillStyle = '#1c1826'; c.fillRect(196, 52, 248, 4);
-        c.fillStyle = this.obsWin - this.obsT < 1.2 ? '#ff6b7a' : '#7fd3ff'; c.fillRect(196, 52, 248 * Math.max(0, 1 - this.obsT / this.obsWin), 4);
-        const by = 320, btn = (x, w, label, col) => { panel(c, x, by, w, 30, col); G.text(c, label, x + w / 2 + 12, by + 15, { size: 11, stroke: false }); };
-        btn(56, 190, '← FANTASMA', '#2c3a5e');
-        c.drawImage(ghostCanvasArt(), 66, by + 2, 24, 26); // el fantasma PROPIO del juego junto a su botón
-        btn(394, 190, 'DISFRAZADO →', '#3a2c50');
-        c.drawImage(miniSheetCanvas(), 404, by + 3, 24, 24); // la sábana en miniatura junto al suyo
-        if (this.specReady) { btn(248, 144, '↑ ESPECIAL', '#5e2c46'); G.icon(c, 'luna', 266, by + 15, 17); }
-        else if (f && (f.kind === 'ximena' || f.kind === 'pollito')) G.text(c, '…algo no cuadra con esta figura…', 320, by + 15, { size: 9, color: '#ffd23f' });
+      const { p: cp, j: cj } = this.counts();
+      // marcador: jugador a la izquierda, José a la derecha (velas
+      // dibujadas por código junto a cada conteo, sin emoticones)
+      panel(c, 8, 8, 168, 40);
+      face(c, this.who, 12, 12, 32);
+      G.text(c, G.CHARS[this.who].name.toUpperCase(), 50, 19, { size: 8, color: G.CHARS[this.who].color, align: 'left', stroke: false });
+      candleGlyph(c, 58, 31, 15, 'p');
+      G.text(c, 'VELAS ' + cp, 68, 35, { size: 12, align: 'left', stroke: false });
+      panel(c, 464, 8, 168, 40, '#40243a');
+      face(c, 'jose', 596, 12, 32);
+      G.text(c, 'JEFE · JOSÉ', 590, 19, { size: 8, color: G.CHARS.jose.color, align: 'right', stroke: false });
+      candleGlyph(c, 582, 31, 15, 'j');
+      G.text(c, 'VELAS ' + cj, 572, 35, { size: 12, align: 'right', stroke: false });
+      // centro: título, reloj y quién va ganando (ícono propio)
+      panel(c, 236, 8, 168, 40);
+      G.text(c, 'VELAS EN EL APAGÓN', 320, 18, { size: 8, color: '#ffd23f', stroke: false });
+      if (this.st === 'play') {
+        const u = this.timeLeft <= 10;
+        G.text(c, Math.max(0, Math.ceil(this.timeLeft)) + 's', 320, 35, { size: 12 + (u ? Math.sin(t * 12) * 1.2 : 0), color: u ? '#ff6b7a' : '#fff', stroke: false });
+        const lead = cp - cj;
+        G.icon(c, lead === 0 ? 'empate' : 'trofeo', 320, 62, 17);
+        G.text(c, lead > 0 ? '¡VAS GANANDO!' : lead < 0 ? 'JOSÉ VA GANANDO' : '¡EMPATE DE VELAS!', 320, 76, { size: 9.5, color: lead > 0 ? '#7dff8a' : lead < 0 ? '#ff6b7a' : '#ffd23f', stroke: false });
       }
-      if (f && this.st !== 'over' && this.st !== 'intro') {
-        if (f.bubble) { const q = R.project(f.x, 104, f.z); if (q.ok) G.bubble(c, f.bubble.text, q.x, q.y - 4); }
-        if (f.caption) { const q = R.project(f.x, -4, f.z + 16); if (q.ok) G.text(c, f.caption.text, q.x, q.y + 14, { size: 9, color: '#ffe9a8' }); }
+      // aviso del parpadeo (ícono de alerta propio)
+      if (this.surgeState === 'warn' && this.st === 'play') { if (Math.sin(t * 16) > -0.3) { G.icon(c, 'alerta', 320, 96, 16); G.text(c, '¡LA LUZ ESTÁ POR VOLVER UN INSTANTE!', 320, 110, { size: 9.5, color: '#ffd23f', stroke: false }); } }
+      else if (this.surgeState === 'on' && this.st === 'play') { G.icon(c, 'alerta', 320, 96, 16); G.text(c, '¡VOLVIÓ LA LUZ! Al cortarse, la sobretensión apaga velas…', 320, 110, { size: 9.5, color: '#ffe9a8', stroke: false }); }
+      if (this.msg && this.st === 'play') G.text(c, this.msg.text, 320, 322, { size: 12, color: this.msg.c, lw: 4 });
+      // cuarto de Ximena: zona sensible marcada (luna + Zzz sobre su cama)
+      const qb = R.project(905, 66, 400);
+      if (qb.ok && this.st !== 'over') {
+        G.icon(c, 'luna', qb.x, qb.y - 6, 15);
+        G.text(c, 'Zzz', qb.x + 13, qb.y - 14 + Math.sin(t * 1.6) * 2, { size: 9, color: '#b9b0d6', stroke: false });
+        G.text(c, 'Ximena duerme: prende con cuidado', qb.x, qb.y + 8, { size: 7.5, color: '#b9b0d6', stroke: false });
       }
-      if (this.st === 'reveal' && this.lastRes) {
-        const r = this.lastRes, k = Math.min(1, (BO_REVEAL - this.stT) * 5);
-        c.fillStyle = `rgba(20,16,30,${0.55 * k})`; c.fillRect(0, 124, 640, 96);
-        G.text(c, r.kind === null ? 'SE ESFUMÓ…' : r.ok ? '¡CORRECTO!' : '¡UPS!', 320, 152, { size: 24 + k * 6, color: r.ok ? '#7dff8a' : '#ff6b7a', lw: 7 });
-        wrap(c, r.line, 150, 180, 340, 9.5, '#fff');
-        if (r.ok) G.text(c, `REPARACIÓN +${r.gain}% — ${this.repLine}`, 320, 208, { size: 9.5, color: '#ffd23f', stroke: false });
+      // prompts y anillos de canalización
+      if (this.st === 'play') {
+        if (this.chan) {
+          this.ringOver(c, this.chan.c, this.chan.t / this.chan.need, this.chan.kind === 'light' ? '#ffa03c' : '#7fd3ff');
+          const h = this.p.head(24);
+          G.prompt(c, this.chan.kind === 'light' ? 'prendiendo…' : 'soplando…', h.x, h.y);
+        } else if (this.near) {
+          const h = this.p.head(24);
+          G.prompt(c, this.near.owner === 'j' ? 'ESPACIO (mantén): soplar la de José' : 'ESPACIO (mantén): prender vela', h.x, h.y);
+        }
+        if (this.jState === 'chan' && this.jTarget) this.ringOver(c, this.jTarget, this.jT / this.jNeed, '#3fe0b0');
       }
       if (this.st === 'intro') {
-        c.fillStyle = 'rgba(12,10,20,.82)'; c.fillRect(66, 66, 508, 216);
-        panel(c, 66, 66, 508, 216, '#221c33');
-        G.icon(c, 'luna', 96, 92, 26);
-        G.text(c, 'APAGÓN: ¿FANTASMA O DISFRAZ?', 330, 92, { size: 16, color: '#ffd23f' });
-        wrap(c, 'Aparecen figuras en la oscuridad. OBSERVA sus pistas antes de responder:', 96, 122, 448, 10, '#fff');
-        c.drawImage(ghostCanvasArt(), 68, 140, 20, 22);
-        wrap(c, 'Fantasma de verdad: FLOTA, no tiene sombra y atraviesa las cosas.', 96, 150, 448, 10, '#bfe0ff');
-        c.drawImage(miniSheetCanvas(), 68, 168, 20, 20);
-        wrap(c, 'Persona disfrazada: se le ven los zapatos bajo la sábana, tropieza y se le caen cosas.', 96, 178, 448, 10, '#ffd9ec');
-        G.icon(c, 'luna', 78, 206, 17);
-        wrap(c, 'Y ojo: no todo es fantasma ni disfraz… Ximena sonámbula y Pollito andan sueltos.', 96, 214, 448, 10, '#ffe9a8');
-        G.text(c, '← FANTASMA · → DISFRAZADO · ↑ ESPECIAL', 320, 252, { size: 11.5, color: '#7dff8a', stroke: false });
-        G.text(c, 'Cada acierto repara la luz. Cada error… hace ruido al lado de Ximena.', 320, 268, { size: 8.5, color: '#b9b0d6', stroke: false });
+        c.fillStyle = 'rgba(12,10,20,.84)'; c.fillRect(66, 60, 508, 228);
+        panel(c, 66, 60, 508, 228, '#221c33');
+        c.drawImage(candleBodyCv(), 88, 76, 15, 22); c.drawImage(flameCv('p'), 92, 66, 9, 13);
+        G.text(c, 'APAGÓN: VELAS CONTRA JOSÉ', 330, 86, { size: 16, color: '#ffd23f' });
+        wrap(c, 'Se fue la luz y José apareció con fósforos: jura que SU ambiente a velas salva la fiesta. Corre por TODA la casa y prende más velas que él antes de que vuelva la luz (75 s).', 96, 116, 448, 10, '#fff');
+        wrap(c, 'Mantén ESPACIO junto a una vela para prenderla (0,6 s; si te mueves, se cancela). Junto a una vela de José (llama verdosa), mantén ESPACIO para soplarla (0,9 s).', 96, 152, 448, 10, '#bfe0ff');
+        wrap(c, 'José sopla las tuyas solo si va perdiendo. Y ojo con los parpadeos: cuando la luz vuelve un instante, la sobretensión apaga 1 de cada 4 velas prendidas.', 96, 188, 448, 10, '#ffd9ec');
+        wrap(c, 'En el cuarto de Ximena (duerme ahí) prende con cuidado: la canalización toma más tiempo.', 96, 224, 448, 10, '#ffe9a8');
+        G.text(c, 'Gana quien tenga más velas prendidas cuando vuelva la luz', 320, 262, { size: 10.5, color: '#7dff8a', stroke: false });
       }
       if (this.st === 'over' && this.result) {
         const r = this.result;
-        c.fillStyle = 'rgba(12,10,20,.82)'; c.fillRect(86, 78, 468, 204);
-        panel(c, 86, 78, 468, 204, '#221c33');
-        G.icon(c, r.win === 'win' ? 'trofeo' : r.win === 'tie' ? 'empate' : 'derrota', 320, 96, 30); // ícono propio del resultado
-        G.text(c, r.blackoutFixed ? '¡VOLVIÓ LA LUZ!' : 'LA LUZ VOLVIÓ TITILANDO…', 320, 122, { size: 18, color: r.blackoutFixed ? '#7dff8a' : '#ffd23f' });
-        G.text(c, r.win === 'win' ? 'Reparación perfecta: ni un grito, ni un rasguño.' : r.win === 'tie' ? 'La luz volvió, con alguna historia que contar.' : 'No se reparó del todo… pero la noche sigue.', 320, 142, { size: 10, stroke: false });
-        G.text(c, `Reparación ${r.repair}% · Aciertos ${r.correct}/10 · Errores ${r.errors}`, 320, 162, { size: 10.5, stroke: false });
-        G.text(c, `Fantasmas confirmados: ${r.ghostsConfirmed} · Disfraces descubiertos: ${r.fakeGhostsFound}`, 320, 180, { size: 10, stroke: false });
-        G.text(c, `${r.sleepwalkerFound ? 'Ximena sonámbula: encontrada y devuelta a su cama' : 'Ximena siguió durmiendo (eso creemos)'}`, 320, 198, { size: 9.5, stroke: false });
-        G.text(c, `${r.decoDamage ? `Decoración dañada en el caos: ${r.decoDamage}` : 'Decoración intacta'}${r.pollitoEvent ? ' · Pollito apareció con una sábana' : ''}`, 320, 216, { size: 9.5, stroke: false });
-        G.text(c, 'PUNTOS: ' + r.score, 320, 248, { size: 15, color: '#ffd23f', stroke: false });
+        c.fillStyle = 'rgba(12,10,20,.84)'; c.fillRect(86, 74, 468, 208);
+        panel(c, 86, 74, 468, 208, '#221c33');
+        G.icon(c, r.win === 'win' ? 'trofeo' : r.win === 'tie' ? 'empate' : 'derrota', 320, 94, 30);
+        G.text(c, '¡VOLVIÓ LA LUZ!', 320, 122, { size: 19, color: '#7dff8a' });
+        G.text(c, r.win === 'win' ? 'Tu ambiente a velas ganó: la casa quedó de revista.' : r.win === 'tie' ? 'Velas iguales: la casa quedó mitad y mitad.' : 'José y su ambiente ganaron. Y no para de contarlo.', 320, 144, { size: 10.5, stroke: false });
+        candleGlyph(c, 238, 158, 17, 'p');
+        G.text(c, `Tus velas: ${r.candlesPlayer}`, 252, 166, { size: 11.5, align: 'left', stroke: false });
+        candleGlyph(c, 238, 182, 17, 'j');
+        G.text(c, `Velas de José: ${r.candlesJose}`, 252, 190, { size: 11.5, align: 'left', stroke: false });
+        G.text(c, `Soplaste ${r.blownByPlayer} de José · Él sopló ${r.blownByJose} tuyas · Parpadeos: ${r.surges}`, 320, 216, { size: 9.5, stroke: false });
+        G.text(c, 'PUNTOS: ' + r.score, 320, 246, { size: 15, color: '#ffd23f', stroke: false });
       }
     }
     draw(dt) {
-      const f = this.fig, P = this.p;
-      const flick = this.phase === 3 && !this.lightsBack && this.st !== 'over' ? 0.82 + Math.random() * 0.36 : 1;
-      const pts = [
-        { x: P.x, y: 54, z: P.y, r: 205, c: [0.52, 0.48, 0.36] },   // la luz del celular del jugador
-        { x: 655, y: 66, z: 120, r: 175 * flick, c: [0.15, 0.19, 0.33] }, // luna por la ventana (parpadea en fase 3)
-      ];
-      if (f && this.st !== 'over' && this.st !== 'intro') pts.push({ x: f.x, y: 52, z: f.z, r: 150, c: this.lightsBack ? [0.42, 0.4, 0.34] : [0.3, 0.33, 0.48] });
+      const p = this.p;
+      let k = this.surgeK;
+      if (this.surgeState === 'warn') k *= 0.75 + Math.random() * 0.5; // tembleque de aviso
+      else if (this.surgeState === 'on') k *= 0.93 + Math.random() * 0.07;
+      const amb = [0.12 + 0.5 * k, 0.11 + 0.47 * k, 0.19 + 0.36 * k];
+      const sun = [0.02 + 0.38 * k, 0.02 + 0.36 * k, 0.05 + 0.28 * k];
+      // luces puntuales: la luna por la ventana + las velas prendidas
+      // más cercanas a la cámara (el shader admite 8 puntos en total)
+      const lit = this.candles.filter((cd) => cd.owner);
+      lit.sort((a, b) => Math.hypot(a.x - this.cam.x, a.z - this.cam.z) - Math.hypot(b.x - this.cam.x, b.z - this.cam.z));
+      const pts = [{ x: 825, y: 66, z: 80, r: 260, c: [0.14 + 0.2 * k, 0.17 + 0.2 * k, 0.3 + 0.15 * k] }];
+      for (const cd of lit.slice(0, 6)) pts.push({ x: cd.x, y: cd.y + 16, z: cd.z, r: 130, c: cd.owner === 'p' ? [0.5, 0.34, 0.13] : [0.13, 0.42, 0.3] });
       W.render({
-        cam: this.cam, dt, actors: [P], focusZ: 0,
-        light: { amb: this.lightsBack ? [0.3, 0.29, 0.36] : [0.11, 0.11, 0.19], sun: [0.03, 0.03, 0.06], sky: '#07060c', points: pts },
-        boxes: (mb) => { if (f && this.st !== 'over' && this.st !== 'intro') { mb.cyl(f.stageX + 48, 0, f.stageZ + 4, 9, 17, '#b5653a', { r2: 12 }); mb.cyl(f.stageX + 48, 17, f.stageZ + 4, 15, 13, '#3f8f4f', { r2: 5 }); } }, // la maceta con la que tropiezan (y que los fantasmas atraviesan)
-        sprites: (t) => this.drawFigure(t),
+        cam: this.cam, dt, actors: [p, this.jose], focusZ: p.y,
+        light: { amb, sun, sky: k > 0.5 ? '#231c2e' : '#07060c', points: pts },
+        sprites: (t) => this.drawCandles(t),
         over: (c, t) => this.hudDraw(c, t),
       });
     }
   }
 
-  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, buildDecoSet, BlackoutGame };
+  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, buildDecoSet, CandleGame };
 })();

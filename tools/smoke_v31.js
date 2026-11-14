@@ -8,10 +8,12 @@
    B) Decoración Express: colocación atómica (acierto coloca,
       fallo NO consume, ESPACIO lejos no hace nada, Pollito puede
       tirar lo colgado y se puede volver a colgar).
-   C) Apagón: práctica directa — partida perfecta, partida con
-      todo mal y partida mixta: salidas del diseño de Jose.
-   D) Apagón en la historia: runEvent('apagon') completo con
-      respuestas correctas: efectos y flags aplicados.
+   C) Apagón: velas contra José — reparto y alcance de las 26
+      velas, prender/soplar con canalización (moverse cancela),
+      la IA de José (prende; sopla solo si va perdiendo), el
+      parpadeo que apaga el 25% y el resultado por conteo final.
+   D) Apagón en la historia: runEvent('apagon') completo jugando
+      a las velas: efectos y flags NUEVAS (sin fantasmas).
    F) Salto de repisas: escalada infinita — generación procedural
       sin fin y determinista, set dibujado acotado a cualquier
       altura, caída de una repisa al fallar (la máxima no se
@@ -224,63 +226,114 @@ const tick = () => new Promise((r) => setImmediate(r));
   hang(d0, true);
   check('lo tirado se puede volver a colgar', d0.placed === true);
 
-  // ================= C) Apagón: práctica directa ===========================
-  console.log('\nC) Apagón: ¿fantasma o disfraz? — práctica');
-  if (!Sc.BlackoutGame) { check('existe la escena BlackoutGame', false); }
+  // ================= C) Apagón: velas — práctica directa ==================
+  console.log('\nC) Apagón: velas contra José — práctica directa');
+  if (!Sc.CandleGame) { check('existe la escena CandleGame', false); }
   else {
-    const drive = (scene, strategy) => {
-      let it = 0;
-      while (!scene.doneFired && it++ < 8000) {
-        scene.update(0.05);
-        if (scene.st === 'observe') { const k = strategy(scene); if (k) scene.answer(k); }
-      }
-      return scene.result;
-    };
-    const mk = () => new Sc.BlackoutGame('natalia', () => {});
-    const probe = mk();
-    const kinds = probe.lineup.map((f) => f.kind);
-    check('lineup: 10 apariciones (4 fantasmas, 4 disfraces, 2 especiales)',
-      probe.lineup.length === 10 && kinds.filter((k) => k === 'ghost').length === 4 && kinds.filter((k) => k === 'person').length === 4 && kinds.filter((k) => k === 'ximena' || k === 'pollito').length === 2, kinds.join(','));
-    check('los especiales no salen en la fase 1 (rondas 1–3)', kinds.slice(0, 3).every((k) => k === 'ghost' || k === 'person'), kinds.join(','));
-
-    let lineupOk = true;
-    for (let i = 0; i < 200 && lineupOk; i++) {
-      const ks = mk().lineup.map((f) => f.kind);
-      lineupOk = ks.length === 10 && ks.filter((k) => k === 'ghost').length === 4 && ks.filter((k) => k === 'person').length === 4
-        && ks.slice(0, 3).every((k) => k === 'ghost' || k === 'person')
-        && ks.findIndex((k) => k === 'ximena') >= 3 && ks.findIndex((k) => k === 'pollito') >= 4;
-    }
-    check('200 alineaciones aleatorias: composición y especiales siempre válidos', lineupOk);
-
-    const perfect = drive(mk(), (sc) => sc.fig.answerKey);
-    check('partida perfecta: vuelve la luz (blackoutFixed)', perfect && perfect.blackoutFixed === true);
-    check('partida perfecta: resultado "win" (victoria perfecta)', perfect && perfect.win === 'win', perfect && perfect.win);
-    check('partida perfecta: salidas del diseño completas',
-      perfect && perfect.ghostsConfirmed === 4 && perfect.fakeGhostsFound === 4 && perfect.pollitoEvent === true && perfect.sleepwalkerFound === true && perfect.decoDamage === 0 && perfect.errors === 0 && typeof perfect.score === 'number' && typeof perfect.awakeRisk === 'number',
-      perfect && JSON.stringify(perfect));
-    check('partida perfecta: el riesgo de despertar no sube (awakeRisk ≤ 0)', perfect && perfect.awakeRisk <= 0, perfect && 'awakeRisk=' + perfect.awakeRisk);
-
-    const wrong = drive(mk(), (sc) => (sc.fig.answerKey === 'ghost' ? 'person' : 'ghost'));
-    check('todo mal: NO hay game over, pero la luz no se repara (lose, fixed=false)', wrong && wrong.win === 'lose' && wrong.blackoutFixed === false, wrong && wrong.win);
-    check('todo mal: reparación 0 y riesgo de despertar alto (awakeRisk ≥ 1)', wrong && wrong.repair === 0 && wrong.awakeRisk >= 1, wrong && `repair=${wrong.repair} risk=${wrong.awakeRisk}`);
-
-    const mixed = drive(mk(), (sc) => (sc.round % 2 === 0 ? sc.fig.answerKey : sc.fig.answerKey === 'ghost' ? 'person' : 'ghost'));
-    check('partida mixta: termina con resultado válido y score > 0', mixed && ['win', 'tie', 'lose'].includes(mixed.win) && mixed.score > 0, mixed && mixed.win);
-
+    check('el minijuego viejo desapareció: ya no hay BlackoutGame', !Sc.BlackoutGame);
     const ev = G.EVENTS.apagon;
-    check("el evento 'apagon' ahora es un minijuego (game: 'apagon')", ev && ev.type === 'minigame' && ev.game === 'apagon');
-    check('MG.apagon registrado con su escena', !!MG.apagon && MG.apagon.Scene() === Sc.BlackoutGame);
+    check("el evento 'apagon' sigue siendo minigame (game: 'apagon'), pero el jefe ahora es José", ev && ev.type === 'minigame' && ev.game === 'apagon' && ev.boss === 'jose');
+    check('MG.apagon registrado con la escena de velas', !!MG.apagon && MG.apagon.Scene() === Sc.CandleGame);
+
+    const toPlay = (s) => { let i = 0; while (s.st !== 'play' && i++ < 200) s.update(0.05); };
+    const step = (s, n) => { for (let i = 0; i < n; i++) s.update(0.05); };
+    const standOf = (cd) => W.nearestFree(cd.x, cd.z + 14);
+    // prender una vela con el jugador: teletransporte junto a ella y ESPACIO sostenido
+    const lightWith = (s, cd) => {
+      const st = standOf(cd); s.p.x = st[0]; s.p.y = st[1];
+      key('Space', true);
+      let i = 0; while (cd.owner !== 'p' && i++ < 60) s.update(0.05);
+      key('Space', false);
+      return cd.owner === 'p';
+    };
+
+    // --- Reparto de velas ---
+    const sc0 = new Sc.CandleGame('natalia', () => {});
+    check('hay 26 velas repartidas por TODAS las habitaciones (cocina, sala, cuarto, pasillo y el de Ximena)',
+      sc0.candles.length === 26 && ['cocina', 'sala', 'cuarto', 'pasillo', 'xroom'].every((r) => sc0.candles.some((c) => c.room === r)),
+      'salas=' + [...new Set(sc0.candles.map((c) => c.room))].join(','));
+    const reachable = (cd) => { for (let dx = -36; dx <= 36; dx += 6) for (let dz = -36; dz <= 36; dz += 6) { if (Math.hypot(dx, dz) <= 36 && W.canStand(cd.x + dx, cd.z + dz)) return true; } return false; };
+    check('toda vela es alcanzable: existe piso libre a distancia de interacción (≤36 u) de su ancla', sc0.candles.every(reachable),
+      sc0.candles.filter((c) => !reachable(c)).map((c) => c.room + '@' + c.x + ',' + c.z).join(' '));
+    check('ninguna vela bloquea un umbral de puerta', sc0.candles.every((cd) => !W.OPEN.some((o) => cd.x > o.x - 6 && cd.x < o.x + o.w + 6 && cd.z > o.y - 6 && cd.z < o.y + o.h + 6)));
+
+    // --- Prender (canalización) y su cancelación al moverse ---
+    {
+      const s = new Sc.CandleGame('natalia', () => {}); s.joseActive = false; s.nextSurge = 1e9; toPlay(s);
+      const cd = s.candles.find((c) => c.room === 'cocina');
+      check('prender: mantener ESPACIO junto a una vela apagada la prende (dueño p, conteo 1)', lightWith(s, cd) && s.counts().p === 1);
+      const cd2 = s.candles.find((c) => c.room === 'sala');
+      const st = standOf(cd2); s.p.x = st[0]; s.p.y = st[1];
+      key('Space', true); step(s, 4); // 0,2 s de canalización (necesita 0,6)
+      key('ArrowRight', true); step(s, 2); key('ArrowRight', false); key('Space', false);
+      check('prender: moverse a mitad de la canalización la CANCELA (la vela sigue apagada)', cd2.owner === null && !s.chan);
+    }
+    // --- Soplar una vela de José ---
+    {
+      const s = new Sc.CandleGame('natalia', () => {}); s.joseActive = false; s.nextSurge = 1e9; toPlay(s);
+      const cd = s.candles[0]; cd.owner = 'j';
+      const st = standOf(cd); s.p.x = st[0]; s.p.y = st[1];
+      key('Space', true);
+      let i = 0; while (cd.owner !== null && i++ < 60) s.update(0.05);
+      key('Space', false);
+      check('soplar: mantener ESPACIO junto a una vela de José la apaga y cuenta el soplido', cd.owner === null && s.blownP === 1, 'blownP=' + s.blownP);
+    }
+    // --- José: prende solo; sopla SOLO si va perdiendo ---
+    {
+      const s = new Sc.CandleGame('natalia', () => {}); s.nextSurge = 1e9; toPlay(s);
+      let i = 0; while (s.counts().j === 0 && i++ < 600) s.update(0.05);
+      check('José IA: recorre la casa por las rutas y prende su primera vela sin ayuda', s.counts().j >= 1, 'velasJosé=' + s.counts().j);
+    }
+    {
+      const sw = new Sc.CandleGame('alan', () => {}); sw.nextSurge = 1e9; toPlay(sw);
+      sw.candles.slice(0, 4).forEach((c) => (c.owner = 'j')); sw.candles[5].owner = 'p'; // José gana 4-1
+      let blewWhileWinning = false;
+      for (let i = 0; i < 40; i++) { sw.pickJoseTarget(); if (sw.jKind === 'blow') blewWhileWinning = true; }
+      check('José IA: yendo GANANDO nunca elige soplar (siempre busca prender)', !blewWhileWinning && sw.jKind === 'light');
+      const sl = new Sc.CandleGame('alan', () => {}); sl.nextSurge = 1e9; toPlay(sl);
+      sl.candles.slice(0, 3).forEach((c) => (c.owner = 'p')); // el jugador gana 3-0
+      let choseBlow = false;
+      for (let i = 0; i < 60 && !choseBlow; i++) { sl.pickJoseTarget(); if (sl.jKind === 'blow' && sl.jTarget && sl.jTarget.owner === 'p') choseBlow = true; }
+      check('José IA: yendo PERDIENDO sí elige soplar una vela del jugador', choseBlow);
+    }
+    // --- Parpadeo: la sobretensión apaga el 25% de las prendidas ---
+    {
+      const s = new Sc.CandleGame('natalia', () => {}); s.joseActive = false; toPlay(s);
+      s.candles.slice(0, 8).forEach((c, i) => (c.owner = i % 2 ? 'j' : 'p')); // 8 prendidas (4 y 4)
+      s.forceSurge();
+      let i = 0; while (s.surges === 0 && i++ < 200) s.update(0.05);
+      const lit = s.candles.filter((c) => c.owner).length;
+      check('parpadeo: al cortarse la luz, la sobretensión apaga el 25% de las prendidas (8 → 6)', s.surges === 1 && lit === 6, `surges=${s.surges} prendidas=${lit}`);
+    }
+    // --- Resultado por conteo final de velas prendidas ---
+    const driveEnd = (setupFn) => {
+      let res = null;
+      const s = new Sc.CandleGame('natalia', (r) => { res = r; });
+      s.joseActive = false; s.nextSurge = 1e9; toPlay(s);
+      setupFn(s);
+      s.timeLeft = 0.05;
+      let i = 0; while (!res && i++ < 300) s.update(0.05);
+      return res;
+    };
+    const rWin = driveEnd((s) => { s.candles.slice(0, 5).forEach((c) => (c.owner = 'p')); s.candles[6].owner = 'j'; s.candles[7].owner = 'j'; });
+    check('resultado: más velas que José al volver la luz = win, con las salidas nuevas del diseño',
+      rWin && rWin.win === 'win' && rWin.candlesPlayer === 5 && rWin.candlesJose === 2 && typeof rWin.blownByPlayer === 'number' && typeof rWin.blownByJose === 'number' && typeof rWin.surges === 'number',
+      rWin && JSON.stringify(rWin));
+    const rTie = driveEnd((s) => { s.candles.slice(0, 3).forEach((c) => (c.owner = 'p')); s.candles.slice(4, 7).forEach((c) => (c.owner = 'j')); });
+    check('resultado: empate de velas prendidas = tie', rTie && rTie.win === 'tie' && rTie.candlesPlayer === 3 && rTie.candlesJose === 3, rTie && rTie.win);
+    const rLose = driveEnd((s) => { s.candles[0].owner = 'p'; s.candles.slice(2, 8).forEach((c) => (c.owner = 'j')); });
+    check('resultado: José con más velas prendidas = lose', rLose && rLose.win === 'lose' && rLose.candlesJose === 6, rLose && rLose.win);
   }
 
   // ================= D) Apagón en la historia ==============================
-  console.log('\nD) Apagón — flujo completo en la historia (runEvent)');
-  if (Sc.BlackoutGame) {
+  console.log('\nD) Apagón: velas — flujo completo en la historia (runEvent)');
+  if (Sc.CandleGame) {
     Object.assign(S, { player: 'natalia', phase: 'act2', inv: {}, flags: {}, sus: 5, sleep: 1, noise: 0, qBonus: 0, duels: [], done: {}, tired: null });
     G.home = new Sc.HomeScene();
     let settled = false;
     const p = G.debug.runEvent('apagon').then(() => { settled = true; }, (e) => { settled = true; console.log('  (error en runEvent: ' + e.message + ')'); });
     let it = 0;
-    while (!settled && it++ < 4000) {
+    while (!settled && it++ < 6000) {
       await tick();
       const actions = documentFake.querySelector('#actions');
       const card = actions && queryWithin(actions, '.card', true).find((b) => b.onclick && !b.disabled);
@@ -288,49 +341,59 @@ const tick = () => new Promise((r) => setImmediate(r));
       const mok = idRegistry.get('mok');
       if (mok && mok.onclick) { const f = mok.onclick; mok.onclick = null; f(); }
       const sc = G.scene;
-      if (sc && sc.isBlackout) { sc.update(0.05); if (sc.st === 'observe') sc.answer(sc.fig.answerKey); }
+      if (sc && sc.isCandles) {
+        // estrategia del conductor: ir a la vela apagada más cercana (o a
+        // soplar una de José si ya no quedan apagadas) y mantener ESPACIO
+        const pool = sc.candles.filter((c) => !c.owner);
+        const targets = pool.length ? pool : sc.candles.filter((c) => c.owner === 'j');
+        const cd = targets.sort((a, b) => Math.hypot(sc.p.x - a.x, sc.p.y - a.z) - Math.hypot(sc.p.x - b.x, sc.p.y - b.z))[0];
+        if (cd) { const st = W.nearestFree(cd.x, cd.z + 14); sc.p.x = st[0]; sc.p.y = st[1]; }
+        key('Space', true);
+        sc.update(0.05);
+      }
     }
+    key('Space', false);
     await p;
-    check('runEvent(apagon) se completa', settled && it < 4000, 'iteraciones=' + it);
+    check('runEvent(apagon) se completa', settled && it < 6000, 'iteraciones=' + it);
     check('el duelo quedó registrado en S.duels', S.duels.some((d) => d.game === 'apagon'), JSON.stringify(S.duels));
-    check('flags.apagon guardadas con el mapeo del diseño', !!S.flags.apagon && S.flags.apagon.fixed === true && S.flags.apagon.ghosts === 4 && S.flags.apagon.fakes === 4 && S.flags.apagon.sleepwalker === true, JSON.stringify(S.flags.apagon));
-    check('fantasmas confirmados → ruta paranormal abierta', S.flags.rutaParanormal === true);
-    check('la calidad de la fiesta recibió el bonus de victoria', S.qBonus > 0, 'qBonus=' + S.qBonus);
+    check('el resultado en la historia no fue derrota (la estrategia prende sin parar)', (S.duels.find((d) => d.game === 'apagon') || {}).win !== 'lose', JSON.stringify(S.duels));
+    check('flags.apagon guardadas con las salidas NUEVAS (velas y parpadeos, sin fantasmas)',
+      !!S.flags.apagon && typeof S.flags.apagon.candlesPlayer === 'number' && typeof S.flags.apagon.candlesJose === 'number' && typeof S.flags.apagon.surges === 'number' && !('ghosts' in S.flags.apagon) && !('fixed' in S.flags.apagon),
+      JSON.stringify(S.flags.apagon));
+    check('sin ruta paranormal: el juego de fantasmas ya no existe', !S.flags.rutaParanormal);
+    check('la calidad de la fiesta recibió el bonus de victoria/empate', S.qBonus > 0, 'qBonus=' + S.qBonus);
   }
 
   // ================= E) Dibujo: caminos de draw() sin excepciones ==========
-  console.log('\nE) Dibujo — draw() de Apagón (todas las figuras) y de DecoDuel');
-  if (Sc.BlackoutGame) {
+  console.log('\nE) Dibujo — draw() de Velas (intro, juego, canalización, parpadeo, final) y de DecoDuel');
+  if (Sc.CandleGame) {
     const realRender = W.render, realProject = G.R.project;
     const ctx2d = new FakeCtx();
     W.render = (opts) => { if (opts.boxes) opts.boxes(new G.R.MB(), 0); if (opts.sprites) opts.sprites(0); if (opts.over) opts.over(ctx2d, 0); }; // R.dyn no existe sin WebGL: se pasa una MB vacía
     G.R.project = () => ({ x: 320, y: 180, ok: true });
     try {
-      const sc = new Sc.BlackoutGame('natalia', () => {});
+      const sc = new Sc.CandleGame('natalia', () => {});
       sc.draw(0.016); // intro
-      const cases = [
-        [{ kind: 'ghost' }, 'ghost'],
-        [{ kind: 'person', charId: 'jose' }, 'persona disfrazada (José)'],
-        [{ kind: 'person', charId: 'natalia' }, 'persona disfrazada (Natalia)'],
-        [{ kind: 'ximena' }, 'Ximena sonámbula'],
-        [{ kind: 'pollito' }, 'Pollito con sábana'],
-      ];
-      for (const [figDef, label] of cases) {
-        sc.lineup = [figDef, ...sc.lineup.slice(1)];
-        sc.startRound(0); sc.st = 'observe'; sc.obsT = 2; sc.specReady = true;
-        sc.fig.clues.forEach((cl) => { cl.fired = true; if (cl.type === 'drop') { sc.fig.dropped = true; sc.fig.dropItem = 'control'; } if (cl.type === 'phase') sc.fig.phaseT = 0.5; });
-        sc.draw(0.016); // observación con pistas activas
-        sc.answer(sc.fig.answerKey); sc.draw(0.016); // reveal
-        check('draw sin errores: ' + label, true);
-      }
-      sc.repair = 100; sc.finish(); sc.draw(0.016); // resumen final
-      check('draw sin errores: resumen del apagón', true);
+      check('draw sin errores: intro de Velas', true);
+      sc.st = 'play';
+      sc.candles[0].owner = 'p'; sc.candles[1].owner = 'j'; // una vela prendida por cada uno
+      sc.draw(0.016);
+      check('draw sin errores: juego con velas prendidas de ambos (llamas ámbar y verdosa)', true);
+      sc.chan = { c: sc.candles[2], kind: 'light', t: 0.3, need: 0.6 };
+      sc.draw(0.016);
+      check('draw sin errores: canalización con anillo de progreso', true);
+      sc.chan = null; sc.surgeState = 'warn'; sc.draw(0.016);
+      check('draw sin errores: aviso de parpadeo (ícono de alerta)', true);
+      sc.surgeState = 'on'; sc.surgeK = 1; sc.draw(0.016);
+      check('draw sin errores: parpadeo con la luz de vuelta (velas apagadas destellando)', true);
+      sc.surgeState = 'idle'; sc.finish(); sc.draw(0.016); // panel final
+      check('draw sin errores: panel final de Velas (¡VOLVIÓ LA LUZ!)', true);
       const dd = new Sc.DecoDuel('natalia', () => {});
       dd.st = 'play'; G.S.deco[0].placed = true; dd.draw(0.016); // incluye la marca ✓ de zona colocada
       check('draw sin errores: DecoDuel con una zona colocada', true);
     } catch (e) {
       check('draw sin errores (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
-    } finally { W.render = realRender; G.R.project = realProject; }
+    } finally { W.render = realRender; G.R.project = realProject; W.xDoorOpen = false; }
   }
 
   // ================= F) Repisas: escalada infinita ========================

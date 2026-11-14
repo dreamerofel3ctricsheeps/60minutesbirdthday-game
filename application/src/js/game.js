@@ -232,7 +232,7 @@
     decoracion: 'Cuelga la decoración en su zona antes de que Pollito la tire.',
     pollito: 'Persigue al gato por la sala y recupera lo que robó.',
     mensajes: 'Duelo de tipeo: responde los mensajes antes que José.',
-    apagon: 'Apagón total: observa cada figura y decide si es un fantasma real o alguien disfrazado, mientras reparas la luz.',
+    apagon: 'Prende más velas que José por toda la casa antes de que vuelva la luz; ojo con los parpadeos, apagan velas.',
     pizza: 'Baja la pizza por la escalera cuidando el equilibrio.',
     sonambula: 'Llega hasta Ximena sonámbula antes que José.',
     memoria: 'Da vuelta las cajas y junta más parejas que José.',
@@ -254,7 +254,7 @@
   function duelListScreen(from) {
     return new Promise((res) => {
       const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = G.CHARS[ev.boss]; return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
-      menuShow(`<h2><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos — práctica</h2><p class="dim">Los duelos contra los jefes (y el apagón), directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
+      menuShow(`<h2><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos — práctica</h2><p class="dim">Los duelos contra los jefes, directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
       overlay.querySelectorAll('.duel').forEach((b) => (b.onclick = () => { G.sfx('pick'); res(b.dataset.id); }));
       $('#mback').onclick = () => { G.sfx('pick'); res('back'); };
     });
@@ -490,32 +490,22 @@
     pisoton: { stats: ['velocidad'], Scene: () => Sc.StompDuel, note: () => 'Velocidad para cambiar de cojín', setup() {} },
     azotea: { stats: ['velocidad'], Scene: () => Sc.DroneDuel, note: () => 'Velocidad lateral', setup() {} },
     apagon: {
-      stats: ['logica', 'sigilo'], Scene: () => Sc.BlackoutGame, note: () => 'Lógica para leer pistas · Sigilo para no despertarla', setup() {},
+      stats: ['velocidad', 'sigilo'], Scene: () => Sc.CandleGame, note: () => 'Velocidad para recorrer la casa · Sigilo: prender más rápido junto a Ximena', setup() {},
       async resolve(r, who) {
-        // MAPEO de las salidas del diseño de Jose a este resultado:
-        // BLACKOUT_FIXED → r.blackoutFixed · BLACKOUT_SCORE → r.score ·
-        // XIMENA_AWAKE_RISK → r.awakeRisk (delta del medidor global de
-        // sueño S.sleep) · GHOSTS_CONFIRMED → r.ghostsConfirmed ·
-        // FAKE_GHOSTS_FOUND → r.fakeGhostsFound · POLLITO_EVENT_TRIGGERED
-        // → r.pollitoEvent · XIMENA_SLEEPWALKER_FOUND → r.sleepwalkerFound
-        // · DECORATION_DAMAGE → r.decoDamage. Todo queda guardado en
-        // S.flags.apagon como gancho para eventos/WhatsApp/finales.
-        S.flags.apagon = { fixed: r.blackoutFixed, score: r.score, ghosts: r.ghostsConfirmed, fakes: r.fakeGhostsFound, pollito: r.pollitoEvent, sleepwalker: r.sleepwalkerFound, damage: r.decoDamage };
-        if (r.ghostsConfirmed > 0) S.flags.rutaParanormal = true; // gancho: la ruta paranormal queda abierta (sin confirmar nada, como pide el diseño)
+        // Salidas del minijuego de velas → S.flags.apagon (gancho para
+        // eventos/WhatsApp/finales): candlesPlayer, candlesJose,
+        // blownByPlayer, blownByJose, surges. El minijuego anterior del
+        // apagón («¿Fantasma o disfraz?») se eliminó por completo el
+        // 2026-11-14: ya no hay fantasmas confirmados, ni ruta
+        // paranormal, ni daño a la decoración desde este evento.
+        S.flags.apagon = { candlesPlayer: r.candlesPlayer, candlesJose: r.candlesJose, blownByPlayer: r.blownByPlayer, blownByJose: r.blownByJose, surges: r.surges };
         const posts = [];
-        if (r.blackoutFixed) posts.push({ who, text: '¡VOLVIÓ LA LUZ! Y sé exactamente cómo lo logramos. Bueno, casi.', mood: 'happy' });
-        else posts.push({ who: 'sistema', text: '💡 La luz volvió sola, titilando. Nadie logró arreglarla del todo.' }, { who, text: 'Si titila otra vez, yo no vi nada. Literalmente nada.', mood: 'surprised' });
-        if (r.sleepwalkerFound) posts.push({ who: 'itzel', text: 'Fun fact: una de las "apariciones" era XIMENA SONÁMBULA paseando por la sala. La devolvimos a su cama y ni se enteró.' });
-        if (r.pollitoEvent) posts.push({ who: 'fatima', text: 'Y sí: otra de las apariciones era Pollito con una sábana encima. POR SUPUESTO que era Pollito.' });
-        if (r.ghostsConfirmed > 0) posts.push({ who: 'saulo', text: `Conté ${r.ghostsConfirmed} aparición(es) que nadie pudo explicar. No pienso dormir nunca más. En esta casa no.` }, { who: 'majo', text: 'Era el viento, Saulo. …¿Era el viento?' });
-        if (r.decoDamage > 0) {
-          // consecuencia visible: parte de la decoración YA colgada se cae
-          const broken = S.deco.filter((d) => d.placed).slice(0, r.decoDamage);
-          broken.forEach((d) => (d.placed = false));
-          posts.push({ who: 'samantha', text: broken.length ? 'En el caos del apagón se cayó parte de la decoración que habíamos colgado. La sala quedó… rústica.' : 'En el caos casi rompemos la decoración. Casi.', mood: 'surprised' });
-        }
+        if (r.win === 'win') posts.push({ who, text: `¡GANAMOS EL APAGÓN! ${r.candlesPlayer} velas prendidas contra ${r.candlesJose} de José. La casa quedó de revista, a pura vela.`, mood: 'happy' }, { who: 'jose', text: 'Ok, ok. Buen ambiente. Pero conste que la idea de las velas fue mía.', direct: true });
+        else if (r.win === 'tie') posts.push({ who: 'majo', text: `Empate de velas: ${r.candlesPlayer} a ${r.candlesJose}. La casa quedó mitad romántica, mitad sospechosa.` }, { who: 'jose', text: 'Empate técnico. Mi ambiente era el bueno, pero empate al fin.', direct: true });
+        else posts.push({ who: 'jose', text: `El ambiente a velas lo salvé YO: ${r.candlesJose} velas contra ${r.candlesPlayer}. De nada, equipo.`, direct: true }, { who: 'itzel', text: 'José prendió más velas que nosotros y no va a callarse en toda la noche.', mood: 'angry' });
+        if (r.blownByPlayer + r.blownByJose >= 4) posts.push({ who: 'saulo', text: `Entre soplidos se apagaron ${r.blownByPlayer + r.blownByJose} velas. Hubo guerra de velas y nadie me avisó.` });
         await ui.postAll(posts);
-        apply({ quality: (r.win === 'win' ? 5 : r.win === 'tie' ? 2 : -4) - r.decoDamage * 2, noise: r.win === 'lose' ? 16 : r.win === 'tie' ? 6 : 0, sleep: r.awakeRisk }, who);
+        apply({ quality: r.win === 'win' ? 5 : r.win === 'tie' ? 2 : -4, noise: r.win === 'lose' ? 14 : r.win === 'tie' ? 6 : 0 }, who);
       },
     },
     mensajes: { stats: ['carisma'], Scene: () => Sc.MessageDuel, note: () => 'Más carisma = José escribe más lento', setup() {} },

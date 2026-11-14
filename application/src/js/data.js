@@ -148,21 +148,22 @@
     },
 
     apagon: {
-      // Antes era type 'assign' (mandar a un roomie con una tirada): desde
-      // 2026-11-14 es el minijuego de observación de Jose, «¿Fantasma o
-      // disfraz?» — ver Sc.BlackoutGame en scenes.js y el mapeo de salidas
-      // en MG.apagon.resolve (game.js).
-      title: 'Apagón: ¿fantasma o disfraz?', kind: 'Duelo', type: 'minigame', game: 'apagon', boss: 'pollito', view: 'sala', dark: true,
+      // Antes fue «¿Fantasma o disfraz?» (minijuego de observación);
+      // Jose lo reemplazó el 2026-11-14 por la adaptación de Lit
+      // Potato / Candlelight: competencia de velas contra José por
+      // toda la casa — ver Sc.CandleGame en scenes.js y el mapeo de
+      // salidas en MG.apagon.resolve (game.js).
+      title: 'Apagón: velas contra José', kind: 'Duelo', type: 'minigame', game: 'apagon', boss: 'jose', view: 'sala', dark: true,
       chat: [
         { who: 'sistema', text: '⚡ Se fue la luz en todo el departamento.' },
         { who: 'fatima', text: 'No veo nada. Acabo de abrazar el refrigerador pensando que era Saulo.' },
         { who: 'saulo', text: 'La oscuridad sólo revela lo que ya éramos.' },
-        { who: 'alan', text: 'Es la llave general. La caja de luz está cruzando la sala.' },
-        { who: 'fatima', text: 'Pregunta seria: ¿eso que se acaba de mover en la sala era… una persona?', mood: 'surprised' },
-        { who: 'majo', text: 'Sea lo que sea: para reparar la luz hay que cruzar la sala e identificar CADA figura que aparezca. Y sin gritar, que Ximena duerme ahí al lado.' },
+        { who: 'jose', text: 'Tranquilos: traje fósforos y un paquete de velas. MI ambiente a velas va a salvar esta fiesta.', direct: true },
+        { who: 'majo', text: '¿Perdón? Si alguien prende las velas de esta casa, somos nosotros. ¡A correr por toda la casa: quien tenga más velas prendidas cuando vuelva la luz, gana!' },
+        { who: 'itzel', text: 'Y sin hacer ruido, que Ximena duerme en su cuarto. Las velas de ahí, con cuidado.' },
       ],
-      intro: 'El departamento quedó a oscuras y empiezan a aparecer figuras con sábanas. Obsérvalas bien antes de responder: un fantasma de verdad FLOTA, no tiene sombra y atraviesa las cosas; una persona disfrazada se le ven los zapatos, tropieza y se le caen cosas. ← 👻 FANTASMA · → 🎭 PERSONA DISFRAZADA · ↑ 😴 PERSONAJE ESPECIAL cuando algo no cuadre (¿Ximena sonámbula? ¿Pollito?). Cada acierto repara la luz; cada error hace ruido.',
-      goal: 'Completa la REPARACIÓN ELÉCTRICA identificando las 10 apariciones, sin despertar a Ximena.',
+      intro: 'Toda la casa quedó a oscuras, con 26 velas apagadas repartidas por las habitaciones. Corre y mantén ESPACIO junto a una vela para prenderla (0,6 s; si te mueves, se cancela). Junto a una vela de José (llama verdosa), mantén ESPACIO para soplarla (0,9 s). José recorre la casa prendiendo las suyas… y sopla las tuyas si va perdiendo. Cada 10–15 s la luz parpadea y vuelve un instante: al cortarse, la sobretensión apaga 1 de cada 4 velas prendidas. En el cuarto de Ximena todo toma más tiempo: hay que prender en silencio.',
+      goal: 'Ten más velas prendidas que José cuando vuelva la luz (75 s).',
     },
 
     pollito: {
