@@ -446,7 +446,9 @@ const tick = () => new Promise((r) => setImmediate(r));
     {
       const d = new Sc.ClimbDuel('natalia', () => {});
       d.st = 'play'; d.time = 1e9; d.cstep = 1e9; d.ct = 1e9; // Pollito congelado
-      const press = (dir) => { tap(dir < 0 ? 'ArrowLeft' : 'ArrowRight'); d.update(0.05); };
+      // el salto ahora es un ARCO con duración real: la tecla se pulsa y
+      // se deja correr el duelo hasta que el escalador se asienta
+      const press = (dir) => { tap(dir < 0 ? 'ArrowLeft' : 'ArrowRight'); d.update(0.016); for (let i = 0; i < 40 && d.hop.p; i++) d.update(0.016); d.update(0.016); };
       for (let i = 0; i < 5; i++) press(sideAt(d.pi));
       const upOk = d.pi === 5 && d.pMax === 5;
       press(-sideAt(d.pi)); // tecla equivocada a propósito
@@ -484,6 +486,39 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('derrota: Pollito escalando sin parar gana por altura', loseRun.result && loseRun.result.win === 'lose' && loseRun.result.cMeters > loseRun.result.pMeters, loseRun.result && loseRun.result.win);
     const tieRun = driveClimb((d) => { d.cstep = 1e9; d.ct = 1e9; }, false);
     check('empate: nadie se mueve, misma altura máxima (0 m)', tieRun.result && tieRun.result.win === 'tie' && tieRun.result.pMeters === 0 && tieRun.result.cMeters === 0, tieRun.result && tieRun.result.win);
+
+    // F5) DE ESPALDAS y SALTO FLUIDO (pedido de Jose): ambos escaladores
+    // se ven de espaldas todo el duelo y el salto es un arco continuo
+    {
+      const d = new Sc.ClimbDuel('natalia', () => {});
+      d.st = 'play'; d.time = 1e9; d.cstep = 1e9; d.ct = 1e9; // Pollito congelado: sus saltos los fuerza el test
+      check('espaldas: el jugador queda con dir "up" (reposo = idle_up, la vista trasera)', d.p.dir === 'up', 'dir=' + d.p.dir);
+      check('espaldas: Pollito parte con su pose trasera quieta (backPose = back_idle)', !!d.cat.backPose && d.cat.backPose.anim === 'back_idle', d.cat.backPose && d.cat.backPose.anim);
+      const cmeta = G.Sprites.META.chars.pollito;
+      check('espaldas: la hoja definida de Pollito trae back_idle (>=1) y back_jump (>=2)', (cmeta.anims.back_idle || []).length >= 1 && (cmeta.anims.back_jump || []).length >= 2,
+        `back_idle=${(cmeta.anims.back_idle || []).length} back_jump=${(cmeta.anims.back_jump || []).length}`);
+      // trayectoria de UN salto muestreada cuadro a cuadro
+      const q1 = d.shelfAt(-70, 1);
+      tap(sideAt(0) < 0 ? 'ArrowLeft' : 'ArrowRight');
+      const samples = [[d.p.x, d.p.elev]]; let stepMax = 0, guard = 0;
+      while (guard++ < 90) { d.update(0.008); samples.push([d.p.x, d.p.elev]); stepMax = Math.max(stepMax, d.p.step); if (!d.hop.p && guard > 3) break; }
+      const maxStep = samples.reduce((m, s, i) => i ? Math.max(m, Math.abs(s[0] - samples[i - 1][0]), Math.abs(s[1] - samples[i - 1][1])) : m, 0);
+      const apex = Math.max(...samples.map((s) => s[1]));
+      check('salto fluido: trayectoria CONTINUA, sin teletransportes (Δmáx por cuadro <= 8 u)', samples.length >= 10 && maxStep <= 8, `muestras=${samples.length} Δmáx=${maxStep.toFixed(2)}`);
+      check('salto fluido: el arco pasa por un ápice sobre la repisa y aterriza EXACTO en ella', apex > q1.e && d.p.x === q1.x && d.p.elev === q1.e && !d.hop.p, `ápice=${apex.toFixed(1)} destino=(${q1.x},${q1.e}) fin=(${d.p.x},${d.p.elev})`);
+      check('salto fluido: el ciclo trasero avanza sincronizado con la fase (step recorre el ciclo)', stepMax > 3, 'stepMax=' + stepMax.toFixed(2));
+      // la caída al fallar también es un arco continuo hasta la repisa anterior
+      tap(-sideAt(d.pi) < 0 ? 'ArrowLeft' : 'ArrowRight');
+      const fs = [[d.p.x, d.p.elev]]; guard = 0;
+      while (guard++ < 90) { d.update(0.008); fs.push([d.p.x, d.p.elev]); if (!d.hop.p && guard > 3) break; }
+      const fMax = fs.reduce((m, s, i) => i ? Math.max(m, Math.abs(s[0] - fs[i - 1][0]), Math.abs(s[1] - fs[i - 1][1])) : m, 0);
+      check('caída fluida: el resbalón baja en arco continuo y se asienta en la repisa anterior, aún de espaldas', fMax <= 8 && d.pi === 0 && d.p.elev === 0 && d.p.dir === 'up', `Δmáx=${fMax.toFixed(2)} pi=${d.pi} elev=${d.p.elev} dir=${d.p.dir}`);
+      // Pollito: back_jump en el aire y back_idle al asentarse
+      d.ct = 0.0001; d.update(0.016); d.update(0.016);
+      check('espaldas: Pollito salta con back_jump (nada de frontal/perfil/pounce en este duelo)', !!d.cat.backPose && d.cat.backPose.anim === 'back_jump' && !!d.hop.c, d.cat.backPose && d.cat.backPose.anim);
+      for (let i = 0; i < 40 && d.hop.c; i++) d.update(0.016);
+      check('espaldas: Pollito se asienta y vuelve a back_idle', !d.hop.c && !!d.cat.backPose && d.cat.backPose.anim === 'back_idle', d.cat.backPose && d.cat.backPose.anim);
+    }
   }
 
   // ================= G) Party: roster, partners y huida ===================

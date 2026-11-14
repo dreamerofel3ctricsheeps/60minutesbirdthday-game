@@ -154,7 +154,7 @@
     constructor(id, x, y) {
       this.id = id; this.x = x; this.y = y; this.dir = 'down'; this.moving = false; this.t = Math.random() * 3;
       this.expr = null; this.frameOverride = null; this.bubble = null; this.route = null; this.speed = 90; this.hidden = false;
-      this.vx = 0; this.vy = 0; this.step = 0; this.jy = 0; this.jv = 0; this.squash = 0; this.blink = 2 + Math.random() * 3; this.emote = null; this.spin = 0; this.flash = 0; this.scale = 1; this.lastStep = 0; this.elev = 0;
+      this.vx = 0; this.vy = 0; this.step = 0; this.jy = 0; this.jv = 0; this.squash = 0; this.blink = 2 + Math.random() * 3; this.emote = null; this.spin = 0; this.flash = 0; this.scale = 1; this.lastStep = 0; this.elev = 0; this.tilt = 0; this.backPose = null;
     }
     get spd() { return Math.hypot(this.vx, this.vy); }
     // jugador: aceleración suave + colisiones.  room: restringe a un ambiente
@@ -216,6 +216,7 @@
       if (E < 1) R.shadow(this.x, this.y, (this.id === 'pollito' ? 13 : 15) * sc * (1 - air * 0.4), 0.85 - air * 0.4);
       const walkBob = this.moving ? Math.abs(Math.sin(this.step)) * 3.2 : 0;
       let roll = this.moving ? Math.sin(this.step) * 0.075 : 0;
+      roll += this.tilt || 0; // inclinación extra que fije la escena (p. ej. el impulso lateral de un salto)
       const sq = this.squash / 0.16, breathe = this.moving ? 0 : Math.sin(this.t * 2.6) * 0.012;
       let sy = (1 - sq * 0.16 + breathe + (this.jy > 4 ? 0.06 : 0)) * sc, sx = (1 + sq * 0.14 - breathe) * sc;
       const fl = this.flash > 0 && Math.floor(this.flash * 20) % 2 ? [0.9, 0.9, 0.9] : null;
@@ -229,6 +230,18 @@
         // sentado y pounce, que salta hacia la cámara) NUNCA se espejan: ahí
         // la mancha naranja debe quedar en su cachete izquierdo. La regla se
         // impone en Sp.catAnim (solo 'walk' admite flip).
+        // POSE TRASERA FORZADA (backPose = {anim, idx} con anim 'back_idle'
+        // o 'back_jump'): la fija la escalada de repisas, donde Pollito
+        // trepa DE ESPALDAS como el jugador. Son las vistas traseras de su
+        // hoja definida (generadas a propósito: el bundle no traía vista
+        // de espaldas) y NUNCA se espejan — de espaldas no hay cachete que
+        // cuidar ni lado que voltear: la cola y el patrón quedan tal cual.
+        if (this.backPose) {
+          if (this.spin > 0) roll = this.spin * 14;
+          R.sprite(Sp.catAnim(this.backPose.anim, this.backPose.idx, false), this.x, E + this.jy + (this.moving ? walkBob * 0.5 : 0), this.y, { feet: 2.5, roll, sx: sx * 1.15, sy: sy * 1.15, flash: fl });
+          if (this.carry && this.carry.length) R.sprite(Sp.item(this.carry[0]), this.x + (this.dir === 'left' ? -14 : 14), E + this.jy + 16, this.y + 0.6, { feet: 4, sx: 0.8, sy: 0.8 });
+          return;
+        }
         let anim, idx;
         if (this.jy > 2) { anim = 'pounce'; idx = this.jy > 26 ? 1 : 0; }
         else if (this.moving) { anim = 'walk'; idx = ppIdx(Math.floor(this.step / (Math.PI / 3)), 3); }

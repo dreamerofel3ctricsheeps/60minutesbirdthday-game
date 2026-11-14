@@ -1015,10 +1015,26 @@
   // conquistada porque el marcador ▲ y los hitos son de la MÁXIMA.
   // POLLITO: escala en su propia columna con el ritmo de siempre
   // (cstep con jitter y distracciones; pollitoOfendido lo acelera y el
-  // stat velocidad del jugador lo ajusta como antes). Su salto se ve
-  // con pounce (jy > 2 en Actor.draw3d, automático al place()) y
-  // jamás se espeja en vistas frontales: place() solo le pone dir de
-  // perfil al saltar, como en el resto del juego.
+  // stat velocidad del jugador lo ajusta como antes).
+  // DE ESPALDAS (ajuste de Jose, 2026-11-14): trepar un librero se ve
+  // desde atrás. El jugador va SIEMPRE de espaldas (dir 'up': reposo
+  // idle_up, salto walk_up en vertical y run_up en diagonal — la
+  // dirección del salto la leen la posición destino y el prompt ←/→, y
+  // el cuerpo se inclina un pelo hacia el lado del salto vía a.tilt).
+  // Pollito igual: usa su vista TRASERA (back_idle quieto, back_jump en
+  // el aire, forzada con a.backPose en world.js) — arte nuevo generado
+  // para su bundle, porque solo traía frontal/perfil/pounce; de
+  // espaldas la mancha del cachete no se ve (correcto) y nunca se
+  // espeja. Nada de frontales ni perfiles en este duelo.
+  // SALTO FLUIDO (mismo ajuste): el desplazamiento entre repisas ya no
+  // es un lerp exponencial con un hop() cosmético (se sentía
+  // escalonado, casi teletransporte): cada salto es una trayectoria con
+  // easing (startHop/advanceClimber) — impulso, ápice sobre la línea
+  // recta, asentamiento exacto con squash y polvo — y el ciclo de
+  // animación trasera avanza sincronizado con la fase del salto. La
+  // caída al fallar también es un arco (acelerando), no un salto de
+  // posición; el spin antiguo se retiró porque rotaba al personaje por
+  // sus vistas frontal/perfil y rompía el "siempre de espaldas".
   // =========================================================
   const SH = 27, U_PER_M = 25, CLIMB_TIME = 60;
   const TECHO_E = 14 * SH, AZOTEA_E = 750, CIELO_E = 2250, ESPACIO_E = 5000;
@@ -1033,6 +1049,11 @@
   // Easing del nacimiento de una repisa: pop elástico (sobrepasa un
   // poco el tamaño final y se asienta) para que el spawn se LEA.
   function climbPop(k) { const u = Math.max(0, Math.min(1, k)), c = 1.70158; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); }
+  // Easings de la TRAYECTORIA del salto entre repisas (arco continuo):
+  // inOut para el desplazamiento lateral, smootherstep para la subida
+  // flotante en el espacio (arranque y llegada suaves en ambos extremos).
+  const climbEaseInOut = (u) => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+  const climbSmoother = (u) => u * u * u * (u * (u * 6 - 15) + 10);
   function climbRaw(k) { return climbHash(k) < 0.5 ? -1 : 1; }
   const CLIMB_ZONES = [
     { e: 0, name: 'El librero' },
@@ -1157,7 +1178,12 @@
       this.rocket = null; this.rocketWait = 6; this.rocketDir = -1; this.rocketSeen = false;
       this._sb = 0; this._sv = []; // ventana de lados generados desde el índice _sb (se poda: ver pruneSides)
       this.cstep = 0.44 * (G.S.flags.pollitoOfendido ? 0.93 : 1) + (10 - stat(this.who, 'velocidad')) * -0.004;
+      this.hop = { p: null, c: null }; this.bufDir = 0; // salto en curso por columna (arco) y tecla guardada en buffer
       this.place(this.p, -70, 0, true); this.place(this.cat, 70, 0, true);
+      // DE ESPALDAS todo el duelo (ver la nota en la cabecera de la
+      // escena): el jugador con dir 'up' permanente y Pollito con su
+      // pose trasera forzada desde el primer cuadro.
+      this.p.dir = 'up'; this.cat.dir = 'up'; this.cat.backPose = { anim: 'back_idle', idx: 0 };
     }
     // Lado jugable de la repisa k-ésima: determinista (misma secuencia
     // en toda instancia) y sin rachas de 4. Se genera hacia adelante y
@@ -1176,7 +1202,79 @@
     pruneSides(minK) { const cut = Math.max(0, minK - 3 - this._sb); if (cut > 0) { this._sv.splice(0, cut); this._sb += cut; } }
     // Generador procedural: la repisa i (i ≥ 1) existe para CUALQUIER i.
     shelfAt(base, i) { return i === 0 ? { x: base, e: 0 } : { x: base + this.sideOf(i - 1) * 28, e: i * SH }; }
-    place(a, base, i, snap) { const q = this.shelfAt(base, i); a.tx = q.x; a.te = q.e; if (snap) { a.x = q.x; a.elev = q.e; } else a.hop(120); a.dir = i && this.sideOf(i - 1) < 0 ? 'left' : 'right'; }
+    place(a, base, i, snap) {
+      const q = this.shelfAt(base, i); a.tx = q.x; a.te = q.e;
+      if (snap) { a.x = q.x; a.elev = q.e; return; }
+      this.startHop(a === this.p ? 'p' : 'c', i); // sin snap: salto con arco continuo (ver startHop)
+    }
+    // SALTO CON ARCO CONTINUO (ajuste de Jose, 2026-11-14): antes el
+    // escalador se movía por un lerp exponencial hacia la repisa con un
+    // hop() cosmético encima — el desplazamiento se sentía escalonado,
+    // casi un teletransporte corto. Ahora cada salto es una TRAYECTORIA
+    // con easing de principio a fin (advanceClimber la integra): impulso
+    // (easeOut), ápice por encima de la línea recta (término seno) y
+    // asentamiento exacto sobre la repisa con squash y polvito. La
+    // duración depende del tramo: vertical puro 0,24 s (walk_up),
+    // diagonal ±56 u 0,28 s (run_up), caída al fallar 0,30 s acelerando
+    // (easeIn). En el ESPACIO todo dura ×1,5 y el arco es más alto: la
+    // flotación también es fluida, no un lerp lento.
+    startHop(col, idx) {
+      const a = col === 'p' ? this.p : this.cat, base = col === 'p' ? -70 : 70;
+      const q = this.shelfAt(base, idx);
+      const kind = q.e >= a.elev ? 'up' : 'fall';
+      const dx = q.x - a.x, space = Math.max(q.e, a.elev) >= ESPACIO_E;
+      let dur = kind === 'fall' ? 0.30 : dx === 0 ? 0.24 : 0.28;
+      if (space) dur *= 1.5;
+      this.hop[col] = { fx: a.x, fe: a.elev, tx: q.x, te: q.e, t: 0, dur, kind, dx, space, hopH: kind === 'fall' ? 2.5 : space ? 16 : 9, idx };
+      a.moving = true; a.jy = 0; a.jv = 0; // el arco vive en elev; jy queda solo para el vaivén espacial en reposo
+    }
+    // Avanza el salto en curso de una columna (o su reposo). El ciclo de
+    // animación trasera del jugador avanza SINCRONIZADO con la fase del
+    // salto: step recorre el ciclo entero entre el impulso y el
+    // aterrizaje (contacto→pase→contacto opuesto→pase en walk_up; los 4
+    // frames de run_up en diagonal) y el cuerpo se inclina un pelo
+    // hacia el lado del salto (a.tilt). Pollito alterna sus dos frames
+    // traseros: estirado en la primera mitad del vuelo, recogido en la
+    // segunda.
+    advanceClimber(col, dt) {
+      const a = col === 'p' ? this.p : this.cat, h = this.hop[col];
+      if (!h) {
+        // reposo: en el espacio, vaivén de ingravidez (jy es solo el
+        // desplazamiento visual del sprite; la lógica vive en elev)
+        if (a.elev >= ESPACIO_E) { a.jy = 2.4 + Math.sin(this.T * 2.2 + (col === 'c' ? 1.7 : 0)) * 2; a.jv = 0; }
+        return;
+      }
+      h.t += dt;
+      const u = Math.min(1, h.t / h.dur);
+      const eu = h.kind === 'up' ? (h.space ? climbSmoother(u) : 1 - Math.pow(1 - u, 2)) : u * u;
+      a.x = h.fx + (h.tx - h.fx) * climbEaseInOut(u);
+      a.elev = h.fe + (h.te - h.fe) * eu + Math.sin(Math.PI * u) * h.hopH;
+      if (col === 'p') {
+        a.step = u * Math.PI * (h.dx ? 3 : 2); // ciclo sincronizado con la fase (ver arriba)
+        a.lastStep = Math.floor(a.step / Math.PI); // sin puffs de pisada: el polvo de este duelo es el de la repisa
+        a.vx = h.dx ? 200 : 0; // spd > RUN_SPD en diagonal -> run_up; vertical puro -> walk_up
+        a.tilt = (h.dx ? Math.sign(h.dx) : 0) * 0.10 * Math.sin(Math.PI * u); // leve inclinación hacia el lado del salto
+      } else a.backPose = { anim: 'back_jump', idx: u < 0.45 ? 0 : 1 };
+      if (u < 1) return;
+      // ATERRIZAJE: posición exacta sobre la repisa, squash breve y polvito
+      a.x = h.tx; a.elev = h.te; a.moving = false; a.tilt = 0; a.vx = 0; a.squash = h.kind === 'fall' ? 0.16 : 0.1;
+      for (let j = 0; j < 3; j++) this.puffs.push({ x: h.tx, y: h.te, t: -j * 0.03, seed: j * 2.4 + h.idx * 1.7 });
+      this.hop[col] = null;
+      if (col === 'c') a.backPose = { anim: 'back_idle', idx: 0 };
+      // la repisa nueva nace SOLO al asentarse sobre la máxima (como siempre)
+      if (h.idx === (col === 'p' ? this.pMax : this.cMax)) this.bornUp(col, h.idx);
+      // la tecla guardada en pleno vuelo se ejecuta al aterrizar: el ritmo no se corta
+      if (col === 'p' && this.bufDir && this.stun <= 0) { const b = this.bufDir; this.bufDir = 0; this.climbInput(b); }
+    }
+    // Una intención de salto del jugador (tecla directa o buffer al aterrizar).
+    climbInput(k) {
+      const p = this.p;
+      if (k === this.sideOf(this.pi)) { this.pi++; if (this.pi > this.pMax) this.pMax = this.pi; this.place(p, -70, this.pi); G.sfx('pick'); }
+      else { // resbalón: CAES a la repisa anterior con el arco de caída (la máxima queda)
+        this.stun = 0.38; this.bufDir = 0; p.emo('💦', 0.7); G.sfx('bad'); G.addNoise(2);
+        if (this.pi > 0) { this.pi--; this.place(p, -70, this.pi); }
+      }
+    }
     // ¿La repisa i de la columna col ('p' | 'c') ya NACIÓ? Solo existen
     // 1..born: el objetivo (actual+1) y la siguiente (actual+2).
     shelfBorn(col, i) { return i >= 1 && i <= this.born[col]; }
@@ -1216,20 +1314,13 @@
     }
     update(dt) {
       const p = this.p, cat = this.cat;
-      [p, cat].forEach((a) => {
-        a.update(dt);
-        const rising = a.te > a.elev + 0.5, space = a.elev >= ESPACIO_E;
-        // en el espacio todo flota: subir y bajar se vuelve leeeento
-        const k = Math.min(1, dt * (space ? (rising ? 6.5 : 5) : (rising ? 17 : 13)));
-        a.x += (a.tx - a.x) * Math.min(1, dt * 16); a.elev += (a.te - a.elev) * k;
-        if (space && Math.abs(a.elev - a.te) < 1.5 && a.jy <= 0.01) a.jy = 2.2 + Math.sin(this.T * 2.2 + (a === cat ? 1.7 : 0)) * 2.2; // vaivén de ingravidez
-      });
-      // NACIMIENTO AL ATERRIZAR: cuando un escalador se asienta sobre su
-      // repisa más alta (recién conquistada), nace la siguiente de la
-      // siguiente en su columna. Nunca antes, nunca por banda lejana.
-      const settled = (a) => Math.abs(a.elev - a.te) < 1.2 && Math.abs(a.x - a.tx) < 4;
-      if (settled(p) && this.pi === this.pMax) this.bornUp('p', this.pi);
-      if (settled(cat) && this.ci === this.cMax) this.bornUp('c', this.ci);
+      [p, cat].forEach((a) => a.update(dt));
+      // TRAYECTORIAS: el arco continuo de cada salto en curso (o el
+      // reposo, con su vaivén en el espacio). NACIMIENTO AL ATERRIZAR:
+      // cuando un escalador se ASIENTA sobre su repisa más alta (recién
+      // conquistada), advanceClimber dispara bornUp y nace la siguiente
+      // de la siguiente en su columna. Nunca antes, nunca por banda lejana.
+      this.advanceClimber('p', dt); this.advanceClimber('c', dt);
       // polvo de los nacimientos + limpieza de pops ya asentados
       this.puffs = this.puffs.filter((u) => (u.t += dt) < 0.5);
       for (const col of ['p', 'c']) for (const k in this.spawnFx[col]) if (this.T - this.spawnFx[col][k] > 1) delete this.spawnFx[col][k];
@@ -1271,14 +1362,15 @@
       else {
         const k = G.input.hit('left') ? -1 : G.input.hit('right') ? 1 : 0;
         if (k) {
-          if (k === this.sideOf(this.pi)) { this.pi++; if (this.pi > this.pMax) this.pMax = this.pi; this.place(p, -70, this.pi); G.sfx('pick'); }
-          else { // resbalón: CAES a la repisa anterior (la máxima queda)
-            this.stun = 0.38; p.spin = 0.5; p.emo('💦', 0.7); G.sfx('bad'); G.addNoise(2);
-            if (this.pi > 0) { this.pi--; this.place(p, -70, this.pi); }
-          }
-        }
+          // en pleno vuelo la tecla no se pierde: queda en buffer (la
+          // última manda) y se ejecuta al aterrizar — escalar a ritmo
+          // no castiga el timing del jugador
+          if (this.hop.p) this.bufDir = k; else this.climbInput(k);
+        } else if (this.bufDir && !this.hop.p) { const b = this.bufDir; this.bufDir = 0; this.climbInput(b); }
       }
-      if ((this.ct -= dt) <= 0) { this.ct = this.cstep + rnd(-0.08, 0.1) + (Math.random() < 0.1 ? 0.5 : 0); this.ci++; if (this.ci > this.cMax) this.cMax = this.ci; this.place(cat, 70, this.ci); }
+      // Pollito: su reloj corre siempre, pero solo salta ASENTADO — su
+      // ritmo por repisa queda ≈ max(cstep, duración del arco), el de siempre
+      if ((this.ct -= dt) <= 0 && !this.hop.c) { this.ct = this.cstep + rnd(-0.08, 0.1) + (Math.random() < 0.1 ? 0.5 : 0); this.ci++; if (this.ci > this.cMax) this.cMax = this.ci; this.place(cat, 70, this.ci); }
       if (this.time <= 0) { // se acabó el tiempo: decide la ALTURA MÁXIMA
         const w = this.pMax > this.cMax ? 'p' : this.cMax > this.pMax ? 'b' : 'tie';
         // el resultado se anuncia con el panel final y su ícono propio;
