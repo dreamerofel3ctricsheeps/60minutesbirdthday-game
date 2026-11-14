@@ -545,6 +545,25 @@
     ctx.fillStyle = '#1c1826'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     lines.forEach((l, i) => ctx.fillText(l, bx + 6, by + 9 + i * 10));
   };
+  // ---------- Iconografía propia del juego ----------
+  // Regla de Jose (2026-11-14): en el ENTORNO del juego (alertas,
+  // indicadores de victoria/derrota/empate, hitos, botones) NO se usan
+  // emoticones simples: hay un set de íconos propio, pixel/chibi, en
+  // assets/icons/ (generado y recortado con el pipeline del proyecto).
+  // Los emojis quedan SOLO dentro del chat del teléfono (WhatsApp) y
+  // en las líneas de diálogo de los personajes.
+  const ICON_CACHE = {};
+  G.iconImg = function (name) {
+    if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
+    if (!ICON_CACHE[name]) { const im = new Image(); im.src = 'assets/icons/' + name + '.png'; ICON_CACHE[name] = im; }
+    return ICON_CACHE[name];
+  };
+  // Dibuja el ícono centrado en (x, y) con el tamaño dado. Si la imagen
+  // aún no cargó, no dibuja nada (el texto que lo acompaña basta).
+  G.icon = function (ctx, name, x, y, size) {
+    const im = G.iconImg(name);
+    if (im && im.complete && im.naturalWidth) ctx.drawImage(im, x - size / 2, y - size / 2, size, size);
+  };
   G.prompt = function (ctx, label, x, y) {
     ctx.font = `bold 7.5px ${G.FONT}`;
     const w = ctx.measureText(label).width + 12;

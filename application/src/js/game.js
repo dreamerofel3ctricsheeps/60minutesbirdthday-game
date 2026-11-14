@@ -176,7 +176,7 @@
   // eso congela el juego entero, no solo lo visual, en cualquier fase.
   // Atajos: ESC siempre; la tecla P solo fuera de los duelos/recolección,
   // donde las teclas son del juego (p. ej. el duelo de mensajes usa letras).
-  // Botón visible: ⏸ en el HUD. Temporizadores de pared auditados
+  // Botón visible de pausa en el HUD. Temporizadores de pared auditados
   // (2026-11-14): cuenta regresiva de ui.choose (se salta los ticks en
   // pausa), saltos de la fiesta (guardados con el flag), resets de
   // expresión y TV (pasaron a G.after) y cierre de CollectScene (pasó a
@@ -195,11 +195,11 @@
     if (v) showPauseMenu(); else { pauseOv.classList.remove('show'); pauseOv.innerHTML = ''; }
   };
   function showPauseMenu() {
-    pauseOv.innerHTML = `<div class="modal"><h1>⏸ PAUSA</h1>
+    pauseOv.innerHTML = `<div class="modal"><h1><span class="pic pic-pause lg"><i></i><i></i></span>PAUSA</h1>
       <div class="pbtns">
-        <button class="big" id="presume">▶ Seguir jugando</button>
-        <button class="big alt" id="pmg">🧩 Minijuegos</button>
-        <button class="big alt" id="pexit">🚪 Salir al título</button>
+        <button class="big" id="presume"><span class="pic pic-play"></span>Seguir jugando</button>
+        <button class="big alt" id="pmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos</button>
+        <button class="big alt" id="pexit"><span class="pic pic-door"></span>Salir al título</button>
       </div>
       <p class="dim">${G.practiceMode ? 'Estás en modo práctica: los duelos no afectan a ninguna partida.' : 'Ojo: lanzar un duelo de práctica abandona la partida actual, y salir al título también la pierde.'}</p></div>`;
     pauseOv.classList.add('show');
@@ -254,7 +254,7 @@
   function duelListScreen(from) {
     return new Promise((res) => {
       const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = G.CHARS[ev.boss]; return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
-      menuShow(`<h2>🧩 Minijuegos — práctica</h2><p class="dim">Los duelos contra los jefes (y el apagón), directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
+      menuShow(`<h2><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos — práctica</h2><p class="dim">Los duelos contra los jefes (y el apagón), directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
       overlay.querySelectorAll('.duel').forEach((b) => (b.onclick = () => { G.sfx('pick'); res(b.dataset.id); }));
       $('#mback').onclick = () => { G.sfx('pick'); res('back'); };
     });
@@ -271,7 +271,7 @@
     return new Promise((res) => {
       const c = G.CHARS[who], boss = G.CHARS[ev.boss];
       menuShow(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${Sp.full(ev.boss)}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
-        <h2>${ev.title}</h2><p>${ev.intro}</p><p class="goal">🏆 ${ev.goal}</p>
+        <h2>${ev.title}</h2><p>${ev.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${ev.goal}</p>
         <p class="dim">${!G.practiceMode && S.phase !== 'title' ? 'Modo práctica: al empezar, la partida actual se abandona.' : 'Modo práctica: sin consecuencias en la historia.'}</p>
         <div class="pbtns"><button class="big" id="mstart">¡EMPEZAR!</button><button class="big alt" id="mback">← Volver</button></div>`);
       $('#mstart').onclick = () => { G.sfx('ok'); res(true); };
@@ -281,10 +281,11 @@
   function resultScreen(ev, r) {
     return new Promise((res) => {
       const boss = G.CHARS[ev.boss];
-      const txt = r.win === 'win' ? `✔ ¡VENCISTE A ${boss.name.toUpperCase()}!` : r.win === 'tie' ? '● EMPATE' : `✖ GANÓ ${boss.name.toUpperCase()}`;
-      menuShow(`<h2>${ev.title}</h2><div class="roll ${r.win === 'win' ? 'good' : r.win === 'tie' ? 'mid' : 'bad'}">${txt}</div>
+      const ico = r.win === 'win' ? 'trofeo' : r.win === 'tie' ? 'empate' : 'derrota'; // ícono PROPIO del resultado
+      const txt = r.win === 'win' ? `¡VENCISTE A ${boss.name.toUpperCase()}!` : r.win === 'tie' ? 'EMPATE' : `GANÓ ${boss.name.toUpperCase()}`;
+      menuShow(`<h2>${ev.title}</h2><div class="roll ${r.win === 'win' ? 'good' : r.win === 'tie' ? 'mid' : 'bad'}"><img class="res-ico" src="assets/icons/${ico}.png" alt="">${txt}</div>
         <p class="dim">Práctica terminada: sin recompensas ni castigos.</p>
-        <div class="pbtns"><button class="big" id="magain">↻ Otra vez</button><button class="big alt" id="mlist">🧩 Lista de minijuegos</button><button class="big alt" id="mexit">🚪 Salir al título</button></div>`);
+        <div class="pbtns"><button class="big" id="magain">↻ Otra vez</button><button class="big alt" id="mlist"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Lista de minijuegos</button><button class="big alt" id="mexit"><span class="pic pic-door"></span>Salir al título</button></div>`);
       $('#magain').onclick = () => res('again');
       $('#mlist').onclick = () => res('list');
       $('#mexit').onclick = () => res('exit');
@@ -322,10 +323,10 @@
   function titleScreen() {
     return new Promise((res) => {
       const show = () => {
-        overlay.innerHTML = `<div class="modal"><div class="logo"><small>🎂</small><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
+        overlay.innerHTML = `<div class="modal"><div class="logo"><img class="logoico" src="assets/icons/pastel.png" alt=""><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
           <p>Siete roomies. Una fiesta sorpresa. Y Ximena, que vuelve de 36 horas de guardia, está por llegar.</p>
           <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa, vence en duelo a <b>Pollito</b> y a <b>José</b> y, sobre todo, <b>no la despiertes</b>.</p>
-          <div class="pbtns"><button class="big" id="tplay">▶ JUGAR</button><button class="big alt" id="tmg">🧩 MINIJUEGOS</button></div></div>`;
+          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button></div></div>`;
         overlay.classList.add('show');
         $('#tplay').onclick = () => {
           overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok');
@@ -383,7 +384,7 @@
       const who = await ui.assign(t.prompt, (c) => ({ stats: statLine(c, t.stats), odds: chanceFor(t, c), note: t.itemBonus && Object.keys(t.itemBonus).some((k) => S.inv[k]) ? 'Bonus por objeto' : '' }));
       const ok = Math.random() < chanceFor(t, who);
       const br = ok ? ev.success : ev.fail;
-      ui.raw(`<div class="roll ${ok ? 'good' : 'bad'}">${ok ? '✔ ÉXITO' : '✖ FALLO'}</div>`); G.sfx(ok ? 'ok' : 'bad');
+      ui.raw(`<div class="roll ${ok ? 'good' : 'bad'}">${ok ? 'ÉXITO' : 'FALLO'}</div>`); G.sfx(ok ? 'ok' : 'bad');
       const actor = home.actor(who); if (actor) { actor.expr = ok ? 'happy' : 'surprised'; G.after(4, () => (actor.expr = null)); }
       await ui.postAll(br.reply(who));
       apply(br.effects, who);
@@ -477,13 +478,13 @@
     const c = G.CHARS[who];
     const bossImg = Sp.full(ev.boss);
     await ui.modal(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${bossImg}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
-      <h2>${ev.title}</h2><p>${ev.intro}</p><p class="goal">🏆 ${ev.goal}</p>`, '¡EMPEZAR!');
+      <h2>${ev.title}</h2><p>${ev.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${ev.goal}</p>`, '¡EMPEZAR!');
     G.captureKeys = true; $('#phone').classList.add('dim');
     const res = await new Promise((r) => G.setScene(new (mg.Scene())(who, r)));
     G.captureKeys = false; $('#phone').classList.remove('dim');
     G.setScene(G.home);
     S.duels.push({ game: ev.game, boss: ev.boss, win: res.win });
-    ui.raw(`<div class="roll ${res.win === 'win' ? 'good' : res.win === 'tie' ? 'mid' : 'bad'}">${res.win === 'win' ? `✔ VENCISTE A ${boss.name.toUpperCase()}` : res.win === 'tie' ? '● EMPATE' : `✖ GANÓ ${boss.name.toUpperCase()}`}</div>`);
+    ui.raw(`<div class="roll ${res.win === 'win' ? 'good' : res.win === 'tie' ? 'mid' : 'bad'}">${`<img class="res-ico" src="assets/icons/${res.win === 'win' ? 'trofeo' : res.win === 'tie' ? 'empate' : 'derrota'}.png" alt="">`} ${res.win === 'win' ? `VENCISTE A ${boss.name.toUpperCase()}` : res.win === 'tie' ? 'EMPATE' : `GANÓ ${boss.name.toUpperCase()}`}</div>`);
     const actor = G.home.actor(who); if (actor) { actor.expr = res.win === 'win' ? 'happy' : 'surprised'; actor.hop(160); G.after(4, () => (actor.expr = null)); }
     if (res.win !== 'win') S.log.fallos++;
     if (mg.resolve) await mg.resolve(res, who);
