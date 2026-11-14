@@ -90,7 +90,9 @@
           { who: 'majo', text: 'Fase uno: decorar la sala. Rápido, preciso y en SILENCIO.' },
           n === 0
             ? { who: 'samantha', text: 'Chicos… no conseguimos ni una sola decoración. Tengo papel higiénico y post-its. Es "minimalista".', mood: 'surprised' }
-            : { who: 'samantha', text: `Tenemos material para ${n * 2} zonas. Quiero que se vea increíble en las fotos.` },
+            : n === 3
+              ? { who: 'samantha', text: 'Tenemos material para las 6 zonas. Quiero que se vea increíble en las fotos.' }
+              : { who: 'samantha', text: `Tenemos material de verdad para ${n * 2} zonas; las demás las improviso con papel y post-its. Nadie notará la diferencia. Casi.` },
           { who: 'pollito', text: '😼' },
           { who: 'fatima', text: 'Pollito ya está mirando las guirnaldas como si fueran presas. Suerte.' },
         ];

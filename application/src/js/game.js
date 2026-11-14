@@ -388,11 +388,13 @@
     deco: {
       stats: ['velocidad', 'logica'], Scene: () => Sc.DecoDuel, note: (c) => (c === 'alan' ? 'Suma ruido' : ''),
       setup() {
-        const kinds = ['guirnalda', 'globos', 'luces'].filter((k) => S.inv[k]);
-        S.deco = kinds.length ? W.DECO_SPOTS.map((s, i) => ({ i, kind: s.kind })).filter((d) => kinds.includes(d.kind)).map((d) => ({ i: d.i, improv: false, placed: false }))
-          : [0, 2, 4].map((i) => ({ i, improv: true, placed: false }));
-        // siempre hay al menos 3 zonas (una por ronda): las que falten se improvisan
-        for (const i of [0, 2, 4, 1, 3, 5]) { if (S.deco.length >= 3) break; if (!S.deco.some((d) => d.i === i)) S.deco.push({ i, improv: true, placed: false }); }
+        // SIEMPRE las 6 zonas de la sala (Sc.buildDecoSet): las de un tipo
+        // recolectado van de verdad y las demás se improvisan. Antes el
+        // pool salía solo de lo recolectado con un mínimo de 3 en total, y
+        // como el duelo reparte en 3 rondas, con 0–2 tipos recolectados
+        // había rondas de UN SOLO ítem (bug reportado por Jose; medido en
+        // tools/smoke_v31.js: [1,1,1] sin inventario o con un solo tipo).
+        S.deco = Sc.buildDecoSet();
       },
       async resolve(r, who) {
         const improv = S.deco.every((d) => d.improv);

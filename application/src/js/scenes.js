@@ -281,11 +281,28 @@
   // =========================================================
   // 1. DECORACIÓN EXPRESS — vs Pollito
   // =========================================================
+  // Set de zonas del duelo: SIEMPRE las 6 zonas de la sala. Las de un tipo
+  // conseguido en la recolección van "de verdad"; las demás las improvisa
+  // Samantha (papel higiénico y post-its). CAUSA DEL BUG "a veces solo me
+  // da a decorar un ítem": antes el pool salía solo de lo recolectado (2
+  // zonas por tipo) con un mínimo de 3 en TOTAL, y el duelo reparte el
+  // pool en 3 rondas (k % 3): con 0–1 tipos cada ronda quedaba con UNA
+  // zona, y con 2 tipos dos rondas quedaban con una. Medido con la prueba
+  // de humo (tools/smoke_v31.js): sin inventario [1,1,1], solo globos
+  // [1,1,1], globos+luces [2,1,1], los 3 tipos [2,2,2]. Con las 6 zonas
+  // siempre, cada ronda tiene 2 ítems, en historia y en práctica.
+  function buildDecoSet() {
+    return W.DECO_SPOTS.map((s, i) => ({ i, improv: !G.S.inv[s.kind], placed: false }));
+  }
   class DecoDuel extends Duel {
     constructor(who, done) {
       super(who, 'pollito', done, { time: 13, title: 'DECORACIÓN EXPRESS', hint: 'ESPACIO en verde para colgar · ESPACIO junto a Pollito para espantarlo' });
       this.p = new Actor(who, 520, 230); this.cat = new Actor('pollito', 880, 120);
       this.zone = 0.2 + stat(who, 'logica') * 0.013 + (G.S.inv.herramientas ? 0.07 : 0);
+      // Red de seguridad: si el duelo se construye sin pasar por
+      // MG.deco.setup() o con un set incompleto/corrupto, se reconstruye
+      // el set completo de 6 zonas (nunca una ronda de un solo ítem).
+      if (!Array.isArray(G.S.deco) || G.S.deco.length < W.DECO_SPOTS.length || G.S.deco.some((d) => !W.DECO_SPOTS[d.i])) G.S.deco = buildDecoSet();
       this.chunks = [0, 1, 2].map((i) => G.S.deco.filter((_, k) => k % 3 === i)); this.knocks = 0; this.cam = CAM_SALA(); this.begin();
     }
     setup(n) { this.cur = this.chunks[n]; this.q = null; this.cool = 0; this.cs = 'wait'; this.ct = (n ? 2.6 : 3.6) - (G.S.flags.pollitoOfendido ? 0.8 : 0); this.target = null; this.p.frameOverride = null; }
@@ -330,6 +347,16 @@
           if (this.cs === 'scratch' || this.cs === 'go') ring(cat.x, cat.y, 30, [1, 0.3, 0.3], 0.5);
         },
         over: (c, t) => {
+          // Marca ✓ sobre cada zona ya colgada (de cualquier ronda). La
+          // decoración colocada la dibuja world.js en su sitio real (la
+          // guirnalda y las luces van a la pared del fondo; los globos, al
+          // piso junto a la zona) y el sprite flotante de la zona se apaga
+          // al colgarla: sin esta marca, en la zona misma parecía que el
+          // ítem "desaparecía y no se colocaba" (bug reportado por Jose).
+          // La marca deja constancia EN LA ZONA de que quedó colocada y
+          // cuenta; si Pollito la tira, la marca se apaga y vuelve el
+          // sprite flotante para reintentarlo.
+          G.S.deco.forEach((d) => { if (!d.placed) return; const s = W.DECO_SPOTS[d.i], q = R.project(s.x, 54, s.y); if (!q.ok) return; c.fillStyle = '#1f4a35'; c.beginPath(); c.arc(q.x, q.y, 7.5, 0, 6.3); c.fill(); c.strokeStyle = '#7dff8a'; c.lineWidth = 1.4; c.stroke(); G.text(c, '✓', q.x, q.y + 0.5, { size: 10, color: '#7dff8a', stroke: false }); });
           if (this.q) { const h = p.head(26), x = h.x - 45, y = h.y; panel(c, x, y, 90, 12, '#4a4458'); c.fillStyle = '#58c46a'; c.fillRect(x + (this.q.c - this.zone / 2) * 90, y, this.zone * 90, 12); c.fillStyle = '#fff'; c.fillRect(x + this.q.pos * 87, y - 3, 3, 18); }
           else if (this.st === 'play') {
             if (dist(p, cat) < 46 && (this.cs === 'go' || this.cs === 'scratch')) { const h = cat.head(18); G.prompt(c, 'ESPACIO: ¡espantar!', h.x, h.y); }
@@ -830,5 +857,5 @@
     }
   }
 
-  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel };
+  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, buildDecoSet };
 })();
