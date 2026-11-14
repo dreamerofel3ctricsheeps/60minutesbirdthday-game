@@ -44,7 +44,14 @@
       W.camLerp(this.cam, p.x, p.y - 20, dt, 5);
       if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
       if (this.count > 0) { this.count -= dt; G.input.flush(); return; }
-      if (this.over) { p.walk(0, 0, 0, dt); return; }
+      if (this.over) {
+        p.walk(0, 0, 0, dt);
+        // el cierre llega a los 1.1 s con el reloj del JUEGO (dt), no con
+        // setTimeout: así la PAUSA también congela esta transición.
+        this.endT = (this.endT || 0) + dt;
+        if (this.endT >= 1.1 && !this.doneFired) { this.doneFired = true; this.done({ inHand: p.carry.slice(), stashed: this.stashed }); }
+        return;
+      }
       this.time -= dt;
       const ax = G.input.axis();
       let sp = this.speed;
@@ -87,7 +94,7 @@
         const lines = this.time < 15 ? ['¡YA VIENE!', '¡Escucho el ascensor!', '¡Guarda lo que tengas!'] : ['¡Apúrate!', '¡El pastel, el pastel!', 'Yo vigilo la puerta.', '¡No te olvides de guardar!', '¿Dónde quedaron los globos?'];
         o.say(lines[(Math.random() * lines.length) | 0], 2.2); o.hop(130);
       }
-      if (this.time <= 0) { this.over = true; G.sfx('bell'); this.others.forEach((o) => o.emo('!', 1.5)); p.emo('!', 1.5); setTimeout(() => this.done({ inHand: p.carry.slice(), stashed: this.stashed }), 1100); }
+      if (this.time <= 0) { this.over = true; G.sfx('bell'); this.others.forEach((o) => o.emo('!', 1.5)); p.emo('!', 1.5); }
     }
     draw(dt) {
       const p = this.p;

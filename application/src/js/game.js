@@ -55,12 +55,26 @@
   const timers = [];
   G.wait = (s) => new Promise((r) => timers.push({ t: s, r }));
   G.until = (fn) => new Promise((r) => timers.push({ fn, r }));
+  // Espera pausable para efectos temporizados (reset de expresiones, la TV
+  // de Pollito): corre con el reloj del juego, así la PAUSA los congela
+  // igual que al resto (antes eran setTimeout de pared, imposibles de pausar).
+  G.after = (s, fn) => { G.wait(s).then(fn); };
+  // Descarta TODOS los temporizadores pendientes sin resolverlos: al entrar
+  // a un duelo de práctica desde una partida, la cadena asíncrona de la
+  // historia queda detenida para siempre y no puede resucitar a mitad de
+  // la práctica ni corromper su estado.
+  G.dropTimers = () => { timers.length = 0; };
   G.setScene = (sc) => { G.scene = sc; G.input.flush(); const f = $('#fade'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
   let last = performance.now();
   function frame(now) {
+    // `last` avanza SIEMPRE, también en pausa: al reanudar, el dt es el de
+    // un frame normal y el juego continúa exactamente donde estaba.
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    for (let i = timers.length - 1; i >= 0; i--) { const tm = timers[i]; if (tm.fn ? tm.fn() : (tm.t -= dt) <= 0) { timers.splice(i, 1); tm.r(); } }
-    if (G.scene) { G.scene.update(dt); G.scene.draw(dt); }
+    if (!G.paused) {
+      for (let i = timers.length - 1; i >= 0; i--) { const tm = timers[i]; if (tm.fn ? tm.fn() : (tm.t -= dt) <= 0) { timers.splice(i, 1); tm.r(); } }
+      if (G.scene) { G.scene.update(dt); G.scene.draw(dt); }
+    }
+    updatePauseBtn();
     requestAnimationFrame(frame);
   }
 
@@ -102,10 +116,13 @@
     choose(options, timer) {
       return new Promise((res) => {
         actions.innerHTML = ''; let tm = null, left = timer;
-        const finish = (i) => { if (tm) clearInterval(tm); actions.innerHTML = ''; ui.raw(`<div class="mine">${options[i].label}</div>`); res(i); };
+        const finish = (i) => { if (G.practiceMode) return; if (tm) clearInterval(tm); actions.innerHTML = ''; ui.raw(`<div class="mine">${options[i].label}</div>`); res(i); };
         if (timer) {
           const bar = el('div', 'tbar', '<i></i>'); actions.appendChild(bar);
-          tm = setInterval(() => { left -= 0.1; bar.firstChild.style.width = (left / timer) * 100 + '%'; if (left <= 0) finish(Math.max(0, options.findIndex((o) => o.timeout))); }, 100);
+          // La cuenta regresiva de la decisión corre con setInterval (reloj
+          // de pared): en PAUSA los ticks se saltan (la cuenta se congela y
+          // la barra no se mueve) y en modo práctica el intervalo se apaga.
+          tm = setInterval(() => { if (G.paused) return; if (G.practiceMode) { clearInterval(tm); return; } left -= 0.1; bar.firstChild.style.width = (left / timer) * 100 + '%'; if (left <= 0) finish(Math.max(0, options.findIndex((o) => o.timeout))); }, 100);
         }
         options.forEach((o, i) => {
           const miss = o.requires && !S.inv[o.requires];
@@ -139,11 +156,175 @@
   });
   msgs.addEventListener('click', () => (ui.fast = true));
 
+  // ---------- Pausa ----------
+  // La pausa se centraliza en frame() (ver arriba): con G.paused activo no
+  // se procesan los temporizadores G.wait/G.until/G.after ni se llama a
+  // update/draw de la escena. Como TODA la lógica del juego corre con dt
+  // (recolección, duelos, animaciones, rutas, temporizadores de escena),
+  // eso congela el juego entero, no solo lo visual, en cualquier fase.
+  // Atajos: ESC siempre; la tecla P solo fuera de los duelos/recolección,
+  // donde las teclas son del juego (p. ej. el duelo de mensajes usa letras).
+  // Botón visible: ⏸ en el HUD. Temporizadores de pared auditados
+  // (2026-11-14): cuenta regresiva de ui.choose (se salta los ticks en
+  // pausa), saltos de la fiesta (guardados con el flag), resets de
+  // expresión y TV (pasaron a G.after) y cierre de CollectScene (pasó a
+  // dt). Único no pausable: un sfx de WebAudio ya disparado (<0.35 s)
+  // termina de sonar; no afecta al estado del juego.
+  G.paused = false; G.menuOpen = false; G.practiceMode = false;
+  const pauseOv = $('#pauseov'), pauseBtn = $('#pausebtn');
+  const pauseShown = () => pauseOv.classList.contains('show');
+  G.canPause = () => !!(hasGL && G.scene && S.phase !== 'title' && !overlay.classList.contains('show') && !G.menuOpen && !pauseShown());
+  G.setPaused = (v) => {
+    if (v === G.paused) return;
+    if (v && !G.canPause()) return;
+    G.paused = v;
+    document.body.classList.toggle('paused', v);
+    G.input.flush(); // que no quede una tecla/acción "cargada" al reanudar
+    if (v) showPauseMenu(); else { pauseOv.classList.remove('show'); pauseOv.innerHTML = ''; }
+  };
+  function showPauseMenu() {
+    pauseOv.innerHTML = `<div class="modal"><h1>⏸ PAUSA</h1>
+      <div class="pbtns">
+        <button class="big" id="presume">▶ Seguir jugando</button>
+        <button class="big alt" id="pmg">🧩 Minijuegos</button>
+        <button class="big alt" id="pexit">🚪 Salir al título</button>
+      </div>
+      <p class="dim">${G.practiceMode ? 'Estás en modo práctica: los duelos no afectan a ninguna partida.' : 'Ojo: lanzar un duelo de práctica abandona la partida actual, y salir al título también la pierde.'}</p></div>`;
+    pauseOv.classList.add('show');
+    $('#presume').onclick = () => G.setPaused(false);
+    $('#pexit').onclick = () => { location.href = location.pathname; }; // mismo reinicio limpio que usa el final del juego
+    $('#pmg').onclick = async () => {
+      pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
+      await showMinigames('pause');
+      if (G.paused) showPauseMenu(); // solo miró la lista y volvió: la pausa sigue puesta
+    };
+  }
+  pauseBtn.onclick = () => { if (G.paused) G.setPaused(false); else G.setPaused(true); };
+  let lastCan = null;
+  function updatePauseBtn() { const c = !!(G.canPause() || G.paused); if (c !== lastCan) { lastCan = c; pauseBtn.classList.toggle('off', !c); } }
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat || G.menuOpen) return;
+    if (e.key === 'Escape' || ((e.key === 'p' || e.key === 'P') && !G.captureKeys)) G.setPaused(!G.paused);
+  });
+
+  // ---------- Minijuegos: práctica directa ----------
+  // Lista de los 10 duelos jugable desde el título y desde la pausa, sin
+  // pasar por la historia. La práctica es PURA: no usa runEvent ni aplica
+  // efectos/inventario/duelos al estado S; corre la misma escena de duelo
+  // (MG[game].Scene) que la historia. Si se lanza un duelo a mitad de una
+  // partida, la partida se ABANDONA (enterPractice descarta los
+  // temporizadores de la historia): al terminar se va a la lista o al
+  // título, nunca de vuelta a la run.
+  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'pizza', 'sonambula', 'memoria', 'cactus', 'repisas', 'pisoton', 'azotea'];
+  const DUEL_DESC = {
+    decoracion: 'Cuelga la decoración en su zona antes de que Pollito la tire.',
+    pollito: 'Persigue al gato por la sala y recupera lo que robó.',
+    mensajes: 'Duelo de tipeo: responde los mensajes antes que José.',
+    pizza: 'Baja la pizza por la escalera cuidando el equilibrio.',
+    sonambula: 'Llega hasta Ximena sonámbula antes que José.',
+    memoria: 'Da vuelta las cajas y junta más parejas que José.',
+    cactus: 'Esquiva los cactus rodantes y sobrevive la ronda.',
+    repisas: 'Salta de repisa en repisa y llega arriba antes que Pollito.',
+    pisoton: 'Cambia de cojín y esquiva los pisotones de Pollito.',
+    azotea: 'Esquiva las pasadas del dron sobre la azotea.',
+  };
+  function menuShow(html) { G.menuOpen = true; overlay.innerHTML = `<div class="modal wide">${html}</div>`; overlay.classList.add('show'); }
+  function menuHide() { G.menuOpen = false; overlay.classList.remove('show'); overlay.innerHTML = ''; }
+  function enterPractice() {
+    if (!G.practiceMode) { G.practiceMode = true; G.dropTimers(); actions.innerHTML = ''; }
+    G.paused = false; document.body.classList.remove('paused');
+    pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
+    S.phase = 'practice';
+    G.home = new Sc.HomeScene(); G.home.xState = 'sleeping'; G.home.wander = true;
+    G.setScene(G.home);
+  }
+  function duelListScreen(from) {
+    return new Promise((res) => {
+      const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = G.CHARS[ev.boss]; return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
+      menuShow(`<h2>🧩 Minijuegos — práctica</h2><p class="dim">Los 10 duelos contra los jefes, directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
+      overlay.querySelectorAll('.duel').forEach((b) => (b.onclick = () => { G.sfx('pick'); res(b.dataset.id); }));
+      $('#mback').onclick = () => { G.sfx('pick'); res('back'); };
+    });
+  }
+  function pickCharScreen(ev) {
+    return new Promise((res) => {
+      const cards = G.PLAYABLE.map((id) => { const c = G.CHARS[id]; return `<button class="pcard" data-id="${id}"><img src="${Sp.full(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small></button>`; }).join('');
+      menuShow(`<h2>${ev.title}</h2><p class="dim">¿Quién se enfrenta a ${G.CHARS[ev.boss].name}?</p><div class="pick">${cards}</div><button class="big alt" id="mback">← Lista de minijuegos</button>`);
+      overlay.querySelectorAll('.pcard').forEach((b) => (b.onclick = () => { G.sfx('ok'); res(b.dataset.id); }));
+      $('#mback').onclick = () => res(null);
+    });
+  }
+  function vsScreen(ev, who) {
+    return new Promise((res) => {
+      const c = G.CHARS[who], boss = G.CHARS[ev.boss];
+      menuShow(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${Sp.full(ev.boss)}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
+        <h2>${ev.title}</h2><p>${ev.intro}</p><p class="goal">🏆 ${ev.goal}</p>
+        <p class="dim">${!G.practiceMode && S.phase !== 'title' ? 'Modo práctica: al empezar, la partida actual se abandona.' : 'Modo práctica: sin consecuencias en la historia.'}</p>
+        <div class="pbtns"><button class="big" id="mstart">¡EMPEZAR!</button><button class="big alt" id="mback">← Volver</button></div>`);
+      $('#mstart').onclick = () => { G.sfx('ok'); res(true); };
+      $('#mback').onclick = () => res(false);
+    });
+  }
+  function resultScreen(ev, r) {
+    return new Promise((res) => {
+      const boss = G.CHARS[ev.boss];
+      const txt = r.win === 'win' ? `✔ ¡VENCISTE A ${boss.name.toUpperCase()}!` : r.win === 'tie' ? '● EMPATE' : `✖ GANÓ ${boss.name.toUpperCase()}`;
+      menuShow(`<h2>${ev.title}</h2><div class="roll ${r.win === 'win' ? 'good' : r.win === 'tie' ? 'mid' : 'bad'}">${txt}</div>
+        <p class="dim">Práctica terminada: sin recompensas ni castigos.</p>
+        <div class="pbtns"><button class="big" id="magain">↻ Otra vez</button><button class="big alt" id="mlist">🧩 Lista de minijuegos</button><button class="big alt" id="mexit">🚪 Salir al título</button></div>`);
+      $('#magain').onclick = () => res('again');
+      $('#mlist').onclick = () => res('list');
+      $('#mexit').onclick = () => res('exit');
+    });
+  }
+  async function practiceDuel(id) {
+    const ev = G.EVENTS[id], mg = MG[ev.game];
+    const who = await pickCharScreen(ev);
+    if (!who) return;
+    for (;;) {
+      if (!await vsScreen(ev, who)) return;
+      enterPractice(); // ← aquí, y solo aquí, se abandona la partida en curso
+      mg.setup();
+      menuHide();
+      G.captureKeys = true; $('#phone').classList.add('dim');
+      const res = await new Promise((r) => G.setScene(new (mg.Scene())(who, r)));
+      G.captureKeys = false; $('#phone').classList.remove('dim');
+      G.setScene(G.home);
+      const act = await resultScreen(ev, res);
+      if (act === 'again') continue;
+      if (act === 'exit') { location.href = location.pathname; return; }
+      return; // 'list'
+    }
+  }
+  async function showMinigames(from) {
+    for (;;) {
+      const pick = await duelListScreen(from);
+      if (pick === 'back') break;
+      await practiceDuel(pick);
+    }
+    menuHide();
+  }
+
   // ---------- Pantallas iniciales ----------
   function titleScreen() {
-    return ui.modal(`<div class="logo"><small>🎂</small><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
-      <p>Siete roomies. Una fiesta sorpresa. Y Ximena, que vuelve de 36 horas de guardia, está por llegar.</p>
-      <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa, vence en duelo a <b>Pollito</b> y a <b>José</b> y, sobre todo, <b>no la despiertes</b>.</p>`, 'JUGAR');
+    return new Promise((res) => {
+      const show = () => {
+        overlay.innerHTML = `<div class="modal"><div class="logo"><small>🎂</small><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
+          <p>Siete roomies. Una fiesta sorpresa. Y Ximena, que vuelve de 36 horas de guardia, está por llegar.</p>
+          <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa, vence en duelo a <b>Pollito</b> y a <b>José</b> y, sobre todo, <b>no la despiertes</b>.</p>
+          <div class="pbtns"><button class="big" id="tplay">▶ JUGAR</button><button class="big alt" id="tmg">🧩 MINIJUEGOS</button></div></div>`;
+        overlay.classList.add('show');
+        $('#tplay').onclick = () => {
+          overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok');
+          // si estuvo practicando desde el título, se resetea el modo antes
+          // de que arranque la partida de verdad
+          if (G.practiceMode) { G.practiceMode = false; G.dropTimers(); S.phase = 'title'; }
+          res();
+        };
+        $('#tmg').onclick = async () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('pick'); await showMinigames('title'); show(); };
+      };
+      show();
+    });
   }
   function selectChar() {
     return new Promise((res) => {
@@ -190,7 +371,7 @@
       const ok = Math.random() < chanceFor(t, who);
       const br = ok ? ev.success : ev.fail;
       ui.raw(`<div class="roll ${ok ? 'good' : 'bad'}">${ok ? '✔ ÉXITO' : '✖ FALLO'}</div>`); G.sfx(ok ? 'ok' : 'bad');
-      const actor = home.actor(who); if (actor) { actor.expr = ok ? 'happy' : 'surprised'; setTimeout(() => (actor.expr = null), 4000); }
+      const actor = home.actor(who); if (actor) { actor.expr = ok ? 'happy' : 'surprised'; G.after(4, () => (actor.expr = null)); }
       await ui.postAll(br.reply(who));
       apply(br.effects, who);
       if (!ok) { S.log.fallos++; if (ev.kind === 'Amenaza' && who !== 'itzel') { await ui.post({ who: 'itzel', text: 'Yo le habría respondido MEJOR. Pero claro, nadie me pregunta.', mood: 'angry' }); apply({ noise: 5 }); } }
@@ -226,7 +407,7 @@
       async resolve(r, who) {
         const t = r.target;
         if (r.win === 'win') { await ui.postAll([{ who, text: `Lo tengo. Recuperé ${t.article}. Sólo tiene un poquito de baba.`, mood: 'happy' }, { who: 'pollito', text: '😾' }]); apply({ quality: 3 }, who); }
-        else if (t.id === 'control') { S.flags.tvOn = true; await ui.postAll([{ who: 'sistema', text: '📺 Pollito pisó el control. La tele se prende a todo volumen.' }, { who: 'alan', text: '¡APÁGUENLA!', mood: 'surprised' }]); apply({ noise: 24 }, who); setTimeout(() => (S.flags.tvOn = false), 6000); }
+        else if (t.id === 'control') { S.flags.tvOn = true; await ui.postAll([{ who: 'sistema', text: '📺 Pollito pisó el control. La tele se prende a todo volumen.' }, { who: 'alan', text: '¡APÁGUENLA!', mood: 'surprised' }]); apply({ noise: 24 }, who); G.after(6, () => (S.flags.tvOn = false)); }
         else {
           delete S.inv[t.id]; ui.refreshInv();
           if (t.id === 'regalo') S.flags.regaloRoto = true;
@@ -259,7 +440,7 @@
     G.setScene(G.home);
     S.duels.push({ game: ev.game, boss: ev.boss, win: res.win });
     ui.raw(`<div class="roll ${res.win === 'win' ? 'good' : res.win === 'tie' ? 'mid' : 'bad'}">${res.win === 'win' ? `✔ VENCISTE A ${boss.name.toUpperCase()}` : res.win === 'tie' ? '● EMPATE' : `✖ GANÓ ${boss.name.toUpperCase()}`}</div>`);
-    const actor = G.home.actor(who); if (actor) { actor.expr = res.win === 'win' ? 'happy' : 'surprised'; actor.hop(160); setTimeout(() => (actor.expr = null), 4000); }
+    const actor = G.home.actor(who); if (actor) { actor.expr = res.win === 'win' ? 'happy' : 'surprised'; actor.hop(160); G.after(4, () => (actor.expr = null)); }
     if (res.win !== 'win') S.log.fallos++;
     if (mg.resolve) await mg.resolve(res, who);
     const br = ev.results && (ev.results[res.win] || ev.results.lose);
@@ -372,7 +553,7 @@
     home.setLight('fiesta', true); home.startConfetti(); G.sfx('party');
     const party = [...home.roomies, ...(S.flags.joseUne ? [home.jose] : [])];
     party.forEach((r) => { r.expr = 'happy'; r.say('¡SORPRESA!', 3); });
-    const jump = setInterval(() => party.forEach((r) => r.hop(150 + Math.random() * 70)), 520);
+    const jump = setInterval(() => { if (!G.paused) party.forEach((r) => r.hop(150 + Math.random() * 70)); }, 520); // en pausa los saltos se detienen (es setInterval de pared)
     xi.expr = 'surprised'; xi.hop(180); xi.emo('!!', 1.4); await G.wait(2.2);
     const good = S.quality >= 45;
     xi.expr = 'happy'; xi.dir = 'down'; xi.say(good ? '¡¿Hicieron todo esto por mí?!' : 'JAJAJA ¿qué le pasó a la sala?', 3.2);
