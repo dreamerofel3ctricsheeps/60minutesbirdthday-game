@@ -23,6 +23,11 @@
     c.fillText(cur, x, ly);
   }
 
+  // Validación de spawns: ningún actor de una escena con muebles puede
+  // nacer dentro de uno sólido (quedaría atrapado: ver World.nearestFree).
+  // Se aplica al construir la escena y al recolocar actores por ronda.
+  const fixSpawn = (a, room) => { const [nx, ny] = W.nearestFree(a.x, a.y, room); a.x = nx; a.y = ny; return a; };
+
   // =========================================================
   // ACTO 0 — 1 MINUTO PARA LA FIESTA
   // =========================================================
@@ -409,6 +414,7 @@
     constructor(who, done) {
       super(who, 'pollito', done, { time: 13, title: 'DECORACIÓN EXPRESS', hint: 'ESPACIO en verde para colgar · ESPACIO junto a Pollito para espantarlo' });
       this.p = new Actor(who, 520, 230); this.cat = new Actor('pollito', 880, 120);
+      fixSpawn(this.p, 'sala'); fixSpawn(this.cat, 'sala'); // spawns validados contra los muebles (ver World.nearestFree)
       this.zone = 0.2 + stat(who, 'logica') * 0.013 + (G.S.inv.herramientas ? 0.07 : 0);
       // Red de seguridad: si el duelo se construye sin pasar por
       // MG.deco.setup() o con un set incompleto/corrupto, se reconstruye
@@ -489,7 +495,16 @@
       this.target = G.pollitoTarget(G.S);
       this.p = new Actor(who, 420, 200); this.cat = new Actor('pollito', 860, 110); this.cat.carry = [this.target.id]; this.cam = CAM_SALA(); this.begin();
     }
-    setup(n) { const p = this.p, c = this.cat; [p.x, p.y] = n % 2 ? [900, 240] : [420, 200]; [c.x, c.y] = n % 2 ? [400, 100] : [860, 110]; p.vx = p.vy = c.vx = c.vy = 0; p.spin = 0; this.dashT = 0; this.cd = 0; this.dx = n % 2 ? -1 : 1; this.dy = 0; this.stun = 0; this.inv = 0; this.juke = 1.5; this.jukeT = 0; this.toys = []; this.toyT = 3; this.hd = { x: 0, y: 1 }; }
+    // Spawns por ronda: pares = jugador abajo-izquierda y Pollito arriba-
+    // derecha; impares = esquinas cruzadas. OJO: el spawn impar original
+    // del jugador era (900, 240), que cae DENTRO de la mesa de fiesta
+    // (ptable: x 800–930, y 200–245): nacía parado sobre la mesa y no
+    // podía moverse en ninguna dirección (walk exige canStand en el
+    // destino y desde dentro todo paso sigue dentro del mueble). El
+    // punto correcto es (900, 264), justo debajo de la mesa. Y como red
+    // permanente, ambos spawns pasan por fixSpawn (World.nearestFree):
+    // si el layout cambia, se reubican al piso libre más cercano.
+    setup(n) { const p = this.p, c = this.cat; [p.x, p.y] = n % 2 ? [900, 264] : [420, 200]; [c.x, c.y] = n % 2 ? [400, 100] : [860, 110]; fixSpawn(p, 'sala'); fixSpawn(c, 'sala'); p.vx = p.vy = c.vx = c.vy = 0; p.spin = 0; this.dashT = 0; this.cd = 0; this.dx = n % 2 ? -1 : 1; this.dy = 0; this.stun = 0; this.inv = 0; this.juke = 1.5; this.jukeT = 0; this.toys = []; this.toyT = 3; this.hd = { x: 0, y: 1 }; }
     extra() { return { target: this.target }; }
     update(dt) {
       const p = this.p, cat = this.cat; p.update(dt); cat.update(dt);
@@ -680,6 +695,7 @@
     constructor(who, done) {
       super(who, 'jose', done, { time: 24, title: 'SONÁMBULA', hint: '→ para avanzar · ¡Quieto cuando Ximena voltea! · Llega a ella antes que José' });
       this.x0 = 388; this.goal = 872; this.p = new Actor(who, this.x0, 266); this.jose = new Actor('jose', this.x0, 92); this.jose.animSet = 'sneak'; this.xi = new Actor('ximena', 936, 160);
+      fixSpawn(this.p, 'sala'); fixSpawn(this.jose, 'sala'); fixSpawn(this.xi, 'sala'); // spawns validados contra los muebles
       this.grace = 0.17 + stat(who, 'sigilo') * 0.013; this.caught = 0; const f = G.S.flags.jose; this.jbase = (f === 'aliado' ? 80 : f === 'desconfia' ? 94 : 87) * 1.45; this.pspeed = (64 + stat(who, 'velocidad') * 7) * 1.5; this.cam = CAM_SALA(); this.begin();
     }
     setup(n) { const p = this.p, j = this.jose, xi = this.xi; p.x = j.x = this.x0; p.vx = j.vx = 0; p.dir = j.dir = 'right'; p.spin = j.spin = 0; xi.dir = 'right'; xi.expr = 'sleep'; this.ph = 'green'; this.pt = rnd(1.4, 2.4); this.redT = 0; this.jsp = this.jbase * (1 + n * 0.06); this.jmove = true; this.jwait = 0; }
@@ -729,6 +745,7 @@
     constructor(who, done) {
       super(who, 'jose', done, { title: 'MEMORIA DE CAJAS', hint: '← → ↑ ↓ para elegir caja · ESPACIO para abrirla · Si aciertas, repites turno' });
       this.p = new Actor(who, 470, 250); this.p.dir = 'up'; this.jose = new Actor('jose', 840, 250); this.jose.dir = 'up';
+      fixSpawn(this.p, 'sala'); fixSpawn(this.jose, 'sala'); // José nacía 1 u dentro de la mesa de fiesta: sin movimiento no se atascaba, pero tampoco debe nacer dentro de un mueble
       const f = G.S.flags.jose; this.recall = (f === 'aliado' ? 0.5 : f === 'desconfia' ? 0.72 : 0.6) - stat(who, 'logica') * 0.012; this.cam = CAM_SALA(); this.begin();
     }
     setup(n) {
@@ -792,8 +809,11 @@
     constructor(who, done) {
       super(who, 'pollito', done, { time: 12, title: 'CACTUS RODANTES', hint: 'Muévete con WASD o flechas · Esquiva los cactus hasta que se acabe el tiempo' });
       this.p = new Actor(who, 180, 250); this.cat = new Actor('pollito', 150, 58); this.cat.elev = 40; this.cam = { x: 185, y: 0, z: 150, dist: 430, pitch: 0.92, fov: 34 }; this.begin();
+      // el jugador se valida contra los muebles de la cocina; Pollito NO:
+      // está elevado (elev=40) sentado sobre la encimera a propósito
+      fixSpawn(this.p, 'cocina');
     }
-    setup(n) { const p = this.p; p.x = 180; p.y = 255; p.vx = p.vy = 0; p.spin = 0; this.balls = []; for (let i = 0; i < n + 2; i++) this.spawn(i * 0.5); this.next = 3.4; }
+    setup(n) { const p = this.p; p.x = 180; p.y = 255; fixSpawn(p, 'cocina'); p.vx = p.vy = 0; p.spin = 0; this.balls = []; for (let i = 0; i < n + 2; i++) this.spawn(i * 0.5); this.next = 3.4; }
     spawn(delay) { const a = rnd(0.5, 2.6), sp = 118 + this.round * 16 + (G.S.flags.pollitoOfendido ? 12 : 0); this.balls.push({ x: rnd(70, 230), y: 96, vx: Math.cos(a) * sp, vy: Math.abs(Math.sin(a)) * sp, t: -delay, r: rnd(0, 6) }); this.cat.hop(90); }
     update(dt) {
       const p = this.p; p.update(dt); this.cat.update(dt);

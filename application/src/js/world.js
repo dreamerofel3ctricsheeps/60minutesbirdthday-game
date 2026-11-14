@@ -110,6 +110,28 @@
       for (let i = 0; i < 60; i++) { const x = r.x + 16 + Math.random() * (r.w - 32), y = r.y + 18 + Math.random() * (r.h - 30); if (World.canStand(x, y)) return [x, y]; }
       return [r.x + r.w / 2, r.y + r.h / 2];
     },
+    // Defensa anti-atasco: si un punto cae DENTRO de un mueble sólido,
+    // devuelve el punto libre más cercano (búsqueda en anillos concéntricos,
+    // determinista). Nacer dentro de un AABB es una trampa sin salida:
+    // Actor.walk exige canStand() en el destino y desde dentro TODO paso
+    // corto sigue intersectando el mueble, así que el actor no puede salir
+    // en ninguna dirección (bug real: el jugador de «Atrapa a Pollito»
+    // nacía sobre la mesa de fiesta en la ronda 2 y quedaba congelado).
+    // Los spawns de las escenas se validan con esto al construirse: si un
+    // cambio futuro de layout mueve un mueble sobre un spawn, el actor se
+    // reubica solo en vez de quedar atrapado.
+    nearestFree(x, y, room) {
+      if (World.canStand(x, y, room)) return [x, y];
+      for (let r = 4; r <= 280; r += 4) {
+        const steps = Math.max(8, Math.round((Math.PI * 2 * r) / 6));
+        for (let i = 0; i < steps; i++) {
+          const a = (i / steps) * Math.PI * 2;
+          const nx = Math.round(x + Math.cos(a) * r), ny = Math.round(y + Math.sin(a) * r);
+          if (World.canStand(nx, ny, room)) return [nx, ny];
+        }
+      }
+      return room ? World.randomFreePoint(room) : [x, y];
+    },
   };
   G.World = World;
 

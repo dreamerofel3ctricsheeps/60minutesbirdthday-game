@@ -33,6 +33,14 @@
       selector de práctica usan un carrusel con botones ‹ ›,
       puntos y flechas del teclado, sin ninguna barra de scroll,
       desde el que se alcanzan los 7 roomies.
+   J) Spawns seguros (bug «Atrapa a Pollito»): el jugador nacía
+      SOBRE la mesa de fiesta en la ronda 2 (spawn (900, 240)
+      dentro de ptable) y no podía moverse en ninguna dirección.
+      Spawn corregido + validación permanente (World.nearestFree):
+      en los duelos con muebles (Pollito, Decoración, Sonámbula,
+      Memoria, Cactus) ningún actor nace dentro de un mueble, y
+      desde el spawn de la ronda 2 se puede salir en las 4
+      direcciones.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -607,6 +615,51 @@ const tick = () => new Promise((r) => setImmediate(r));
     backBtn.onclick(); await pBack;
     check('práctica: el botón Volver del carrusel resuelve null (vuelve a la lista)', backRes === null, 'res=' + backRes);
     G.menuOpen = false;
+  }
+
+  // ================= J) Spawns seguros: nadie nace dentro de un mueble =====
+  console.log('\nJ) Spawns — ningún actor de duelo nace dentro de un mueble (bug Atrapa a Pollito)');
+  {
+    // la defensa en sí: nearestFree no toca un punto libre y rescata uno atrapado
+    check('nearestFree: un punto libre queda intacto', JSON.stringify(W.nearestFree(420, 200, 'sala')) === '[420,200]');
+    const rescued = W.nearestFree(900, 240, 'sala'); // el spawn original del bug: dentro de la mesa de fiesta (ptable)
+    check('nearestFree: rescata (900, 240), que caía dentro de la mesa de fiesta, al piso libre cercano',
+      W.canStand(rescued[0], rescued[1], 'sala') && Math.hypot(rescued[0] - 900, rescued[1] - 240) <= 60, rescued.join(','));
+
+    // Atrapa a Pollito: spawns de TODAS las rondas (jugador y Pollito)
+    S.inv = {}; S.flags = {};
+    const chase = new Sc.ChaseDuel('natalia', () => {});
+    for (let n = 0; n < 3; n++) {
+      chase.setup(n);
+      check(`ronda ${n + 1}: el jugador nace en piso libre (no sobre la mesa)`, W.canStand(chase.p.x, chase.p.y, 'sala'), `${chase.p.x},${chase.p.y}`);
+      check(`ronda ${n + 1}: Pollito nace en piso libre`, W.canStand(chase.cat.x, chase.cat.y, 'sala'), `${chase.cat.x},${chase.cat.y}`);
+    }
+    // y desde el spawn de la ronda 2 (el del bug) se puede salir en las 4 direcciones
+    const dirs = [['ArrowRight', 'x', 1], ['ArrowLeft', 'x', -1], ['ArrowDown', 'y', 1], ['ArrowUp', 'y', -1]];
+    for (const [code, axis, sign] of dirs) {
+      chase.setup(1); chase.st = 'play'; chase.time = 1e9;
+      const before = chase.p[axis];
+      key(code, true);
+      for (let i = 0; i < 10; i++) chase.update(0.05);
+      key(code, false);
+      const moved = (chase.p[axis] - before) * sign;
+      check(`desde el spawn de la ronda 2 se puede mover hacia ${code.replace('Arrow', '').toLowerCase()} (no está atrapado)`, moved > 8, `desplazamiento=${moved.toFixed(1)}`);
+    }
+
+    // los demás duelos que comparten el sistema de salas/muebles
+    const decoJ = new Sc.DecoDuel('natalia', () => {});
+    check('Decoración Express: jugador y Pollito nacen en piso libre',
+      W.canStand(decoJ.p.x, decoJ.p.y, 'sala') && W.canStand(decoJ.cat.x, decoJ.cat.y, 'sala'), `${decoJ.p.x},${decoJ.p.y} / ${decoJ.cat.x},${decoJ.cat.y}`);
+    const sleepJ = new Sc.SleepwalkDuel('natalia', () => {});
+    check('Sonámbula: jugador, José y Ximena nacen en piso libre',
+      W.canStand(sleepJ.p.x, sleepJ.p.y, 'sala') && W.canStand(sleepJ.jose.x, sleepJ.jose.y, 'sala') && W.canStand(sleepJ.xi.x, sleepJ.xi.y, 'sala'),
+      `${sleepJ.p.x},${sleepJ.p.y} / ${sleepJ.jose.x},${sleepJ.jose.y} / ${sleepJ.xi.x},${sleepJ.xi.y}`);
+    const memJ = new Sc.MemoryDuel('natalia', () => {});
+    check('Memoria de cajas: jugador y José nacen en piso libre (José ya no nace dentro de la mesa)',
+      W.canStand(memJ.p.x, memJ.p.y, 'sala') && W.canStand(memJ.jose.x, memJ.jose.y, 'sala'), `${memJ.p.x},${memJ.p.y} / ${memJ.jose.x},${memJ.jose.y}`);
+    const spikeJ = new Sc.SpikeDuel('natalia', () => {});
+    spikeJ.setup(0);
+    check('Cactus rodantes: el jugador nace en piso libre de la cocina', W.canStand(spikeJ.p.x, spikeJ.p.y, 'cocina'), `${spikeJ.p.x},${spikeJ.p.y}`);
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
