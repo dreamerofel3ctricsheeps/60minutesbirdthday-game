@@ -41,6 +41,11 @@
       Memoria, Cactus) ningún actor nace dentro de un mueble, y
       desde el spawn de la ronda 2 se puede salir en las 4
       direcciones.
+   K) Repisas en el espacio: el campo de galaxias solo existe en
+      la zona espacio y su densidad crece con la altura; el cohete
+      de los huidos solo pasa en el espacio, con la tripulación
+      correcta (S.fled en historia; todos menos el elegido en
+      práctica) y su guiño en burbuja la primera vez.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -660,6 +665,94 @@ const tick = () => new Promise((r) => setImmediate(r));
     const spikeJ = new Sc.SpikeDuel('natalia', () => {});
     spikeJ.setup(0);
     check('Cactus rodantes: el jugador nace en piso libre de la cocina', W.canStand(spikeJ.p.x, spikeJ.p.y, 'cocina'), `${spikeJ.p.x},${spikeJ.p.y}`);
+  }
+
+  // ================= K) Repisas en el espacio: galaxias y el cohete de los huidos =====
+  console.log('\nK) Salto de repisas — galaxias en el espacio y el cohete de los roomies no elegidos');
+  if (!Sc.ClimbDuel || !Sc.ClimbDuel.galaxiesAt) { check('existe ClimbDuel.galaxiesAt', false); }
+  else {
+    // --- Galaxias: solo en el espacio, con densidad creciente ---
+    check('galaxias: bajo el espacio (cámara a 300 u y a 4400 u) NO hay ninguna',
+      Sc.ClimbDuel.galaxiesAt(300).length === 0 && Sc.ClimbDuel.galaxiesAt(4400).length === 0,
+      `300u=${Sc.ClimbDuel.galaxiesAt(300).length} 4400u=${Sc.ClimbDuel.galaxiesAt(4400).length}`);
+    const gSpace = Sc.ClimbDuel.galaxiesAt(5600), gDeep = Sc.ClimbDuel.galaxiesAt(30000);
+    check('galaxias: en el espacio (5600 u) hay galaxias visibles, todas sobre el borde de la zona y con variante válida',
+      gSpace.length >= 1 && gSpace.every((g) => g.y > 4900 && g.v >= 0 && g.v <= 2 && g.s > 100 && g.a > 0), JSON.stringify(gSpace));
+    // densidad: suma de galaxias visibles en muestreos de dos bandas
+    const perTramo = (cy) => Sc.ClimbDuel.galaxiesAt(cy).length;
+    let densLow = 0, densHigh = 0;
+    for (let cy = 5200; cy <= 8200; cy += 310) densLow += perTramo(cy);
+    for (let cy = 24000; cy <= 27000; cy += 310) densHigh += perTramo(cy);
+    check('galaxias: la densidad CRECE con la altura (más por tramo muy arriba que al entrar)',
+      densHigh > densLow, `recién entrado=${densLow} muy arriba=${densHigh}`);
+    check('galaxias: el campo es determinista (misma altura, mismo campo)',
+      JSON.stringify(Sc.ClimbDuel.galaxiesAt(12345)) === JSON.stringify(Sc.ClimbDuel.galaxiesAt(12345)));
+
+    // --- El cohete: tripulación según modo, y solo en el espacio ---
+    const mkClimbAtSpace = (who) => {
+      const d = new Sc.ClimbDuel(who, () => {});
+      d.st = 'play'; d.time = 1e9; d.cstep = 1e9; d.ct = 1e9; // Pollito congelado
+      d.p.elev = 6000; d.p.te = 6000; d.pi = d.pMax = 222; d.cam.y = 6000; // cámara y jugador en el espacio
+      return d;
+    };
+    // historia: la tripulación son los HUIDOS (S.fled)
+    G.practiceMode = false;
+    S.party = ['natalia', 'itzel', 'alan', 'saulo'];
+    S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
+    {
+      const d = mkClimbAtSpace('natalia');
+      check('cohete (historia): la tripulación son exactamente los no elegidos (S.fled)',
+        JSON.stringify(d.rocketCrew()) === JSON.stringify(S.fled), d.rocketCrew().join(','));
+      d.rocketWait = 0;
+      d.update(0.05);
+      check('cohete (historia): en el espacio se dispara el pase, con la tripulación de huidos a bordo',
+        !!d.rocket && JSON.stringify(d.rocket.crew) === JSON.stringify(S.fled) && d.rocketSeen === true, d.rocket && d.rocket.crew.join(','));
+      check('cohete: el guiño de la primera vez es la burbuja del protagonista (sin emoticones)',
+        !!d.p.bubble && d.p.bubble.text.includes('se fueron'), d.p.bubble && d.p.bubble.text);
+      const x0 = d.rocket.x;
+      d.update(0.05);
+      check('cohete: cruza en horizontal (x avanza en su sentido)', (d.rocket.x - x0) * d.rocket.dir > 3, `dx=${(d.rocket.x - x0).toFixed(1)}`);
+      for (let i = 0; i < 200 && d.rocket; i++) d.update(0.05);
+      check('cohete: al salir de pantalla se retira y reprograma el próximo pase (12–18 s)',
+        d.rocket === null && d.rocketWait >= 12 && d.rocketWait <= 18, `wait=${d.rocketWait}`);
+    }
+    // práctica: todos los roomies menos el elegido para practicar
+    G.practiceMode = true;
+    {
+      const d = mkClimbAtSpace('saulo');
+      const expect = G.PLAYABLE.filter((id) => id !== 'saulo');
+      check('cohete (práctica): la tripulación son todos los roomies menos el elegido',
+        JSON.stringify(d.rocketCrew()) === JSON.stringify(expect), d.rocketCrew().join(','));
+      d.rocketWait = 0; d.update(0.05);
+      check('cohete (práctica): el pase se dispara con esa tripulación (6 ventanillas)',
+        !!d.rocket && d.rocket.crew.length === 6, d.rocket && d.rocket.crew.join(','));
+    }
+    G.practiceMode = false;
+    // fuera del espacio: jamás pasa
+    {
+      const d = new Sc.ClimbDuel('natalia', () => {});
+      d.st = 'play'; d.time = 1e9; d.cstep = 1e9; d.ct = 1e9; d.rocketWait = 0;
+      for (let i = 0; i < 40; i++) d.update(0.05);
+      check('cohete: fuera de la zona espacio NUNCA se dispara (ni con la espera agotada)', d.rocket === null && d.cam.y < 5000, `cam.y=${d.cam.y.toFixed(0)}`);
+    }
+    // draw con el cohete en pantalla y galaxias: sin excepciones
+    {
+      const realRender = W.render, realProject = G.R.project;
+      const ctx2d = new FakeCtx();
+      W.render = (opts) => { if (opts.boxes) opts.boxes(new G.R.MB(), 0); if (opts.sprites) opts.sprites(0); if (opts.over) opts.over(ctx2d, 0); };
+      G.R.project = () => ({ x: 320, y: 180, ok: true });
+      try {
+        const d = mkClimbAtSpace('natalia');
+        d.rocket = { x: -40, dir: 1, crew: d.rocketCrew() };
+        d.draw(0.016);
+        check('draw sin errores: espacio con galaxias y el cohete en pantalla (caras en las ventanillas)', d.rocket.crew.length === 3);
+        d.rocket = { x: 120, dir: -1, crew: G.PLAYABLE.filter((id) => id !== 'natalia') };
+        d.draw(0.016);
+        check('draw sin errores: cohete en sentido contrario y con 6 tripulantes', true);
+      } catch (e) {
+        check('draw sin errores con cohete/galaxias (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
+      } finally { W.render = realRender; G.R.project = realProject; }
+    }
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

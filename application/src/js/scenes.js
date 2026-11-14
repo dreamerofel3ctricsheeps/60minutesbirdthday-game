@@ -981,7 +981,14 @@
   // tenues, la luna) → ESPACIO (≥5000 u ≈ 200 m: estrellas, un satélite
   // que cruza, el planeta brillando abajo y FLOTACIÓN: subir y bajar
   // se vuelve lento y los actores quedan suspendidos con un vaivén —
-  // gag físico de ingravidez). El fondo (cielo y luz) interpola suave
+  // gag físico de ingravidez). En el espacio además hay GALAXIAS
+  // (espirales y una elíptica pintadas por código, en la capa más
+  // lejana con parallax y densidad creciente con la altura) y cada
+  // 12–18 s pasa EL COHETE DE LOS HUIDOS: los roomies NO elegidos
+  // (G.S.fled; en práctica, todos menos el elegido) saludan desde las
+  // ventanillas — "ya nos íbamos", y se fueron lejos de verdad (guiño
+  // sin emoticones: la primera vez el protagonista lo dice en burbuja).
+  // El fondo (cielo y luz) interpola suave
   // entre zonas según la altura de la cámara, y cada zona se anuncia
   // una sola vez al cruzarla con la altura máxima.
   // CÁMARA: sigue al jugador en vertical con suavidad — sube ágil
@@ -1034,6 +1041,82 @@
     const L = (u, v) => u.map((x, j) => x + (v[j] - x) * k);
     return { amb: L(a[2], b[2]), sun: L(a[3], b[3]), sky: rgbHex(L(hexRgb(a[1]), hexRgb(b[1]))), points: [{ x: 0, y: y + 40, z: 80, r: 340, c: [0.45, 0.36, 0.22] }] };
   }
+  // ---------- Galaxias del espacio profundo ----------
+  // Se pintan UNA vez en canvas (3 variantes) con puntitos y brillos en
+  // la paleta suave del juego (morados, rosas, azules): dos ESPIRALES de
+  // dos brazos y una ELÍPTICA inclinada de núcleo cálido. En escena van
+  // como billboards en la capa MÁS LEJANA (z = -470, detrás de las
+  // estrellas de z = -300 y de la luna de z = -390): al moverse la
+  // cámara pesan menos en pantalla que todo lo demás (parallax).
+  let galaxyCvs = null;
+  const galRnd = (s) => { const v = Math.sin(s * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+  const galRgba = (h, a) => `rgba(${parseInt(h.slice(1, 3), 16)},${parseInt(h.slice(3, 5), 16)},${parseInt(h.slice(5, 7), 16)},${a})`;
+  function makeGalaxyCv(v) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 168;
+    const x = cv.getContext('2d'), C = 84;
+    const PAL = [['#ffb7e3', '#c9a7ff', '#8fb7ff'], ['#aee9ff', '#8fb7ff', '#c9a7ff'], ['#ffd9a0', '#ffb7a0', '#a8c8ff']][v];
+    let g = x.createRadialGradient(C, C, 2, C, C, 82); // halo tenue general
+    g.addColorStop(0, 'rgba(255,255,255,.5)'); g.addColorStop(0.3, galRgba(PAL[1], 0.26)); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 168, 168);
+    const dot = (px, py, s, col, a) => { x.globalAlpha = a; x.fillStyle = col; x.beginPath(); x.arc(px, py, s, 0, 6.3); x.fill(); };
+    if (v === 2) { // ELÍPTICA: halo alargado e inclinado, sin brazos
+      x.save(); x.translate(C, C); x.rotate(-0.5); x.scale(1, 0.44);
+      g = x.createRadialGradient(0, 0, 2, 0, 0, 80);
+      g.addColorStop(0, 'rgba(255,246,230,.95)'); g.addColorStop(0.35, galRgba(PAL[0], 0.55)); g.addColorStop(0.75, galRgba(PAL[2], 0.20)); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(0, 0, 80, 0, 6.3); x.fill();
+      for (let i = 0; i < 170; i++) { const a = galRnd(i * 3.1 + 7) * 6.283, r = Math.pow(galRnd(i * 7.7 + 3), 0.6) * 74; dot(Math.cos(a) * r, Math.sin(a) * r, 0.8 + galRnd(i * 13.7) * 1.5, PAL[i % 3], 0.25 + galRnd(i * 5.3) * 0.5); }
+      x.restore();
+    } else { // ESPIRAL: dos brazos de puntitos que se abren desde el núcleo
+      const twist = v === 0 ? 3.3 : 4.2;
+      for (let a = 0; a < 2; a++) for (let i = 0; i < 150; i++) {
+        const tt = i / 150, ang = a * Math.PI + tt * twist + (galRnd(v * 977 + a * 131 + i * 3) - 0.5) * 0.4;
+        const r = 5 + tt * 66 + (galRnd(v * 331 + a * 57 + i * 7) - 0.5) * 10;
+        dot(C + Math.cos(ang) * r, C + Math.sin(ang) * r * 0.84, 0.8 + (1 - tt) * 1.7 + galRnd(i * 11 + a) * 1.3, PAL[i % 5 === 4 ? 2 : (a + (i % 2)) % 2], 0.28 + (1 - tt) * 0.55);
+      }
+      g = x.createRadialGradient(C, C, 0, C, C, 17); // núcleo brillante
+      g.addColorStop(0, 'rgba(255,255,255,.98)'); g.addColorStop(0.5, galRgba(PAL[0], 0.75)); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(C, C, 17, 0, 6.3); x.fill();
+    }
+    for (let i = 0; i < 7; i++) { // estrellitas con destello en cruz
+      const px = 14 + galRnd(v * 71 + i * 17) * 140, py = 14 + galRnd(v * 43 + i * 23) * 140;
+      x.globalAlpha = 0.85; x.fillStyle = '#ffffff';
+      x.fillRect(px - 0.75, py - 3.5, 1.5, 7); x.fillRect(px - 3.5, py - 0.75, 7, 1.5); x.fillRect(px - 1, py - 1, 2, 2);
+    }
+    x.globalAlpha = 1;
+    return cv;
+  }
+  function galaxyCv(v) { if (!galaxyCvs) galaxyCvs = [makeGalaxyCv(0), makeGalaxyCv(1), makeGalaxyCv(2)]; return galaxyCvs[v]; }
+  // Campo de galaxias visible a la altura de cámara cy: colocación por
+  // tramos de 620 u con el hash determinista de siempre. Solo existen
+  // en el ESPACIO (y por encima de ~5000 u) y la DENSIDAD crece con la
+  // altura: al entrar hay ~1 por tramo; muy arriba, hasta 2 por tramo.
+  function climbGalaxies(cy) {
+    const out = [], TR = 620;
+    for (let g = Math.floor((cy - 430) / TR); g <= Math.floor((cy + 470) / TR); g++) {
+      const gy = g * TR + 110 + climbHash(g * 3.17 + 51) * 390;
+      if (gy < ESPACIO_E - 40) continue;
+      const n = 1 + (climbHash(g * 7.77 + 5) < Math.min(0.75, Math.max(0, (gy - ESPACIO_E) / 5200)) ? 1 : 0);
+      for (let j = 0; j < n; j++) {
+        const h1 = climbHash(g * 13.3 + j * 29.7 + 8), h2 = climbHash(g * 5.9 + j * 47.1 + 23);
+        out.push({ x: -440 + h1 * 880, y: gy + j * 215 + h2 * 80, v: Math.floor(h2 * 2.99), s: 128 + h1 * 105, roll: (h1 - 0.5) * 1.15 + j * 0.8, a: Math.max(0, Math.min(1, (gy - ESPACIO_E + 170) / 430)) * 0.92 });
+      }
+    }
+    return out;
+  }
+  // Cara de un roomie para las ventanillas del cohete de los huidos:
+  // recorte cuadrado de su frame idle frontal centrado en los ojos
+  // detectados de su hoja definida (la cara que se ve en el retrato).
+  const rocketFaceCache = {};
+  function rocketFaceCv(id) {
+    if (rocketFaceCache[id]) return rocketFaceCache[id];
+    const meta = Sp.META.chars[id], src = Sp.frame(id, 'idle', 0);
+    const cv = document.createElement('canvas'); cv.width = cv.height = 56; cv._scale = 0.3;
+    const es = (meta.eyes || {})[meta.anims.idle[0]];
+    const cx = es && es.length ? es.reduce((s, e) => s + e.x, 0) / es.length : meta.fw / 2;
+    const cyy = es && es.length ? es[0].y : meta.top + 34, S = 98;
+    cv.getContext('2d').drawImage(src, cx - S / 2, cyy - S * 0.44, S, S, 0, 0, 56, 56);
+    rocketFaceCache[id] = cv; return cv;
+  }
   class ClimbDuel extends Duel {
     constructor(who, done) {
       super(who, 'pollito', done, { rounds: 1, need: 1, time: CLIMB_TIME, label: 'ESCALADA', title: 'SALTO DE REPISAS', hint: '← o → según la siguiente repisa · Si fallas, caes una repisa · Gana la mayor altura en 60 s' });
@@ -1049,6 +1132,11 @@
       this.spawnFx = { p: { 1: 0, 2: 0.18 }, c: { 1: 0, 2: 0.18 } }; // nº de repisa -> instante de nacimiento (pop)
       this.puffs = []; // polvo del nacimiento de cada repisa
       this.stun = 0; this.ct = 1; this.banner = null; this.debris = []; this.zoneSeen = 0; this.catZone = 0;
+      // EL COHETE DE LOS HUIDOS (solo en el espacio): null = fuera de
+      // escena; rocketWait = cuenta atrás para el próximo pase (el
+      // primero llega a los ~6 s de estar en la zona; luego cada
+      // 12–18 s). rocketDir alterna el sentido de cada pase.
+      this.rocket = null; this.rocketWait = 6; this.rocketDir = -1; this.rocketSeen = false;
       this._sb = 0; this._sv = []; // ventana de lados generados desde el índice _sb (se poda: ver pruneSides)
       this.cstep = 0.44 * (G.S.flags.pollitoOfendido ? 0.93 : 1) + (10 - stat(this.who, 'velocidad')) * -0.004;
       this.place(this.p, -70, 0, true); this.place(this.cat, 70, 0, true);
@@ -1084,6 +1172,18 @@
       this.spawnFx[col][target] = this.T;
       const q = this.shelfAt(col === 'p' ? -70 : 70, target);
       for (let j = 0; j < 5; j++) this.puffs.push({ x: q.x, y: q.e, t: -j * 0.035, seed: j * 2.4 + target });
+    }
+    // Tripulación del cohete del espacio: los roomies que NO están en
+    // la party. En la historia son los que HUYERON (G.S.fled, la lista
+    // que fija la llegada de Ximena); en práctica no hay party de
+    // historia, así que van todos los roomies menos el elegido para
+    // practicar. Si la lista saliera vacía, el cohete no pasa.
+    rocketCrew() {
+      if (G.practiceMode) return G.PLAYABLE.filter((id) => id !== this.who);
+      const fled = (G.S && G.S.fled) || [];
+      if (fled.length) return fled.slice();
+      const party = (G.S && G.S.party) || [];
+      return G.PLAYABLE.filter((id) => id !== this.who && !party.includes(id));
     }
     meters(i) { return Math.round((i * SH) / U_PER_M); }
     extra() { return { pMeters: this.meters(this.pMax), cMeters: this.meters(this.cMax), zone: CLIMB_ZONES[climbZone(this.pMax * SH)].name }; }
@@ -1122,6 +1222,25 @@
       this.cam.y += (ty - this.cam.y) * Math.min(1, dt * (ty > this.cam.y ? 4.5 : 2));
       this.pruneSides(Math.min(this.pi, this.ci, Math.max(0, Math.floor((this.cam.y - 300) / SH)))); // la ventana de lados no crece con la altura
       if (!this.tick(dt)) return;
+      // EL COHETE DE LOS HUIDOS: solo con la cámara en el ESPACIO.
+      // Cruza en horizontal por el FONDO (z=-182..-160, detrás de
+      // repisas y actores), a la altura de la banda de la cámara como
+      // el satélite, sin colisionar ni tapar el prompt. La primera vez
+      // el protagonista reacciona: el chiste es que los que "ya se
+      // iban"… se fueron LEJOS de verdad.
+      if (climbZone(this.cam.y) >= 4) {
+        if (this.rocket) {
+          this.rocket.x += this.rocket.dir * 135 * dt;
+          if (Math.abs(this.rocket.x) > 620) { this.rocket = null; this.rocketWait = 12 + climbHash(Math.floor(this.T)) * 6; }
+        } else if ((this.rocketWait -= dt) <= 0) {
+          const crew = this.rocketCrew();
+          if (crew.length) {
+            this.rocketDir = -this.rocketDir;
+            this.rocket = { x: this.rocketDir > 0 ? -580 : 580, dir: this.rocketDir, crew };
+            if (!this.rocketSeen) { this.rocketSeen = true; p.say('¿¡Esos eran los que se fueron!?', 3.4); }
+          } else this.rocketWait = 5; // sin tripulación posible: no pasa (y no revienta)
+        }
+      }
       // hitos de zona según la altura MÁXIMA del jugador (una vez por zona)
       const pz = climbZone(this.pMax * SH);
       if (pz > this.zoneSeen) {
@@ -1199,6 +1318,26 @@
         mb.box(sx, sy, -160, 26, 9, 9, '#c9cedd'); mb.box(sx - 34, sy + 2, -160, 30, 1.5, 13, '#3f6fd8'); mb.box(sx + 30, sy + 2, -160, 30, 1.5, 13, '#3f6fd8');
         if (Math.sin(t * 6) > 0) mb.box(sx + 11, sy + 9, -160, 3, 3, 3, '#ff5f6b', { emit: true });
       }
+      // EL COHETE DE LOS HUIDOS cruzando el espacio: cuerpo por cajas
+      // (las CARAS de las ventanillas van como billboards en el
+      // callback sprites de draw, a z=-160, sobre estos aros). Vuela a
+      // la altura de la banda de la cámara, como el satélite, y por el
+      // fondo: no tapa el prompt ni colisiona con nada.
+      if (zone >= 4 && this.rocket) {
+        const rk = this.rocket, ry = cy + 135, n = rk.crew.length, L = 44 + n * 30, x0 = rk.x - L / 2, dir = rk.dir;
+        mb.box(x0, ry - 12, -182, L, 24, 13, '#e9edf5', { top: '#f8fafc' }); // cuerpo
+        mb.box(x0 + 4, ry - 12, -183, L - 8, 6, 15, '#e23b4e'); // franja roja
+        const nx = dir > 0 ? x0 + L : x0; // morro escalonado hacia el avance
+        mb.box(dir > 0 ? nx : nx - 12, ry - 9, -181, 12, 18, 11, '#dfe6f2');
+        mb.box(dir > 0 ? nx + 12 : nx - 21, ry - 6, -180, 9, 12, 9, '#e23b4e');
+        const tx = dir > 0 ? x0 : x0 + L; // aletas traseras
+        mb.box(dir > 0 ? tx - 3 : tx - 5, ry + 10, -180, 8, 13, 9, '#e23b4e');
+        mb.box(dir > 0 ? tx - 3 : tx - 5, ry - 23, -180, 8, 13, 9, '#e23b4e');
+        const fl = 9 + Math.sin(t * 34) * 3.5; // llama del motor, parpadeante
+        mb.box(dir > 0 ? tx - 4 - fl : tx + 4, ry - 4, -179, fl, 8, 7, '#ffb03a', { emit: true });
+        mb.box(dir > 0 ? tx - 4 - fl * 0.55 : tx + 4 + fl * 0.45, ry - 2, -178, fl * 0.55, 4, 5, '#ff7847', { emit: true });
+        for (let i = 0; i < n; i++) { const wx = rk.x + (i - (n - 1) / 2) * 30; mb.box(wx - 10, ry - 10, -168, 20, 20, 3, '#9fd8ff', { emit: true }); } // aros de ventanilla
+      }
       // escombros del momento del techo, cayendo
       this.debris.forEach((d) => mb.box(d.x, d.y, d.z, d.s, d.s * 0.7, d.s, '#7a6752'));
       // columnas: rieles por tramos + repisas de la ventana visible
@@ -1242,10 +1381,25 @@
         cam: this.cam, dt, mesh: null, actors: [this.p, this.cat], noApartment: true,
         light: climbLight(cy),
         boxes: (mb) => this.drawWorld(mb),
-        sprites: () => {
+        sprites: (t) => {
           const z = climbZone(cy);
           if (z >= 3) R.flat(R.glowTex, 305, cy + 175, -390, 58, { tint: [0.92, 0.96, 1], alpha: 0.95 }); // la luna
-          if (z >= 4) R.flat(R.glowTex, -30, cy - 320, -280, 330, { tint: [0.30, 0.50, 1], alpha: 0.5 }); // el planeta, brillando abajo
+          if (z >= 4) {
+            // GALAXIAS: la capa más lejana (z=-470), detrás de las
+            // estrellas; colocación por tramos con hash y densidad
+            // creciente con la altura (ver climbGalaxies)
+            for (const gx of climbGalaxies(cy)) R.sprite(galaxyCv(gx.v), gx.x, gx.y - gx.s / 2, -470, { w: gx.s, h: gx.s, roll: gx.roll, alpha: gx.a * (0.86 + 0.14 * Math.sin(t * 0.6 + gx.x * 0.05)), lit: 0, nostretch: true });
+            R.flat(R.glowTex, -30, cy - 320, -280, 330, { tint: [0.30, 0.50, 1], alpha: 0.5 }); // el planeta, brillando abajo
+            // las CARAS de la tripulación saludando desde las
+            // ventanillas del cohete (vaivén y balanceo suaves)
+            if (this.rocket) {
+              const ry = cy + 135, n = this.rocket.crew.length;
+              this.rocket.crew.forEach((id, i) => {
+                const wx = this.rocket.x + (i - (n - 1) / 2) * 30;
+                R.sprite(rocketFaceCv(id), wx, ry - 8 + Math.sin(t * 3.1 + i * 1.35) * 1.3, -160, { nostretch: true, lit: 0, roll: Math.sin(t * 2.3 + i * 1.1) * 0.07 });
+              });
+            }
+          }
         },
         over: (c, t) => {
           if (this.st === 'over') { this.endOverlay(c); return; }
@@ -1266,6 +1420,7 @@
     }
   }
   ClimbDuel.SHELF_H = SH; // expuesto para la prueba de humo (los lados se piden a una instancia: sideOf)
+  ClimbDuel.galaxiesAt = climbGalaxies; // ídem: el campo de galaxias visible a una altura de cámara
 
   // =========================================================
   // 11. APAGÓN: ¿FANTASMA O DISFRAZ? — minijuego de observación
