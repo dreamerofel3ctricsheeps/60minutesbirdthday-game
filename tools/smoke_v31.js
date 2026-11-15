@@ -949,6 +949,213 @@ const tick = () => new Promise((r) => setImmediate(r));
     }
   }
 
+  // ================= L) Tres minijuegos nuevos: carrera, imagen, globos =====
+  console.log('\nL) Minijuegos nuevos — Cactus en carrera · La imagen distinta · Globos por las nubes');
+  {
+    // --- Registro: escenas, MG, eventos, guion y práctica ---
+    check('existen las tres escenas nuevas', !!(Sc.CactusRaceDuel && Sc.ImageDuel && Sc.BalloonDuel));
+    check('MG registra cactus2 / imagen / globos con sus escenas',
+      MG.cactus2 && MG.cactus2.Scene() === Sc.CactusRaceDuel && MG.imagen && MG.imagen.Scene() === Sc.ImageDuel && MG.globos && MG.globos.Scene() === Sc.BalloonDuel);
+    check('eventos: imagen y globos contra José; cactus2 contra Pollito',
+      G.EVENTS.imagen.game === 'imagen' && G.EVENTS.imagen.boss === 'jose' && G.EVENTS.globos.game === 'globos' && G.EVENTS.globos.boss === 'jose' && G.EVENTS.cactus2.game === 'cactus2' && G.EVENTS.cactus2.boss === 'pollito');
+    check('la tarjeta de práctica de Globos nombra al director: «José · dirige Pollito»', (G.EVENTS.globos.bossLabel || '').includes('Pollito'), G.EVENTS.globos.bossLabel);
+    const st = G.STORY;
+    check('guion: «imagen» cae en acto intermedio (tras memoria, antes de pollito) y «globos» en acto tardío (tras azotea, antes de sonambula)',
+      st.indexOf('imagen') > st.indexOf('memoria') && st.indexOf('imagen') < st.indexOf('pollito') && st.indexOf('globos') > st.indexOf('azotea') && st.indexOf('globos') < st.indexOf('sonambula'), st.join(','));
+    check('guion: cactus2 NO está en la historia (entra solo por el sorteo del evento cactus)', !st.includes('cactus2') && st.includes('cactus'));
+
+    // --- Cactus en carrera: física de gravedad, golpes, cambio de velocidad ---
+    const race = new Sc.CactusRaceDuel('natalia', () => {});
+    check('carrera: jugador y Pollito en el MISMO carril (misma z, desfase en x ≤ 90 u)',
+      race.p.y === race.cat.y && Math.abs(race.p.x - race.cat.x) <= 90, `p=${race.p.x},${race.p.y} cat=${race.cat.x},${race.cat.y}`);
+    check('carrera: tramos de gravedad — normal → lunar → pesada → lunar → pesada → normal',
+      race.gravAt(5) === 'normal' && race.gravAt(15) === 'luna' && race.gravAt(30) === 'pesada' && race.gravAt(45) === 'luna' && race.gravAt(53) === 'pesada' && race.gravAt(59) === 'normal',
+      [5, 15, 30, 45, 53, 59].map((t) => race.gravAt(t)).join(','));
+    const jumpMax = (gkey) => { race.grav = gkey; const r = { h: 0, v: 0, stun: 0, hits: 0 }; race.tryJump(r); let max = 0; for (let i = 0; i < 300 && (r.h > 0 || r.v > 0); i++) { race.stepRunner(r, race.p, 0.016); max = Math.max(max, r.h); } return max; };
+    const hN = jumpMax('normal'), hL = jumpMax('luna'), hP = jumpMax('pesada');
+    check('carrera: la gravedad ALTERA el salto (lunar mucho más alto y flotante; pesada, corto)',
+      hL > hN * 1.8 && hP < hN * 0.85 && Math.abs(race.jumpHeight('luna') - hL) < hL * 0.25, `lunar=${hL.toFixed(0)} normal=${hN.toFixed(0)} pesada=${hP.toFixed(0)}`);
+    race.grav = 'normal'; race.st = 'play'; race.time = 1e9; race.spawnT = 1e9;
+    race.cacti = [{ x: race.p.x, vx: 0, rot: 0, change: null, warned: false, hitP: false, hitC: false, catAct: true, react: 9, ignore: true }];
+    race.update(0.016);
+    check('carrera: un cactus a ras de suelo SUMA un golpe y aturde (tropiezo)', race.run.p.hits === 1 && race.run.p.stun > 0, `hits=${race.run.p.hits} stun=${race.run.p.stun}`);
+    race.run.p.h = 80; race.run.p.stun = 0; // en el aire, el mismo cactus ya no cuenta (y además ya marcó a este corredor)
+    race.cacti.push({ x: race.p.x, vx: 0, rot: 0, change: null, warned: false, hitP: false, hitC: false, catAct: true, react: 9, ignore: true });
+    race.update(0.016);
+    check('carrera: saltando por encima NO hay golpe', race.run.p.hits === 1, 'hits=' + race.run.p.hits);
+    const speeder = { x: -350, vx: 100, rot: 0, change: { at: -100, f: 1.5, done: false }, warned: false, hitP: false, hitC: false, catAct: true, react: 9, ignore: true };
+    race.cacti = [speeder]; race.run.p.h = 500; race.run.c.h = 500; // nadie estorba: solo se mide la velocidad
+    let warnedSeen = false;
+    for (let i = 0; i < 300 && !speeder.change.done; i++) { race.update(0.05); if (speeder.warned) warnedSeen = true; }
+    check('carrera: el cactus con cambio de velocidad AVISA antes (warned) y luego acelera ×1,5',
+      warnedSeen && speeder.change.done && speeder.vx > 170, `vx=${speeder.vx.toFixed(0)} warned=${warnedSeen}`);
+
+    // --- La imagen distinta: construcción, puntos y anulaciones ---
+    const img = new Sc.ImageDuel('natalia', () => {});
+    let allOneDiff = true, levelsOk = true;
+    for (let r = 0; r < 9; r++) {
+      img.round = r; img.setup(r);
+      const keys = img.panels.map((s) => JSON.stringify(s));
+      const uniq = keys[img.diffIdx];
+      if (!(keys.filter((k) => k === uniq).length === 1 && keys.filter((k, i) => i !== img.diffIdx).every((k) => k === keys[(img.diffIdx + 1) % 3]))) allOneDiff = false;
+      const lv = r < 2 ? 0 : r < 4 ? 1 : 2;
+      const want = lv === 0 ? ['color'] : lv === 1 ? ['cantidad', 'accesorio'] : ['raya', 'adorno', 'espejo'];
+      if (!want.includes(img.diffType)) levelsOk = false;
+    }
+    check('imagen: TODA ronda tiene exactamente UNA imagen distinta (garantizado por construcción)', allOneDiff);
+    check('imagen: la sutileza crece por rondas (color → cantidad/accesorio → raya/adorno/espejo)', levelsOk);
+    const playImg = (mutate) => {
+      const d = new Sc.ImageDuel('natalia', () => {});
+      d.st = 'play'; mutate(d);
+      for (let i = 0; i < 400 && (d.st === 'play' || d.st === 'rend'); i++) d.update(0.05); // hasta que la ronda puntuada/anulada AVANZA
+      return d;
+    };
+    const dWin = playImg((d) => { d.choose(d.diffIdx); });
+    check('imagen: el punto va al PRIMERO que acierta (jugador)', dWin.pw === 1 && dWin.bw === 0, `pw=${dWin.pw} bw=${dWin.bw}`);
+    const dJose = playImg((d) => { d.joseAcc = 1; d.choose((d.diffIdx + 1) % 3); }); // el jugador falla y José acierta: punto de José
+    check('imagen: si eliges mal y José acierta, el punto es de José', dJose.bw === 1 && dJose.pw === 0, `pw=${dJose.pw} bw=${dJose.bw}`);
+    const dNull = playImg((d) => { d.joseAcc = 0; d.choose((d.diffIdx + 1) % 3); }); // ambos fallan: ronda anulada
+    check('imagen: si ambos fallan, la ronda se ANULA (sin punto)', dNull.pw === 0 && dNull.bw === 0 && dNull.round >= 1, `pw=${dNull.pw} bw=${dNull.bw} round=${dNull.round}`);
+    const dJoseFirst = playImg((d) => { d.joseAcc = 1; d.joseAt = 0.01; });
+    check('imagen: José también puede llegar primero y llevarse el punto', dJoseFirst.bw === 1, 'bw=' + dJoseFirst.bw);
+
+    // --- Globos: finta, vuelo y mejor de 5 ---
+    // OJO: el juego corre en un contexto vm con su PROPIO Math; el azar
+    // se fuerza sobre el Math DEL CONTEXTO (el del host no llega a las
+    // escenas), recuperado con vm.runInContext.
+    const ctxMath = vm.runInContext('Math', sandbox);
+    const realRandom = ctxMath.random;
+    ctxMath.random = () => 0.99; // determinismo: sin doble finta y José sin error de apuro en estas pruebas
+    try {
+      const bal = new Sc.BalloonDuel('natalia', () => {});
+      bal.setup(1); bal.st = 'play';
+      bal.cur = 0; bal.feint = true; bal.feintDone = false; bal.feintT = 0.1; bal.feint2 = false; bal.signalT = 0.5;
+      for (let i = 0; i < 60 && bal.phase !== 'go'; i++) bal.update(0.05);
+      check('globos: la FINTA cambia la indicación final (era izquierda, quedó derecha)', bal.feintDone && bal.final === 1, `final=${bal.final}`);
+      // elegir ANTES de la señal con la indicación vieja → vuela cuando llega la finta
+      const bal2 = new Sc.BalloonDuel('natalia', () => {});
+      bal2.setup(1); bal2.st = 'play';
+      bal2.cur = 0; bal2.feint = true; bal2.feintDone = false; bal2.feintT = 0.3; bal2.feint2 = false; bal2.signalT = 0.8;
+      bal2.press(0, 'p'); // se adelanta: elige la izquierda vigente
+      for (let i = 0; i < 200 && bal2.phase !== 'fly'; i++) bal2.update(0.05);
+      check('globos: adelantarse a la señal y caer en la finta = SALIR VOLANDO', bal2.phase === 'fly' && bal2.fly.p > 0 && bal2.pPick.early === true, `phase=${bal2.phase} fly.p=${bal2.fly.p}`);
+      // elegir mal tras la señal → vuela; José acierta y se lleva la ronda
+      const bal3 = new Sc.BalloonDuel('natalia', () => {});
+      bal3.setup(0); bal3.st = 'play'; bal3.feint = false; bal3.signalT = 0.1;
+      for (let i = 0; i < 60 && bal3.phase !== 'go'; i++) bal3.update(0.05);
+      bal3.press(1 - bal3.final, 'p');
+      for (let i = 0; i < 200 && bal3.phase !== 'fly'; i++) bal3.update(0.05);
+      check('globos: elegir el globo equivocado hace volar al jugador (y José no vuela)', bal3.fly.p > 0 && bal3.fly.b === 0, `fly.p=${bal3.fly.p} fly.b=${bal3.fly.b}`);
+      for (let i = 0; i < 200 && bal3.st === 'play'; i++) bal3.update(0.05);
+      check('globos: la ronda del error es para José', bal3.bw === 1, 'bw=' + bal3.bw);
+      // mejor de 5: ganando 3 rondas seguidas el duelo CIERRA con victoria
+      let balRes = null;
+      const bal4 = new Sc.BalloonDuel('natalia', (r) => { balRes = r; });
+      for (let i = 0; i < 6000 && !balRes; i++) {
+        if (bal4.st === 'play' && bal4.phase === 'go' && !bal4.pPick) bal4.press(bal4.final, 'p'); // siempre el correcto, nada más sonar el ¡YA!
+        bal4.update(0.05);
+      }
+      check('globos: mejor de 5 — con 3 rondas el duelo cierra y gana el jugador', !!balRes && balRes.win === 'win' && bal4.pw === 3, balRes && `win=${balRes.win} pw=${bal4.pw}`);
+    } finally { ctxMath.random = realRandom; }
+
+    // --- Dibujo de los tres (render sustituido, como en E/K) ---
+    {
+      const realRender = W.render, realProject = G.R.project;
+      const ctx2d = new FakeCtx();
+      W.render = (opts) => { if (opts.boxes) opts.boxes(new G.R.MB(), 0); if (opts.sprites) opts.sprites(0); if (opts.over) opts.over(ctx2d, 0); };
+      G.R.project = () => ({ x: 320, y: 180, ok: true });
+      try {
+        const rd = new Sc.CactusRaceDuel('natalia', () => {});
+        rd.st = 'play'; rd.grav = 'luna'; rd.gravAnn = { key: 'luna', t: 1.2 };
+        rd.cacti = [{ x: -40, vx: 150, rot: 1, change: { at: 0, f: 1.5, done: false }, warned: true, hitP: false, hitC: false, catAct: true, react: 9, ignore: true }];
+        rd.draw(0.016);
+        check('draw sin errores: carrera con banner de gravedad lunar y cactus avisando', true);
+        const id2 = new Sc.ImageDuel('natalia', () => {});
+        id2.st = 'play'; id2.draw(0.016);
+        id2.phase = 'reveal'; id2.pPick = (id2.diffIdx + 1) % 3; id2.josePick = id2.diffIdx; id2.draw(0.016);
+        check('draw sin errores: imagen distinta en muestra y en revelado (marco dorado)', true);
+        const bd = new Sc.BalloonDuel('natalia', () => {});
+        bd.st = 'play'; bd.draw(0.016);
+        bd.phase = 'fly'; bd.fly.p = 0.6; bd.p.elev = 120; bd.stars = [{ x: 0, y: 100, z: 0, t: 0.2 }];
+        bd.draw(0.016);
+        check('draw sin errores: globos con banderas y con el jugador volando entre estrellitas', true);
+      } catch (e) {
+        check('draw sin errores en los tres minijuegos nuevos (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
+      } finally { W.render = realRender; G.R.project = realProject; }
+    }
+
+    // --- Sorteo del evento cactus: 50/50 en la historia ---
+    {
+      const seen = new Set();
+      for (let i = 0; i < 400; i++) seen.add(G.cactusVariant());
+      check('sorteo cactus: en 400 tiradas salen AMBAS variantes (50/50)', seen.has('cactus') && seen.has('cactus2'), [...seen].join(','));
+    }
+
+    // --- Integración por runEvent (historia completa, con efectos) ---
+    const driveEvent = async (id, strat) => {
+      Object.assign(S, { player: 'natalia', phase: 'act2', inv: {}, flags: {}, sus: 5, sleep: 1, noise: 0, qBonus: 0, duels: [], done: {}, tired: null });
+      G.home = new Sc.HomeScene(); G.practiceMode = false;
+      let settled = false;
+      const p = G.debug.runEvent(id).then(() => { settled = true; }, (e) => { settled = true; console.log('  (error en runEvent ' + id + ': ' + e.message + ')'); });
+      let it = 0;
+      while (!settled && it++ < 30000) {
+        await tick();
+        const actions = documentFake.querySelector('#actions');
+        const card = actions && queryWithin(actions, '.card', true).find((b) => b.onclick && !b.disabled);
+        if (card) card.onclick();
+        const mok = idRegistry.get('mok');
+        if (mok && mok.onclick) { const f = mok.onclick; mok.onclick = null; f(); }
+        const sc = G.scene;
+        if (sc) strat(sc, it);
+      }
+      // Si no se completó, NO se espera la promesa (quedaría colgada y
+      // Node saldría en silencio al vaciarse el bucle de eventos): el
+      // fallo se ve en los checks que usan el retorno.
+      if (settled) await p; else console.log('  (runEvent ' + id + ' NO se completó en ' + it + ' iteraciones)');
+      return settled && it < 30000;
+    };
+    // La imagen distinta: el conductor señala siempre la distinta en cuanto se muestra
+    {
+      const okRun = await driveEvent('imagen', (sc) => { if (sc.isImage) { if (sc.st === 'play' && sc.phase === 'show' && sc.pPick === null) sc.choose(sc.diffIdx); sc.update(0.05); } });
+      const entry = S.duels.find((d) => d.game === 'imagen');
+      check('runEvent(imagen): el evento nuevo corre en la historia y se registra el duelo', okRun && !!entry, JSON.stringify(S.duels));
+      check('runEvent(imagen): acertando siempre se GANA y aplican los efectos de victoria (calidad +)', !!entry && entry.win === 'win' && S.qBonus > 0, `win=${entry && entry.win} qBonus=${S.qBonus}`);
+    }
+    // Globos: el conductor levanta el globo final en cuanto suena el ¡YA!
+    {
+      const okRun = await driveEvent('globos', (sc) => { if (sc.isBalloons) { if (sc.st === 'play' && sc.phase === 'go' && !sc.pPick) sc.press(sc.final, 'p'); sc.update(0.05); } });
+      const entry = S.duels.find((d) => d.game === 'globos');
+      check('runEvent(globos): el evento tardío corre en la historia y se registra el duelo', okRun && !!entry, JSON.stringify(S.duels));
+      check('runEvent(globos): respondiendo al ¡YA! se GANA (mejor de 5) con efectos de victoria', !!entry && entry.win === 'win' && S.qBonus > 0, `win=${entry && entry.win} qBonus=${S.qBonus}`);
+    }
+    // El sorteo, de punta a punta: con la tirada forzada baja, el evento cactus juega la CARRERA
+    {
+      ctxMath.random = () => 0.1; // cactusVariant() < 0,5 → cactus2 (azar del contexto vm)
+      let sawRace = false;
+      try {
+        const okRun = await driveEvent('cactus', (sc, it) => { if (sc.isRace) { sawRace = true; if (sc.st === 'play' && it % 9 === 0) tap('Space'); sc.update(0.05); } });
+        const entry = S.duels.find((d) => d.game === 'cactus');
+        check('sorteo en runEvent(cactus): con tirada baja se juega CACTUS EN CARRERA y queda registrado',
+          okRun && sawRace && S.flags.cactusVariant === 'cactus2' && !!entry && entry.variant === 'cactus2',
+          `variant=${S.flags.cactusVariant} entry=${JSON.stringify(entry)}`);
+      } finally { ctxMath.random = realRandom; }
+    }
+    // Y con la tirada alta, el evento cactus juega el de siempre (bolas en la cocina)
+    {
+      ctxMath.random = () => 0.9; // cactusVariant() ≥ 0,5 → cactus
+      let sawSpike = false;
+      try {
+        const okRun = await driveEvent('cactus', (sc) => { if (sc instanceof Sc.SpikeDuel) { sawSpike = true; sc.update(0.05); } });
+        const entry = S.duels.find((d) => d.game === 'cactus');
+        check('sorteo en runEvent(cactus): con tirada alta se juega el CACTUS RODANTES de siempre',
+          okRun && sawSpike && S.flags.cactusVariant === 'cactus' && !!entry && entry.variant === 'cactus',
+          `variant=${S.flags.cactusVariant} entry=${JSON.stringify(entry)}`);
+      } finally { ctxMath.random = realRandom; }
+    }
+    // En práctica NO hay sorteo: la entrada «cactus» juega siempre su variante (runMinigame no sortea con practiceMode)
+    check('práctica sin sorteo: cactusVariant solo se invoca desde la historia (guardado por G.practiceMode en runMinigame)', typeof G.cactusVariant === 'function');
+  }
+
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR FATAL en la prueba:', e); process.exit(2); });
