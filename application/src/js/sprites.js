@@ -209,7 +209,8 @@
   // escala en su metadata) con las animaciones reales de sus bundles:
   // idle / idle_up / idle_right / walk_* / run_* / act (+ sneak y celebrate
   // en Jose; idle / walk / pounce en el gato). Pollito usa la hoja del gato
-  // calicó real y NUNCA se espeja (su mancha va en el cachete izquierdo).
+  // blanco atigrado real y NUNCA se espeja (su mancha atigrada va en su
+  // mejilla izquierda).
   const M = root.G.DEFINED_META, CHAR_SCALE = 0.33, imgs = {};
   const INKC = [43, 29, 36];
   const ready = typeof Image === 'undefined' ? Promise.resolve() : Promise.all(Object.keys(root.G.DEFINED_DATA).map((id) => new Promise((res) => { const im = new Image(); im.onload = () => { imgs[id] = im; res(); }; im.onerror = res; im.src = root.G.DEFINED_DATA[id]; })));
@@ -308,8 +309,8 @@
     // derecha); espejarlo al ir a la izquierda NO viola la regla de la
     // mancha — vemos el otro costado del gato, que es lo físicamente
     // correcto (la v3.1 original ya espejaba así su gato por código).
-    // 'idle' y 'pounce' son vistas FRONTALES: ahí la mancha naranja debe
-    // quedar en su cachete izquierdo, así que NUNCA se espejan — el flip
+    // 'idle' y 'pounce' son vistas FRONTALES: ahí la mancha atigrada debe
+    // quedar en su mejilla izquierda, así que NUNCA se espejan — el flip
     // que pase world.js se ignora para esas animaciones. Las traseras
     // tampoco se espejan jamás: de espaldas la mancha del cachete no se
     // ve (correcto) y su cola/patrón no se voltean sin necesidad.

@@ -221,14 +221,14 @@
       let sy = (1 - sq * 0.16 + breathe + (this.jy > 4 ? 0.06 : 0)) * sc, sx = (1 + sq * 0.14 - breathe) * sc;
       const fl = this.flash > 0 && Math.floor(this.flash * 20) % 2 ? [0.9, 0.9, 0.9] : null;
       if (this.id === 'pollito') {
-        // Pollito es el gato calicó REAL (hoja definida): idle sentado, prowl
+        // Pollito es el gato blanco atigrado REAL (hoja definida): idle sentado, prowl
         // al moverse (ciclo de 3 frames) y pounce en el aire.
         // ESPEJO POR TIPO DE VISTA: el prowl es un PERFIL — al ir a la
         // izquierda se espeja, porque lo que vemos es su OTRO costado (lo
         // físicamente correcto, igual que hacía el Pollito por código de la
         // v3.1 con Sp.cat(pose, dir==='left')). Las vistas FRONTALES (idle
         // sentado y pounce, que salta hacia la cámara) NUNCA se espejan: ahí
-        // la mancha naranja debe quedar en su cachete izquierdo. La regla se
+        // la mancha atigrada debe quedar en su mejilla izquierda. La regla se
         // impone en Sp.catAnim (solo 'walk' admite flip).
         // POSE TRASERA FORZADA (backPose = {anim, idx} con anim 'back_idle'
         // o 'back_jump'): la fija la escalada de repisas, donde Pollito
