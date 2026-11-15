@@ -300,6 +300,22 @@
       },
     },
 
+    imagen: {
+      title: 'La imagen distinta', kind: 'Duelo', type: 'minigame', game: 'imagen', boss: 'jose', view: 'sala',
+      chat: [
+        { who: 'samantha', text: 'Estoy armando el collage de fotos para Xime y se me duplicaron TODAS las imágenes. Tengo tres copias de cada una… creo.' },
+        { who: 'jose', text: 'Deja eso. Yo tengo ojo de águila: apuesto a que encuentro la imagen distinta antes que cualquiera de ustedes. Si gano, despierto a Xime y le muestro el collage YO.', direct: true },
+        { who: 'majo', text: 'Nadie despierta a nadie. Alguien le gana a José en su propio juego de mirar fijamente.' },
+      ],
+      intro: 'Tres paneles con objetos de la fiesta: dos son idénticos y uno es DISTINTO. Señálalo con ← ↓ → (o clic en el panel) antes que José. Las diferencias empiezan obvias y se van poniendo sutiles: una raya menos, una cereza de más, la imagen espejada… Si te equivocas, José tiene su oportunidad; si él falla primero, tienes un instante para rescatar el punto.',
+      goal: 'Carrera a 5 puntos: el primero en señalar la imagen distinta se lleva el punto.',
+      results: {
+        win: { effects: { quality: 5 }, reply: (who) => [{ who, text: 'Ojo de águila, decía. El collage quedó perfecto y sin duplicados raros.', mood: 'happy' }, { who: 'jose', text: 'La última era IMPOSIBLE. Una raya. ¡UNA raya!', direct: true }] },
+        tie: { effects: {}, reply: () => [{ who: 'samantha', text: 'Empate visual. El collage queda como está: artísticamente duplicado.' }] },
+        lose: { effects: { quality: -4, sus: 4 }, reply: () => [{ who: 'jose', text: 'GANÉ. Mi ojo de águila merece despertar a Xime para contárselo.', direct: true }, { who: 'majo', text: 'Que alguien le esconda el collage. Y las llaves. Y a José.', mood: 'angry' }] },
+      },
+    },
+
     cactus: {
       title: 'Cactus rodantes', kind: 'Duelo', type: 'minigame', game: 'cactus', boss: 'pollito', view: 'cocina',
       chat: [
@@ -314,6 +330,24 @@
         win: { effects: { quality: 3 }, reply: (who) => [{ who, text: 'Salí ileso y con los bocaditos. Pollito me mira con respeto. O con hambre.', mood: 'happy' }] },
         tie: { effects: { noise: 5 }, reply: () => [{ who: 'fatima', text: 'Medio pinchado, medio ileso. Me lo llevo.' }] },
         lose: { effects: { noise: 14 }, reply: (who) => [{ who, text: 'AY. Ay. Ay. Tengo espinas en lugares que no sabía que tenía.', mood: 'surprised' }, { who: 'majo', text: 'Grita hacia adentro.', mood: 'angry' }] },
+      },
+    },
+
+    // Variante del evento cactus: NO está en G.STORY. En la historia,
+    // el evento «Cactus rodantes» sortea 50/50 entre su minijuego de
+    // siempre y esta carrera (ver runMinigame en game.js, que usa el
+    // intro/goal de aquí para anunciar la variante). Esta entrada
+    // existe para la lista de práctica, donde la carrera se juega
+    // siempre, como entrada propia.
+    cactus2: {
+      title: 'Cactus en carrera', kind: 'Duelo', type: 'minigame', game: 'cactus2', boss: 'pollito', view: 'cocina',
+      chat: [],
+      intro: '¡Sorteo de cactus! Esta vez los cactus ruedan en línea recta, de izquierda a derecha, y toca CARRERA en vista lateral: corres en el mismo carril que Pollito y hay que SALTAR cada cactus con ESPACIO o ↑. Ojo: algunos cactus cambian de velocidad a mitad de camino (se inclinan un instante antes) y la gravedad cambia por tramos — LUNAR (salto alto y flotante) y PESADA (salto corto y rápido) — anunciados con su banner. Cada golpe es un tropiezo; gana quien tenga MENOS golpes en 60 segundos.',
+      goal: 'Salta los cactus durante 60 s y termina con menos tropiezos que Pollito.',
+      results: {
+        win: { effects: { quality: 3 }, reply: (who) => [{ who, text: 'Carrera limpia: salté cactus con tres gravedades distintas y ni una espina.', mood: 'happy' }, { who: 'pollito', text: '😾' }] },
+        tie: { effects: { noise: 5 }, reply: () => [{ who: 'fatima', text: 'Empate de tropiezos. Mis cactus ruedan libres y nadie ganó nada.' }] },
+        lose: { effects: { noise: 14 }, reply: (who) => [{ who, text: 'Tropecé con todo. La gravedad pesada fue personal.', mood: 'surprised' }, { who: 'pollito', text: '😼' }] },
       },
     },
 
@@ -364,6 +398,23 @@
       },
     },
 
+    globos: {
+      title: 'Globos por las nubes', kind: 'Duelo', type: 'minigame', game: 'globos', boss: 'jose', bossLabel: 'José · dirige Pollito', view: 'todo',
+      chat: [
+        { who: 'alan', text: 'José infló los globos de la decoración y se los llevó a la azotea. Dice que tiene "un sistema" para colgarlos.', mood: 'surprised' },
+        { who: 'jose', text: 'Sistema infalible: Pollito dirige con banderas, como en los aeropuertos. Quien levante el globo correcto, manda. Si gano yo, bajo cantando.', direct: true },
+        { who: 'pollito', text: '😼' },
+        { who: 'natalia', text: 'Pollito dirigiendo globos de noche. ¿Qué puede salir mal? Alguien suba y gane, por favor.' },
+      ],
+      intro: 'En la azotea, Pollito dirige con dos banderas desde su plataforma: levanta la del lado que toca… pero a veces hace una FINTA y la cambia antes de la señal. Cuando baja ambas banderas y suena el ¡YA!, levanta el globo del lado FINAL con ← o →. Si eliges antes de la señal, tu elección queda fijada: si luego hay finta, vuelas. Y quien elige mal sale volando con su globo, literalmente. José responde tras la señal; si ambos aciertan, gana el más rápido.',
+      goal: 'Mejor de 5 rondas: gana quien se lleve 3, levantando el globo que Pollito indique tras el ¡YA!',
+      results: {
+        win: { effects: { quality: 5 }, reply: (who) => [{ who, text: 'Leí hasta las fintas de Pollito. Los globos quedaron colgados y José bajó de la azotea volando… en sentido figurado. Él no.', mood: 'happy' }, { who: 'jose', text: 'Ese gato cambia las banderas a propósito. ¡A PROPÓSITO!', direct: true }] },
+        tie: { effects: { noise: 4 }, reply: () => [{ who: 'alan', text: 'Empate en la azotea. Los globos quedaron a medio colgar, como nuestras esperanzas.' }, { who: 'pollito', text: '😼' }] },
+        lose: { effects: { quality: -4, sus: 4 }, reply: () => [{ who: 'jose', text: '¡GANÉ! Bajo cantando la serenata de globos. Es un género nuevo.', direct: true }, { who: 'itzel', text: 'Alguien baje a José de su nube. Literal y figurada.', mood: 'angry' }] },
+      },
+    },
+
     // ----- eventos reactivos -----
     vuelta: {
       title: 'La vuelta', kind: 'Sueño', type: 'decision', reactive: true, timer: 9, view: 'xroom',
@@ -403,7 +454,7 @@
   };
 
   // Orden de la historia; los eventos reactivos se intercalan cuando se cumplen sus condiciones.
-  G.STORY = ['cajas', 'decoracion', 'whatsapp', 'jose', 'mensajes', 'apagon', 'memoria', 'pollito', 'sinRegalo', 'cactus', 'sinPastel', 'pizza', 'repisas', 'pisoton', 'azotea', 'sonambula'];
+  G.STORY = ['cajas', 'decoracion', 'whatsapp', 'jose', 'mensajes', 'apagon', 'memoria', 'imagen', 'pollito', 'sinRegalo', 'cactus', 'sinPastel', 'pizza', 'repisas', 'pisoton', 'azotea', 'globos', 'sonambula'];
   G.REACTIVE = ['vuelta', 'sexto'];
 
   // Rondas de la Batalla de Mensajes: x = lo que escribe Ximena, ok = respuesta que la calma

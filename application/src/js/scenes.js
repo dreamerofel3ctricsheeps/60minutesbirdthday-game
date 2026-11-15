@@ -1995,5 +1995,545 @@
     }
   }
 
-  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, buildDecoSet, CandleGame };
+  // =========================================================
+  // 12. CACTUS EN CARRERA — vista lateral: salta los cactus que
+  // ruedan de izquierda a derecha (variante del evento cactus)
+  // =========================================================
+  // DECISIONES DE JOSE (2026-11-14): jugador y Pollito en el MISMO
+  // carril (misma línea de suelo, con un pequeño desfase horizontal
+  // para que ambos se vean; nada de carriles paralelos). Los cactus
+  // ruedan desde el borde izquierdo hacia la derecha, acelerando al
+  // cruzar, y ambos corredores los saltan (ESPACIO/↑; Pollito con su
+  // IA de reacción). Golpe = tropiezo: animación de mareo, contador
+  // de golpes y 0,75 s sin poder saltar; nadie queda eliminado.
+  // Dificultad pedida: (a) ~1 de cada 3 cactus CAMBIA DE VELOCIDAD a
+  // mitad de recorrido (×0,55 o ×1,5), con aviso sutil y justo:
+  // medio segundo antes se inclina, echa polvo y lleva un anillo
+  // tenue; (b) la GRAVEDAD cambia por tramos de ~8 s anunciados con
+  // banner e ícono propio (luna / planeta del set del juego):
+  // LUNAR (salto más alto y caída lenta, flotante) y PESADA (salto
+  // corto y caída rápida), intercalados con la normal. Dura 60 s y
+  // gana quien tenga MENOS golpes (empate si igualan). En la
+  // historia, el evento «Cactus rodantes» SORTEA esta variante al
+  // 50/50 contra la de siempre (ver runMinigame en game.js); en
+  // práctica cada una tiene su propia entrada.
+  const RACE_GRAV = {
+    normal: { g: 620, v0: 252, label: 'GRAVEDAD NORMAL', icon: null },
+    luna: { g: 235, v0: 240, label: '¡GRAVEDAD LUNAR!', icon: 'luna' },
+    pesada: { g: 1120, v0: 288, label: '¡GRAVEDAD PESADA!', icon: 'planeta' },
+  };
+  // Tramos de gravedad (clave, segundos): el guion suma 57 s y el
+  // tramo final normal cubre lo que reste hasta los 60.
+  const RACE_SEGS = [['normal', 11], ['luna', 8], ['normal', 7], ['pesada', 8], ['normal', 7], ['luna', 8], ['pesada', 8], ['normal', 99]];
+  let raceMesh = null;
+  function buildRaceArena() {
+    const m = new R.MB();
+    m.flat(-460, -260, 920, 520, -2, '#171126'); // fondo lejano
+    m.box(-460, 0, -96, 920, 150, 44, '#4b3550', { s: '#5d4263' }); // pared del fondo
+    m.box(-460, 132, -96, 920, 18, 44, '#3a2a40');
+    m.flat(-460, -52, 920, 150, 0, '#7a5a38'); // la pista
+    m.flat(-460, -52, 920, 8, 0.3, '#96703f');
+    [-300, -60, 180].forEach((x) => { m.box(x, 62, -97, 92, 62, 2, '#2c2135'); m.wallQuad(x + 6, 68, -95.8, 80, 50, '#e8a04c'); }); // ventanas cálidas
+    for (let i = 0; i < 12; i++) m.wallQuad(-420 + i * 76, 118 - Math.abs(Math.sin(i * 1.2)) * 8, -95.6, 30, 16, ['#e23b4e', '#ffd23f', '#3fa0f0', '#58c46a'][i % 4]); // guirnalda
+    [-392, 372].forEach((x) => { m.box(x, 0, 52, 44, 22, 40, '#8a4a3a', { top: '#a55a48' }); m.box(x + 8, 22, 60, 28, 26, 24, '#3f8f4f'); }); // macetas
+    return m.upload();
+  }
+  class CactusRaceDuel extends Duel {
+    constructor(who, done) {
+      super(who, 'pollito', done, { rounds: 1, need: 1, time: 60, label: 'CARRERA', title: 'CACTUS EN CARRERA', hint: 'ESPACIO o ↑ para saltar · Gana quien reciba MENOS golpes en 60 s', rendT: 1.6 });
+      this.isRace = true;
+      this.p = new Actor(who, -38, 0); this.cat = new Actor('pollito', 38, 0); // MISMO carril: misma z, desfase en x
+      this.cam = { x: 0, y: 0, z: 6, dist: 350, pitch: 0.3, fov: 42 };
+      this.quietRend = true; // el cierre usa su propio panel con los golpes (ver endOverlay)
+      this.begin();
+    }
+    setup(n) {
+      this.cacti = []; this.spawnT = 1.1; this.elapsed = 0;
+      this.run = { p: { h: 0, v: 0, stun: 0, hits: 0 }, c: { h: 0, v: 0, stun: 0, hits: 0 } };
+      this.grav = 'normal'; this.gravAnn = null; this.puffT = 0;
+      for (const a of [this.p, this.cat]) { a.jy = 0; a.jv = 0; a.elev = 0; a.spin = 0; a.flash = 0; a.tilt = 0; a.dir = 'right'; }
+    }
+    gravAt(t) { let acc = 0; for (const [k, d] of RACE_SEGS) { acc += d; if (t < acc) return k; } return 'normal'; }
+    // Altura de salto con la gravedad dada (la usa también la prueba de humo)
+    jumpHeight(key) { const Gv = RACE_GRAV[key || this.grav]; return (Gv.v0 * Gv.v0) / (2 * Gv.g); }
+    spawnCactus() {
+      const c = {
+        x: -350, vx: 148 + this.elapsed * 1.15 + rnd(0, 26), rot: 0, change: null, warned: false, hitP: false, hitC: false, catAct: false,
+        react: 0.3 + rnd(-0.05, 0.07) - (G.S.flags.pollitoOfendido ? 0.05 : 0), // tiempo de reacción de Pollito ante ESTE cactus
+        ignore: Math.random() < 0.1, // 1 de cada 10 lo distrae una mariposa imaginaria
+      };
+      if (Math.random() < 0.34) c.change = { at: rnd(-50, 100), f: Math.random() < 0.5 ? 0.55 : 1.5, done: false };
+      this.cacti.push(c);
+    }
+    tryJump(r) { if (r.h <= 0 && r.stun <= 0) { r.v = RACE_GRAV[this.grav].v0; r.h = 0.01; } }
+    stepRunner(r, a, dt) {
+      // Física propia del duelo (la gravedad varía por tramos): se
+      // escribe en a.jy DESPUÉS de a.update() y con jv=0, para que el
+      // Actor no integre su gravedad fija encima.
+      if (r.stun > 0) r.stun -= dt;
+      if (r.h > 0 || r.v > 0) {
+        r.v -= RACE_GRAV[this.grav].g * dt; r.h += r.v * dt;
+        if (r.h <= 0) { r.h = 0; r.v = 0; a.squash = 0.16; W.puff(a.x, a.y, 2); }
+      }
+      a.jy = r.h; a.jv = 0;
+      a.moving = r.stun <= 0; // tropiezo = pierde el ritmo unos instantes
+      a.step += dt * (r.stun > 0 ? 0 : 24); // cadencia de carrera en el sitio
+    }
+    hitCheck(c, r, a, flag, mine) {
+      if (c[flag]) return;
+      if (Math.abs(c.x - a.x) < 18) {
+        if (r.h < 15) {
+          c[flag] = true; r.hits++; r.stun = 0.75; a.flash = 0.7; a.spin = 0.7; a.emo('!!', 0.8); W.puff(a.x, a.y, 6, true);
+          if (mine) { G.sfx('bad'); this.say('¡Tropiezo!', '#ff6b7a', 0.9); } else G.sfx('meow');
+        }
+      } else if (c.x > a.x + 26) c[flag] = true; // ya pasó (saltado): no vuelve a contar
+    }
+    update(dt) {
+      const p = this.p, cat = this.cat; p.update(dt); cat.update(dt);
+      if (!this.tick(dt)) return;
+      this.elapsed += dt;
+      const g = this.gravAt(this.elapsed);
+      if (g !== this.grav) { // cambio de tramo: banner + ícono propio
+        this.grav = g; this.gravAnn = { key: g, t: 1.8 };
+        this.say(RACE_GRAV[g].label, g === 'normal' ? '#fff' : '#ffd23f', 1.6);
+        if (g !== 'normal') G.sfx('msg');
+      }
+      if (this.gravAnn && (this.gravAnn.t -= dt) <= 0) this.gravAnn = null;
+      const rp = this.run.p, rc = this.run.c;
+      if (G.input.hit('action') || G.input.hit('up')) this.tryJump(rp);
+      // IA de Pollito: decide UNA vez por cactus, cuando el tiempo de
+      // llegada (con la velocidad ACTUAL del cactus) baja de su tiempo
+      // de reacción. Si el cactus acelera o frena DESPUÉS de su salto,
+      // puede caer mal: la finta de velocidad también lo engaña a él.
+      const near = this.cacti.filter((c) => !c.catAct && c.x < cat.x - 4).sort((a, b) => b.x - a.x)[0];
+      if (near && (cat.x - near.x) / Math.max(60, near.vx) <= near.react) { near.catAct = true; if (!near.ignore) this.tryJump(rc); }
+      this.stepRunner(rp, p, dt); this.stepRunner(rc, cat, dt);
+      if ((this.puffT -= dt) <= 0) { this.puffT = 0.16; if (rp.stun <= 0) W.puff(p.x - 8, p.y, 1); if (rc.stun <= 0) W.puff(cat.x - 8, cat.y, 1); }
+      if ((this.spawnT -= dt) <= 0) { this.spawnCactus(); this.spawnT = rnd(1.05, 1.55) * (1 - Math.min(0.25, this.elapsed / 240)); }
+      for (const c of this.cacti) {
+        if (c.change && !c.change.done) {
+          if (!c.warned && c.x > c.change.at - c.vx * 0.5) { c.warned = true; W.puff(c.x, 0, 2); } // aviso sutil: se inclina y echa polvo
+          if (c.x >= c.change.at) { c.vx *= c.change.f; c.change.done = true; W.puff(c.x, 0, 3); }
+        }
+        c.vx += 24 * dt; // acelera al cruzar la pista
+        c.x += c.vx * dt; c.rot -= (c.vx * dt) / 13;
+        this.hitCheck(c, rp, p, 'hitP', true);
+        this.hitCheck(c, rc, cat, 'hitC', false);
+      }
+      this.cacti = this.cacti.filter((c) => c.x < 400);
+      if (this.time <= 0) this.endRound(rp.hits < rc.hits ? 'p' : rp.hits > rc.hits ? 'b' : 'tie', `Golpes — Tú: ${rp.hits} · Pollito: ${rc.hits}`);
+    }
+    extra() { return { hitsP: this.run.p.hits, hitsC: this.run.c.hits }; }
+    endOverlay(c) {
+      const w = this.result.win, rp = this.run.p, rc = this.run.c;
+      c.fillStyle = 'rgba(16,12,26,.85)'; c.fillRect(0, 0, 640, 360);
+      G.icon(c, w === 'win' ? 'trofeo' : w === 'tie' ? 'empate' : 'derrota', 320, 84, 48); // ícono propio del resultado
+      G.text(c, w === 'win' ? '¡GANASTE!' : w === 'tie' ? 'EMPATE' : 'GANÓ POLLITO', 320, 138, { size: 40, color: w === 'win' ? '#7dff8a' : w === 'tie' ? '#ffd23f' : '#ff6b7a', lw: 9 });
+      G.text(c, `Golpes — Tú: ${rp.hits} · Pollito: ${rc.hits}`, 320, 182, { size: 17, lw: 6 });
+      G.text(c, w === 'win' ? 'Menos tropiezos: la carrera es tuya' : w === 'tie' ? 'Mismo número de tropiezos' : 'Habrá consecuencias…', 320, 208, { size: 11 });
+    }
+    draw(dt) {
+      if (!raceMesh && R.gl) raceMesh = buildRaceArena(); // la malla se sube al primer draw con WebGL presente
+      W.render({
+        cam: this.cam, dt, mesh: raceMesh, actors: [this.p, this.cat], noApartment: true,
+        light: { amb: [0.62, 0.56, 0.66], sun: [0.42, 0.38, 0.4], sky: '#171126', points: [{ x: 0, y: 90, z: -40, r: 430, c: [0.4, 0.28, 0.14] }] },
+        boxes: (mb) => { // franjas de la pista corriendo hacia la izquierda: venden la velocidad de la carrera
+          const off = (this.T * 150) % 64;
+          for (let i = 0; i < 15; i++) mb.flat(-448 + i * 64 - off, 26, 30, 5, 0.4, '#8f6a3d');
+        },
+        sprites: () => this.cacti.forEach((c) => {
+          R.shadow(c.x, 0, 13, 0.8);
+          const lean = c.warned && c.change && !c.change.done ? Math.sin(this.T * 26) * 0.14 : 0; // la inclinación de aviso
+          R.sprite(Sp.item('cactus'), c.x, 3, 0, { feet: 6, roll: c.rot + lean, sx: 1.7, sy: 1.7 });
+          if (c.warned && c.change && !c.change.done) ring(c.x, 0, 20, [1, 0.8, 0.3], 0.3);
+        }),
+        over: (c, t) => {
+          if (this.st === 'over') { this.endOverlay(c); return; }
+          this.hud(c, t, `GOLPES ${this.run.p.hits}`, `GOLPES ${this.run.c.hits}`);
+          // chip con la gravedad vigente (ícono propio cuando no es la normal)
+          const Gv = RACE_GRAV[this.grav];
+          c.fillStyle = 'rgba(28,24,38,.8)'; c.beginPath(); c.roundRect(10, 322, Gv.icon ? 168 : 138, 24, 7); c.fill();
+          if (Gv.icon) G.icon(c, Gv.icon, 30, 334, 17);
+          G.text(c, Gv.label.replace('¡', '').replace('!', ''), Gv.icon ? 112 : 79, 334, { size: 9.5, stroke: false });
+          // banner del cambio de tramo
+          if (this.gravAnn) {
+            const k = Math.min(1, this.gravAnn.t * 3, (1.8 - this.gravAnn.t) * 5);
+            c.globalAlpha = Math.max(0, k);
+            c.fillStyle = 'rgba(20,16,30,.72)'; c.fillRect(0, 96, 640, 64);
+            if (RACE_GRAV[this.gravAnn.key].icon) G.icon(c, RACE_GRAV[this.gravAnn.key].icon, 320, 116, 30);
+            G.text(c, RACE_GRAV[this.gravAnn.key].label, 320, 146, { size: 21, color: '#ffd23f', lw: 6 });
+            c.globalAlpha = 1;
+          }
+        },
+      });
+    }
+  }
+
+  // =========================================================
+  // 13. LA IMAGEN DISTINTA — vs José: dos paneles iguales y uno
+  // distinto; el primero en señalarlo gana el punto (a 5 puntos)
+  // =========================================================
+  // Las imágenes son objetos de fiesta DIBUJADOS POR CÓDIGO con
+  // parámetros (color, cantidad n, accesorio, adorno extra y
+  // orientación): la pareja idéntica y la variante con UNA sola
+  // diferencia controlada salen POR CONSTRUCCIÓN — es imposible que
+  // una ronda tenga cero o dos imágenes distintas. Sutileza por
+  // rondas: 1-2 obvias (otro color), 3-4 medias (cantidad ±1 o
+  // accesorio que aparece/desaparece), 5+ sutiles (una raya menos
+  // entre 4-5, un adorno extra, o la imagen espejada). José tarda
+  // más y falla más cuanto más sutil sea la diferencia.
+  // REGLA DE FALLO (decisión documentada): si eliges mal, José tiene
+  // su oportunidad — si acierta se lleva el punto; si también falla,
+  // la ronda se ANULA. Si José falla primero, tienes 1,4 s de gracia
+  // para acertar; si no, también se anula. Máximo 8 s por ronda:
+  // rondas ágiles de ~4-8 s. Gana quien llegue a 5 puntos (tope de
+  // 9 rondas: si se agotan, manda quien tenga más).
+  const IMG_COLORS = ['#f48fb1', '#7fd3ff', '#ffd23f', '#b6f08a', '#b48cf0', '#ff9a5c'];
+  const IMG_KINDS = ['pastel', 'globo', 'regalo', 'vela', 'gorro', 'corneta'];
+  const IMG_PANELS = [{ x: 62, y: 122 }, { x: 245, y: 122 }, { x: 428, y: 122 }];
+  const IMG_W = 150, IMG_H = 148;
+  function imgBase(kind) { return { kind, color: (Math.random() * IMG_COLORS.length) | 0, n: 2 + ((Math.random() * 3) | 0), extra: Math.random() < 0.5, extra2: false, flip: false }; }
+  function imgVariant(base, level) {
+    const v = { ...base };
+    let type;
+    if (level === 0) { type = 'color'; v.color = (base.color + 1 + ((Math.random() * (IMG_COLORS.length - 1)) | 0)) % IMG_COLORS.length; }
+    else if (level === 1) {
+      if (Math.random() < 0.5) { type = 'cantidad'; v.n = base.n >= 4 ? base.n - 1 : base.n + 1; }
+      else { type = 'accesorio'; v.extra = !base.extra; }
+    } else {
+      type = ['raya', 'adorno', 'espejo'][(Math.random() * 3) | 0];
+      if (type === 'raya') { base.n = 4 + ((Math.random() * 2) | 0); v.n = base.n - 1; } // una raya menos entre 4-5: sutil
+      else if (type === 'adorno') v.extra2 = true;
+      else v.flip = true;
+    }
+    if (JSON.stringify(v) === JSON.stringify(base)) { v.color = (base.color + 1) % IMG_COLORS.length; type = 'color'; } // red de seguridad
+    return { variant: v, type };
+  }
+  function imgStar(c, x, y, s, col) {
+    c.save(); c.translate(x, y); c.fillStyle = col;
+    c.beginPath(); c.moveTo(0, -s); c.quadraticCurveTo(0, 0, s, 0); c.quadraticCurveTo(0, 0, 0, s); c.quadraticCurveTo(0, 0, -s, 0); c.quadraticCurveTo(0, 0, 0, -s); c.fill();
+    c.restore();
+  }
+  // Dibuja el objeto de fiesta de una spec, centrado en (cx, cy) con escala s
+  function imgDraw(c, spec, cx, cy, s) {
+    const col = IMG_COLORS[spec.color], col2 = IMG_COLORS[(spec.color + 2) % IMG_COLORS.length], n = spec.n;
+    c.save(); c.translate(cx, cy); c.scale(spec.flip ? -s : s, s);
+    if (spec.kind === 'pastel') {
+      c.fillStyle = '#cfd3dc'; c.beginPath(); c.ellipse(0, 22, 27, 6, 0, 0, 6.3); c.fill();
+      c.fillStyle = col; c.fillRect(-20, 4, 40, 17); c.fillStyle = 'rgba(255,255,255,.35)'; c.fillRect(-20, 4, 40, 4);
+      c.fillStyle = '#fff6f9'; c.fillRect(-15, -6, 30, 11);
+      for (let i = 0; i < n; i++) { const x = n === 1 ? 0 : -11 + (22 * i) / (n - 1); c.fillStyle = ['#ffd84a', '#7fd3ff', '#b6f08a'][i % 3]; c.fillRect(x - 1.5, -19, 3, 13); c.fillStyle = '#ff9a2e'; c.beginPath(); c.ellipse(x, -22, 2.4, 3.6, 0, 0, 6.3); c.fill(); }
+      if (spec.extra) { c.fillStyle = '#d8404a'; c.beginPath(); c.arc(-4, -8, 3.6, 0, 6.3); c.fill(); c.fillStyle = '#5e9c4a'; c.fillRect(-4.8, -13, 1.6, 3); }
+      if (spec.extra2) { c.fillStyle = '#d8404a'; c.beginPath(); c.arc(5, -7, 3.2, 0, 6.3); c.fill(); }
+    } else if (spec.kind === 'globo') {
+      c.strokeStyle = '#8a8a99'; c.lineWidth = 1.3; c.beginPath(); c.moveTo(0, 13); c.quadraticCurveTo(4, 21, 0, 30); c.stroke();
+      c.fillStyle = col; c.beginPath(); c.ellipse(0, -7, 17, 20, 0, 0, 6.3); c.fill();
+      c.strokeStyle = col2; c.lineWidth = 2;
+      for (let i = 1; i < n; i++) { const x = -14 + (28 * i) / n; c.beginPath(); c.ellipse(x * 0.55, -7, Math.max(2.5, 8 - Math.abs(x) * 0.32), 18.5, 0, 0, 6.3); c.stroke(); }
+      c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.ellipse(-6, -14, 4, 6.5, -0.5, 0, 6.3); c.fill();
+      c.fillStyle = col; c.beginPath(); c.moveTo(-3.5, 12); c.lineTo(3.5, 12); c.lineTo(0, 16.5); c.closePath(); c.fill();
+      if (spec.extra) imgStar(c, 7, -13, 5, '#fff6f9');
+      if (spec.extra2) imgStar(c, -8.5, -2, 3.6, '#fff6f9');
+    } else if (spec.kind === 'regalo') {
+      c.fillStyle = col; c.fillRect(-19, -3, 38, 26);
+      c.fillStyle = col2;
+      [[-12, 6], [0, 12], [11, 5], [-5, 18], [13, 17]].slice(0, n).forEach(([x, y]) => { c.beginPath(); c.arc(x, y, 2.3, 0, 6.3); c.fill(); });
+      c.fillStyle = '#ffd23f'; c.fillRect(-3, -11, 6, 34); c.fillRect(-19, 7, 38, 5);
+      c.fillStyle = IMG_COLORS[(spec.color + 1) % IMG_COLORS.length]; c.fillRect(-22, -12, 44, 9);
+      c.fillStyle = '#ffd23f'; c.fillRect(-3, -12, 6, 9);
+      if (spec.extra) { c.fillStyle = '#ffd23f'; c.beginPath(); c.ellipse(-6, -16, 5.5, 3.4, -0.6, 0, 6.3); c.fill(); c.beginPath(); c.ellipse(6, -16, 5.5, 3.4, 0.6, 0, 6.3); c.fill(); }
+      if (spec.extra2) { c.fillStyle = '#fff6f9'; c.fillRect(13, 0, 8, 11); c.fillStyle = '#d8404a'; c.fillRect(15.5, 3, 3, 3); }
+    } else if (spec.kind === 'vela') {
+      c.fillStyle = '#e8d9b8'; c.beginPath(); c.ellipse(0, 25, 15, 3.6, 0, 0, 6.3); c.fill();
+      c.fillStyle = col; c.fillRect(-9, -6, 18, 30);
+      c.fillStyle = 'rgba(255,255,255,.6)';
+      for (let i = 0; i < n; i++) c.fillRect(-9, 0 + i * 6.4, 18, 2.6);
+      c.strokeStyle = '#2b1d24'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(0, -6); c.lineTo(0, -11); c.stroke();
+      c.fillStyle = '#ff9a2e'; c.beginPath(); c.ellipse(0, -16, 4.2, 6.4, 0, 0, 6.3); c.fill();
+      c.fillStyle = '#ffd23f'; c.beginPath(); c.ellipse(0, -15, 2, 3.6, 0, 0, 6.3); c.fill();
+      if (spec.extra) { imgStar(c, -14, -12, 4, '#ffd23f'); imgStar(c, 14, -8, 4, '#ffd23f'); }
+      if (spec.extra2) imgStar(c, 13, 4, 3.4, '#ffd23f');
+    } else if (spec.kind === 'gorro') {
+      c.save();
+      c.beginPath(); c.moveTo(-19, 20); c.lineTo(0, -25); c.lineTo(19, 20); c.closePath(); c.clip();
+      c.fillStyle = col; c.fillRect(-19, -25, 38, 45);
+      c.fillStyle = col2;
+      for (let i = 0; i < n; i++) c.fillRect(-19, -14 + i * 9, 38, 4.4);
+      if (spec.extra2) { c.fillStyle = '#fff6f9'; [[-6, 2], [5, 9], [0, -6]].forEach(([x, y]) => { c.beginPath(); c.arc(x, y, 2.2, 0, 6.3); c.fill(); }); }
+      c.restore();
+      c.fillStyle = '#fff6f9'; c.fillRect(-19, 18, 38, 5);
+      if (spec.extra) { c.fillStyle = '#fff6f9'; c.beginPath(); c.arc(0, -27, 6, 0, 6.3); c.fill(); c.fillStyle = 'rgba(0,0,0,.08)'; c.beginPath(); c.arc(2, -25, 4.4, 0, 6.3); c.fill(); }
+    } else { // corneta
+      c.fillStyle = col; c.beginPath(); c.moveTo(-19, -3.4); c.lineTo(13, -11); c.lineTo(13, 11); c.lineTo(-19, 3.4); c.closePath(); c.fill();
+      c.fillStyle = '#fff6f9';
+      [[-8, 0], [1, -3], [1, 4], [8, 0], [-13, 1]].slice(0, n).forEach(([x, y]) => { c.beginPath(); c.arc(x, y, 2.2, 0, 6.3); c.fill(); });
+      c.fillStyle = col2; c.beginPath(); c.ellipse(14, 0, 5, 12, 0, 0, 6.3); c.fill();
+      c.fillStyle = '#8a8a99'; c.fillRect(-24, -2.2, 5.5, 4.4);
+      if (spec.extra) { c.strokeStyle = col2; c.lineWidth = 2; for (let i = -1; i <= 1; i++) { c.beginPath(); c.moveTo(17, i * 5); c.quadraticCurveTo(24, i * 6 - 3, 28, i * 8 + Math.sin(i * 4) * 2); c.stroke(); } }
+      if (spec.extra2) { c.strokeStyle = '#ffd23f'; c.lineWidth = 2.4; c.beginPath(); c.ellipse(14, 0, 6.4, 13, 0, 0, 6.3); c.stroke(); }
+    }
+    c.restore();
+  }
+  class ImageDuel extends Duel {
+    constructor(who, done) {
+      super(who, 'jose', done, { rounds: 9, need: 5, label: 'PUNTO', title: 'LA IMAGEN DISTINTA', hint: '← ↓ → o clic en el panel: señala la imagen DISTINTA antes que José', rendT: 1.1 });
+      this.isImage = true;
+      this.p = new Actor(who, 190, 292); this.jose = new Actor('jose', 810, 292);
+      this.p.dir = 'up'; this.jose.dir = 'up';
+      fixSpawn(this.p, 'sala'); fixSpawn(this.jose, 'sala');
+      this.cam = CAM_SALA();
+      // Clic en los paneles (además del teclado): se traduce a choose(i)
+      // con las mismas coordenadas de pantalla (640×360) del dibujo.
+      this.clickIdx = -1;
+      try {
+        const cv = document.querySelector('#cv');
+        if (cv && cv.addEventListener) cv.addEventListener('pointerdown', (e) => {
+          if (this.st !== 'play' || this.phase !== 'show') return;
+          const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 640, height: 360 };
+          const lx = ((e.clientX - r.left) * 640) / Math.max(1, r.width), ly = ((e.clientY - r.top) * 360) / Math.max(1, r.height);
+          const i = IMG_PANELS.findIndex((pn) => lx >= pn.x && lx <= pn.x + IMG_W && ly >= pn.y && ly <= pn.y + IMG_H);
+          if (i >= 0) this.clickIdx = i;
+        });
+      } catch (e) { /* sin canvas accesible: queda el teclado */ }
+      this.begin();
+    }
+    level() { return this.round < 2 ? 0 : this.round < 4 ? 1 : 2; }
+    setup(n) {
+      const lv = this.level();
+      const base = imgBase(IMG_KINDS[(Math.random() * IMG_KINDS.length) | 0]);
+      const { variant, type } = imgVariant(base, lv);
+      this.diffIdx = (Math.random() * 3) | 0;
+      this.panels = [base, base, base]; this.panels[this.diffIdx] = variant; // exactamente UNA distinta, por construcción
+      this.diffType = type;
+      this.phase = 'show'; this.phaseT = 0; this.pPick = null; this.josePick = null; this.graceT = 0; this.revealT = 0; this.pendingEnd = null; this.clickIdx = -1;
+      // IA de José: tarda más y acierta menos cuanto más sutil; tu Lógica lo frena un poco más
+      this.joseAt = [rnd(1.5, 2.3), rnd(2.4, 3.4), rnd(3.6, 5.0)][lv] * (1 + (stat(this.who, 'logica') - 5) * 0.04);
+      this.joseAcc = [0.95, 0.82, 0.6][lv];
+      this.p.frameOverride = null; this.jose.frameOverride = null;
+    }
+    choose(i) { // elección del jugador (teclado o clic)
+      if (this.st !== 'play' || this.phase !== 'show' || this.pPick !== null) return;
+      this.pPick = i; this.p.emo(i === this.diffIdx ? '!' : '?', 0.7);
+      if (i === this.diffIdx) { this.score('p', '¡Esa era la distinta!'); return; }
+      if (this.josePick !== null) { this.score(this.josePick === this.diffIdx ? 'b' : 'tie', this.josePick === this.diffIdx ? 'José la vio y tú no' : '¡Los dos fallaron! Ronda anulada'); return; }
+      // elegiste mal: José apura su respuesta; si acierta se lleva el punto, si falla se anula
+      this.joseAt = Math.min(this.joseAt, this.phaseT + rnd(0.5, 1.1));
+      this.say('Esa no era… José busca la suya', '#ff6b7a', 1.1);
+    }
+    joseAnswer() {
+      const ok = Math.random() < this.joseAcc;
+      this.josePick = ok ? this.diffIdx : [0, 1, 2].filter((i) => i !== this.diffIdx)[(Math.random() * 2) | 0];
+      this.jose.emo(ok ? '!' : '?', 0.7);
+      if (ok) { this.score('b', this.pPick !== null ? 'José la vio y tú no' : 'José la vio primero'); return; }
+      if (this.pPick !== null) { this.score('tie', '¡Los dos fallaron! Ronda anulada'); return; }
+      this.graceT = 1.4; this.say('¡José falló! ¡Tu turno!', '#7dff8a', 1.2); // falló primero: ventana de gracia para ti
+    }
+    score(w, text) {
+      if (this.phase !== 'show') return;
+      this.phase = 'reveal'; this.revealT = 1.4; this.pendingEnd = { w, text };
+      const win = w === 'p' ? this.p : w === 'b' ? this.jose : null;
+      if (win) win.hop(170);
+    }
+    update(dt) {
+      const p = this.p, j = this.jose; p.update(dt); j.update(dt);
+      if (!this.tick(dt)) return;
+      if (this.phase === 'reveal') { if ((this.revealT -= dt) <= 0 && this.pendingEnd) { const pe = this.pendingEnd; this.pendingEnd = null; this.endRound(pe.w, pe.text); } return; }
+      this.phaseT += dt;
+      if (this.clickIdx >= 0) { const i = this.clickIdx; this.clickIdx = -1; this.choose(i); if (this.phase !== 'show') return; }
+      if (G.input.hit('left')) this.choose(0); else if (G.input.hit('down')) this.choose(1); else if (G.input.hit('right')) this.choose(2);
+      if (this.phase !== 'show') return;
+      if (this.josePick === null && this.phaseT >= this.joseAt) { this.joseAnswer(); if (this.phase !== 'show') return; }
+      if (this.graceT > 0) { if ((this.graceT -= dt) <= 0 && this.pPick === null) this.score('tie', 'Nadie la encontró: ronda anulada'); }
+      else if (this.phaseT >= 8) this.score('tie', 'Se acabó el tiempo: ronda anulada');
+    }
+    drawPanels(c, t) {
+      const reveal = this.phase === 'reveal';
+      IMG_PANELS.forEach((pn, i) => {
+        const gold = reveal && i === this.diffIdx;
+        c.fillStyle = gold ? '#ffd23f' : '#241d33'; c.beginPath(); c.roundRect(pn.x - 5, pn.y - 5, IMG_W + 10, IMG_H + 10, 10); c.fill();
+        c.fillStyle = '#f7ead9'; c.beginPath(); c.roundRect(pn.x, pn.y, IMG_W, IMG_H, 7); c.fill();
+        imgDraw(c, this.panels[i], pn.x + IMG_W / 2, pn.y + IMG_H / 2 + 4, 1.55);
+        // marcas de elección: pestaña con el color de cada uno y su inicial
+        const mark = (who, col, label) => { c.fillStyle = col; c.beginPath(); c.roundRect(pn.x + (who === 'p' ? 6 : IMG_W - 34), pn.y + 6, 28, 15, 4); c.fill(); G.text(c, label, pn.x + (who === 'p' ? 20 : IMG_W - 20), pn.y + 13.5, { size: 8.5, stroke: false }); };
+        if (this.pPick === i) mark('p', '#3f8f4f', 'TÚ');
+        if (this.josePick === i) mark('b', '#8a4a6b', 'JOSÉ');
+        if (reveal) { // el marco dorado ya señala la distinta; cruz sobre las elecciones erradas
+          const cross = (bad) => { if (!bad) return; c.strokeStyle = '#e23b4e'; c.lineWidth = 4; c.beginPath(); c.moveTo(pn.x + IMG_W - 22, pn.y + IMG_H - 22); c.lineTo(pn.x + IMG_W - 8, pn.y + IMG_H - 8); c.moveTo(pn.x + IMG_W - 8, pn.y + IMG_H - 22); c.lineTo(pn.x + IMG_W - 22, pn.y + IMG_H - 8); c.stroke(); };
+          if (this.pPick === i) cross(i !== this.diffIdx);
+          if (this.josePick === i) cross(i !== this.diffIdx);
+        }
+      });
+      if (this.phase === 'show') { // barra del tiempo de la ronda (8 s)
+        c.fillStyle = 'rgba(28,24,38,.8)'; c.fillRect(88, 288, 464, 5);
+        c.fillStyle = this.phaseT > 6 ? '#ff6b7a' : '#ffd23f'; c.fillRect(88, 288, 464 * Math.max(0, 1 - this.phaseT / 8), 5);
+      }
+      if (reveal) G.text(c, '¡ESA ERA LA DISTINTA!', 320, 104, { size: 13, color: '#ffd23f', lw: 4 });
+    }
+    draw(dt) {
+      W.render({
+        cam: this.cam, dt, light: W.LIGHT.noche, actors: [this.p, this.jose], focusZ: 292,
+        over: (c, t) => { this.hud(c, t, `${this.pw} PUNTOS`, `${this.bw} PUNTOS`); if (this.panels && this.st !== 'over') this.drawPanels(c, t); },
+      });
+    }
+  }
+
+  // =========================================================
+  // 14. GLOBOS POR LAS NUBES — vs José, Pollito dirige con
+  // banderas (mejor de 5: gana quien llegue a 3 rondas)
+  // =========================================================
+  // DECISIONES DE JOSE (2026-11-14): Pollito dirige desde el centro
+  // (plataforma en la azotea, DE FRENTE — sin espejo, como siempre en
+  // frontal) con dos banderas dibujadas por código. A veces hace una
+  // FINTA: levanta una bandera y la cambia rápido por la otra ANTES
+  // de la señal de «¡YA!» (la señal: baja ambas banderas y destella
+  // el ícono de alerta propio). Solo cuenta la indicación FINAL tras
+  // la señal. Si eliges ANTES de la señal, tu elección queda fijada
+  // con la indicación vigente en ese instante: si luego hay finta,
+  // vuelas. José responde SOLO tras la señal con su tiempo de
+  // reacción (nunca cae en la finta; pero el 22% de las veces agarra
+  // el globo equivocado por apurado). Quien levanta el globo
+  // correcto primero gana la ronda; si ambos aciertan, gana el más
+  // rápido; quien elige mal SALE VOLANDO con su globo — se eleva
+  // agarrado a él, se achica hacia el cielo entre estrellitas y
+  // vuelve para la ronda siguiente: es el gag central del duelo —.
+  // Si ambos fallan, ambos vuelan y la ronda no da punto.
+  const BALLOON_COLORS = ['#e23b4e', '#3fa0f0', '#ffd23f', '#58c46a', '#f08cc0', '#ff9a5c', '#b48cf0'];
+  let balloonMesh = null;
+  function buildBalloonArena() {
+    const m = new R.MB();
+    m.flat(-460, -300, 920, 620, -2, '#0d0b1e'); // cielo nocturno lejano
+    m.box(-280, -10, -70, 560, 10, 190, '#5d4a63', { top: '#6f5a75' }); // azotea
+    m.box(-280, 0, -70, 560, 30, 10, '#4a3a52', { s: '#584664' }); // baranda del fondo
+    m.box(-34, 0, -34, 68, 36, 56, '#7a6248', { top: '#8f7554' }); // plataforma de Pollito
+    m.box(186, 0, -62, 8, 74, 8, '#3a3348'); m.box(156, 74, -62, 68, 5, 5, '#3a3348'); // antena
+    m.box(-238, 0, -62, 52, 40, 40, '#54606e', { top: '#67727f' }); // tanque
+    return m.upload();
+  }
+  function drawBalloon2D(c, x, y, s, color) { // globo por código: cuerpo, brillo, nudo e hilo
+    c.save(); c.translate(x, y); c.scale(s, s);
+    c.strokeStyle = 'rgba(240,240,255,.75)'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(0, 13); c.quadraticCurveTo(3, 20, 0, 27); c.stroke();
+    c.fillStyle = color; c.beginPath(); c.ellipse(0, 0, 13, 15, 0, 0, 6.3); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.ellipse(-5, -6, 4, 6, -0.5, 0, 6.3); c.fill();
+    c.fillStyle = color; c.beginPath(); c.moveTo(-3, 13.5); c.lineTo(3, 13.5); c.lineTo(0, 18); c.closePath(); c.fill();
+    c.restore();
+  }
+  function drawFlag2D(c, x, y, up, color, t, side) { // mástil + banderín que ondea (o baja junto al mástil si no está levantada)
+    c.save(); c.translate(x, y);
+    c.strokeStyle = '#e8e2f2'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(0, 10); c.lineTo(0, -16); c.stroke();
+    if (up) { const w = Math.sin(t * 9 + (side ? 2 : 0)) * 2.2; c.fillStyle = color; c.beginPath(); c.moveTo(0, -16); c.lineTo(side ? -15 : 15, -11 + w * 0.4); c.lineTo(0, -6); c.closePath(); c.fill(); }
+    c.restore();
+  }
+  class BalloonDuel extends Duel {
+    constructor(who, done) {
+      super(who, 'jose', done, { rounds: 5, need: 3, label: 'RONDA', title: 'GLOBOS POR LAS NUBES', hint: 'Pollito indica con las banderas · Espera el ¡YA! y pulsa ← o → para levantar ese globo', rendT: 1.3 });
+      this.isBalloons = true;
+      this.p = new Actor(who, -120, 8); this.jose = new Actor('jose', 120, 8); this.cat = new Actor('pollito', 0, -8);
+      this.cat.elev = 38; // sobre su plataforma, DE FRENTE dirigiendo (sin espejo)
+      this.p.dir = 'up'; this.jose.dir = 'up'; this.cat.dir = 'down';
+      this.cam = { x: 0, y: 0, z: 0, dist: 430, pitch: 0.42, fov: 38 };
+      this.begin();
+    }
+    setup(n) {
+      this.phase = 'flags'; this.rT = 0;
+      this.cur = (Math.random() * 2) | 0; // indicación vigente: 0 = izquierda, 1 = derecha
+      this.feint = n > 0 && Math.random() < 0.45; this.feintT = rnd(0.95, 1.35); this.feintDone = false; // la 1ª ronda nunca trae finta
+      this.feint2 = false; this.feint2T = 0; this.feint2Done = false;
+      this.signalT = rnd(1.7, 2.3); this.final = null; this.flashT = 0;
+      this.pPick = null; this.bPick = null; this.joseAt = null;
+      this.fly = { p: 0, b: 0 }; this.flyT = 0; this.pendingEnd = null; this.stars = [];
+      this.colors = { p: shuffle([...BALLOON_COLORS]).slice(0, 2), b: shuffle([...BALLOON_COLORS]).slice(0, 2) }; // colores nuevos por ronda
+      for (const a of [this.p, this.jose]) { a.elev = 0; a.scale = 1; a.spin = 0; a.tilt = 0; a.jy = 0; a.jv = 0; }
+      this.cat.elev = 38;
+    }
+    press(side, who) {
+      if (who === 'p') {
+        if (this.pPick || this.phase === 'fly') return;
+        // Elegir ANTES de la señal fija la elección con la indicación
+        // vigente: si después hay finta, esa elección queda mal.
+        this.pPick = { side, t: this.rT, early: this.phase === 'flags' };
+        this.p.emo('!', 0.6); G.sfx('pick');
+      } else if (!this.bPick) this.bPick = { side, t: this.rT };
+    }
+    signal() {
+      this.phase = 'go'; this.final = this.cur; this.flashT = 0.45; // ambas banderas bajan + destello de alerta
+      this.joseAt = this.rT + 0.25 + rnd(0.5, 0.85) * (G.S.flags.joseEnojado ? 0.85 : 1); // José responde tras la señal
+      G.sfx('ok');
+    }
+    resolve() {
+      const pOk = !!this.pPick && this.pPick.side === this.final;
+      const bOk = !!this.bPick && this.bPick.side === this.final;
+      let w, text;
+      if (pOk && bOk) { w = this.pPick.t <= this.bPick.t ? 'p' : 'b'; text = w === 'p' ? '¡Ambos bien, pero fuiste más rápido!' : 'Ambos bien… José fue más rápido'; }
+      else if (pOk) { w = 'p'; text = '¡Globo correcto! José sale volando'; }
+      else if (bOk) { w = 'b'; text = this.pPick && this.pPick.early ? 'Te adelantaste a la señal… ¡y la finta te dejó volando!' : 'Globo equivocado: ¡a volar!'; }
+      else { w = 'tie'; text = '¡Los dos volaron! La ronda no da punto'; }
+      if (!pOk) this.fly.p = 0.001; // el gag: quien falla se va volando con su globo
+      if (!bOk) this.fly.b = 0.001;
+      this.phase = 'fly'; this.flyT = 1.7; this.pendingEnd = { w, text };
+      if (w === 'p') this.p.hop(150); else if (w === 'b') this.jose.hop(150);
+      G.sfx(w === 'tie' ? 'msg' : 'party');
+    }
+    update(dt) {
+      const p = this.p, j = this.jose, cat = this.cat; p.update(dt); j.update(dt); cat.update(dt);
+      if (!this.tick(dt)) return;
+      this.rT += dt;
+      if (this.flashT > 0) this.flashT -= dt;
+      // Vuelos en curso: sube agarrado al globo, se achica, estrellitas
+      for (const [key, a] of [['p', p], ['b', j]]) {
+        if (this.fly[key] > 0) {
+          this.fly[key] += dt;
+          const k = Math.min(1, this.fly[key] / 1.5), e = 1 - (1 - k) * (1 - k);
+          a.elev = e * 250; a.scale = 1 - e * 0.5; a.tilt = Math.sin(this.fly[key] * 5) * 0.13;
+          if (Math.random() < 0.4) this.stars.push({ x: a.x + rnd(-16, 16), y: a.elev + rnd(24, 64), z: a.y, t: 0 });
+        }
+      }
+      this.stars.forEach((s) => (s.t += dt)); this.stars = this.stars.filter((s) => s.t < 0.8);
+      if (this.phase === 'fly') { if ((this.flyT -= dt) <= 0 && this.pendingEnd) { const pe = this.pendingEnd; this.pendingEnd = null; this.endRound(pe.w, pe.text); } return; }
+      if (this.phase === 'flags') {
+        if (this.feint && !this.feintDone && this.rT >= this.feintT) {
+          this.feintDone = true; this.cur = 1 - this.cur; cat.emo('!', 0.5); // LA FINTA: cambia la bandera antes de la señal
+          if (Math.random() < 0.25) { this.feint2 = true; this.feint2T = this.rT + rnd(0.35, 0.5); } // a veces, doble finta
+        }
+        if (this.feint2 && !this.feint2Done && this.rT >= this.feint2T) { this.feint2Done = true; this.cur = 1 - this.cur; cat.emo('!', 0.5); }
+        if (this.rT >= this.signalT) this.signal();
+      }
+      if (G.input.hit('left')) this.press(0, 'p'); else if (G.input.hit('right')) this.press(1, 'p');
+      if (this.phase === 'go') {
+        if (this.bPick === null && this.rT >= this.joseAt) { const wrong = Math.random() < 0.22; this.press(wrong ? 1 - this.final : this.final, 'b'); this.jose.emo(wrong ? '?' : '!', 0.6); }
+        if ((this.pPick && this.bPick) || this.rT >= this.signalT + 1.9) { if (!this.pPick) this.pPick = { side: -1, t: 1e9, early: false }; this.resolve(); }
+      }
+    }
+    drawStage(c, t) {
+      // Pollito y sus banderas (de frente, sin espejo)
+      const ch = this.cat.head(8);
+      const upSide = this.flashT > 0 ? -1 : this.phase === 'flags' ? this.cur : this.final; // durante el destello, AMBAS bajan
+      drawFlag2D(c, ch.x - 21, ch.y + 16, upSide === 0, '#ff6b7a', t, 0);
+      drawFlag2D(c, ch.x + 21, ch.y + 16, upSide === 1, '#4db2ff', t, 1);
+      if (this.flashT > 0) { G.icon(c, 'alerta', ch.x, ch.y - 30, 26); G.text(c, '¡YA!', ch.x, ch.y - 54, { size: 17, color: '#ffd23f', lw: 5 }); }
+      // los globos de cada concursante (el elegido se infla y acompaña; si vuela, se lo lleva)
+      for (const [a, cols, pick] of [[this.p, this.colors.p, this.pPick], [this.jose, this.colors.b, this.bPick]]) {
+        const hd = a.head(4);
+        for (let side = 0; side < 2; side++) {
+          const chosen = pick && pick.side === side;
+          // el globo ELEGIDO va en la mano (y se lo lleva si sale volando);
+          // el otro se queda flotando junto a su puesto, en el suelo
+          if (chosen) drawBalloon2D(c, hd.x + (side ? 30 : -30), hd.y - 20 + Math.sin(t * 3 + side * 2) * 2, 1.3, cols[side]);
+          else { const g = R.project(a.x + (side ? 17 : -17), 34, a.y); if (g.ok) drawBalloon2D(c, g.x, g.y - 14 + Math.sin(t * 3 + side * 2) * 2, 0.95, cols[side]); }
+        }
+      }
+      for (const s of this.stars) { const pr = R.project(s.x, s.y, s.z); if (pr.ok) imgStar(c, pr.x, pr.y, 6 - s.t * 5, '#ffe58a'); }
+      if (this.phase === 'flags') G.text(c, this.pPick ? 'Elección fijada… a ver si no hay finta' : 'Pollito está indicando… espera el ¡YA!', 320, 318, { size: 11, color: '#b7a8e8', lw: 4 });
+      if (this.phase === 'go' && !this.pPick) G.text(c, '¡YA!  ← / →', 320, 300 + Math.sin(t * 10) * 2, { size: 15, color: '#ffd23f', lw: 5 });
+    }
+    draw(dt) {
+      if (!balloonMesh && R.gl) balloonMesh = buildBalloonArena(); // la malla se sube al primer draw con WebGL presente
+      W.render({
+        cam: this.cam, dt, mesh: balloonMesh, actors: [this.p, this.cat, this.jose], noApartment: true,
+        light: { amb: [0.5, 0.48, 0.62], sun: [0.3, 0.3, 0.38], sky: '#0d0b1e', points: [{ x: 0, y: 80, z: -20, r: 380, c: [0.35, 0.3, 0.2] }] },
+        over: (c, t) => { this.hud(c, t, `${this.pw} RONDAS`, `${this.bw} RONDAS`); if (this.st !== 'over') this.drawStage(c, t); },
+      });
+    }
+  }
+
+  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, CactusRaceDuel, ImageDuel, BalloonDuel, buildDecoSet, CandleGame };
 })();

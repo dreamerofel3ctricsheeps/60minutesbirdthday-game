@@ -227,7 +227,7 @@
   // partida, la partida se ABANDONA (enterPractice descarta los
   // temporizadores de la historia): al terminar se va a la lista o al
   // título, nunca de vuelta a la run.
-  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'apagon', 'pizza', 'sonambula', 'memoria', 'cactus', 'repisas', 'pisoton', 'azotea'];
+  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'apagon', 'pizza', 'sonambula', 'memoria', 'imagen', 'cactus', 'cactus2', 'repisas', 'pisoton', 'globos', 'azotea'];
   const DUEL_DESC = {
     decoracion: 'Cuelga la decoración en su zona antes de que Pollito la tire.',
     pollito: 'Persigue al gato por la sala y recupera lo que robó.',
@@ -236,9 +236,12 @@
     pizza: 'Baja la pizza por la escalera cuidando el equilibrio.',
     sonambula: 'Llega hasta Ximena sonámbula antes que José.',
     memoria: 'Da vuelta las cajas y junta más parejas que José.',
+    imagen: 'Dos paneles iguales y uno distinto: señálalo antes que José. Carrera a 5 puntos.',
     cactus: 'Esquiva los cactus rodantes y sobrevive la ronda.',
+    cactus2: 'Carrera lateral en el mismo carril que Pollito: salta los cactus que ruedan de izquierda a derecha. Ojo con los cambios de velocidad y de gravedad.',
     repisas: 'Escalada infinita por el librero sin techo: gana quien suba más alto en 60 s.',
     pisoton: 'Cambia de cojín y esquiva los pisotones de Pollito.',
+    globos: 'Pollito dirige con banderas (¡y hace fintas!): espera el ¡YA! y levanta el globo indicado. Quien elige mal, sale volando.',
     azotea: 'Esquiva las pasadas del dron sobre la azotea.',
   };
   function menuShow(html) { G.menuOpen = true; overlay.innerHTML = `<div class="modal wide">${html}</div>`; overlay.classList.add('show'); }
@@ -253,7 +256,7 @@
   }
   function duelListScreen(from) {
     return new Promise((res) => {
-      const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = G.CHARS[ev.boss]; return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
+      const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = G.CHARS[ev.boss]; return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${ev.bossLabel || boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
       menuShow(`<h2><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos — práctica</h2><p class="dim">Los duelos contra los jefes, directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
       overlay.querySelectorAll('.duel').forEach((b) => (b.onclick = () => { G.sfx('pick'); res(b.dataset.id); }));
       $('#mback').onclick = () => { G.sfx('pick'); res('back'); };
@@ -485,7 +488,9 @@
       },
     },
     memoria: { stats: ['logica'], Scene: () => Sc.MemoryDuel, note: () => 'Más lógica = José recuerda menos', setup() {} },
+    imagen: { stats: ['logica', 'velocidad'], Scene: () => Sc.ImageDuel, note: () => 'Más lógica = José tarda más en verla', setup() {} },
     cactus: { stats: ['velocidad'], Scene: () => Sc.SpikeDuel, note: () => 'Velocidad para esquivar', setup() {} },
+    cactus2: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.CactusRaceDuel, note: () => 'Mismo carril que Pollito: salta con ESPACIO o ↑', setup() {} },
     repisas: { stats: ['velocidad'], Scene: () => Sc.ClimbDuel, note: () => 'La altura máxima manda: ← y →', setup() {} },
     pisoton: { stats: ['velocidad'], Scene: () => Sc.StompDuel, note: () => 'Velocidad para cambiar de cojín', setup() {} },
     azotea: { stats: ['velocidad'], Scene: () => Sc.DroneDuel, note: () => 'Velocidad lateral', setup() {} },
@@ -511,21 +516,40 @@
     mensajes: { stats: ['carisma'], Scene: () => Sc.MessageDuel, note: () => 'Más carisma = José escribe más lento', setup() {} },
     pizza: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.PizzaRace, note: () => 'Sigilo = mejor equilibrio', setup() {} },
     sonambula: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.SleepwalkDuel, note: () => 'Sigilo = más margen al frenar', setup() {} },
+    globos: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.BalloonDuel, note: () => 'Pollito dirige: no caigas en sus fintas', setup() {} },
   };
 
+  // SORTEO DEL EVENTO CACTUS (decisión de Jose, 2026-11-14): en la
+  // historia, el evento «Cactus rodantes» sortea en cada partida cuál
+  // variante se juega — las bolas que rebotan por la cocina (cactus)
+  // o la carrera lateral con gravedad cambiante (cactus2) — al
+  // 50/50. En práctica NO hay sorteo: cada entrada de la lista juega
+  // siempre su variante. Se expone en G para la prueba de humo.
+  function cactusVariant() { return Math.random() < 0.5 ? 'cactus2' : 'cactus'; }
+  G.cactusVariant = cactusVariant;
+
   async function runMinigame(ev) {
-    const mg = MG[ev.game], boss = G.CHARS[ev.boss];
+    // Sorteo de variante del evento cactus (solo en la historia): si
+    // sale la carrera, se juega con el MG, el título, el intro y la
+    // meta de «Cactus en carrera», y la pantalla VS lo anuncia.
+    let mg = MG[ev.game], variant = null, evShow = ev;
+    if (ev.game === 'cactus' && !G.practiceMode) {
+      variant = cactusVariant();
+      S.flags.cactusVariant = variant;
+      if (variant === 'cactus2') { mg = MG.cactus2; evShow = G.EVENTS.cactus2; }
+    }
+    const boss = G.CHARS[ev.boss];
     const who = await ui.assign(`¿Quién se enfrenta a ${boss.name}?`, (c) => ({ stats: statLine(c, mg.stats), note: mg.note ? mg.note(c) : '' }));
     mg.setup();
     const c = G.CHARS[who];
     const bossImg = Sp.full(ev.boss);
     await ui.modal(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${bossImg}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
-      <h2>${ev.title}</h2><p>${ev.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${ev.goal}</p>`, '¡EMPEZAR!');
+      <h2>${evShow.title}</h2>${variant ? '<p class="goal">Sorteo de cactus: esta partida toca la variante «' + (variant === 'cactus2' ? 'Cactus en carrera' : 'Cactus rodantes') + '».</p>' : ''}<p>${evShow.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${evShow.goal}</p>`, '¡EMPEZAR!');
     G.captureKeys = true; $('#phone').classList.add('dim');
     const res = await new Promise((r) => G.setScene(new (mg.Scene())(who, r)));
     G.captureKeys = false; $('#phone').classList.remove('dim');
     G.setScene(G.home);
-    S.duels.push({ game: ev.game, boss: ev.boss, win: res.win });
+    S.duels.push({ game: ev.game, boss: ev.boss, win: res.win, ...(variant ? { variant } : {}) });
     ui.raw(`<div class="roll ${res.win === 'win' ? 'good' : res.win === 'tie' ? 'mid' : 'bad'}">${`<img class="res-ico" src="assets/icons/${res.win === 'win' ? 'trofeo' : res.win === 'tie' ? 'empate' : 'derrota'}.png" alt="">`} ${res.win === 'win' ? `VENCISTE A ${boss.name.toUpperCase()}` : res.win === 'tie' ? 'EMPATE' : `GANÓ ${boss.name.toUpperCase()}`}</div>`);
     const actor = G.home.actor(who); if (actor) { actor.expr = res.win === 'win' ? 'happy' : 'surprised'; actor.hop(160); G.after(4, () => (actor.expr = null)); }
     if (res.win !== 'win') S.log.fallos++;
