@@ -42,9 +42,11 @@
       // (diseño original retomado el 2026-11-14): los otros 6 son NPC
       // repartidos por las habitaciones, cada uno en la suya ('free').
       // Estados de un NPC: 'free' (vive el depa, se le puede cargar) →
-      // 'carried' (al hombro del jugador) → 'waiting' (reclutado: espera
-      // junto al armario y se queda para TODO el juego). Al bajarlo sin
-      // reclutar vuelve a 'free' donde quedó.
+      // 'carried' (al hombro del jugador) → 'entering' (reclutado: hace
+      // cola frente al armario y se METE DENTRO cuando la puerta se
+      // abre) → 'inside' (dentro del armario: invisible e intocable el
+      // resto de la recolección; asomará los ojos al llegar Ximena).
+      // Al bajarlo sin reclutar vuelve a 'free' donde quedó.
       const npcRooms = ['cocina', 'sala', 'cuarto', 'pasillo', 'sala', 'cuarto'];
       this.others = G.PLAYABLE.filter((c) => c !== playerId).map((id, i) => {
         const room = npcRooms[i % npcRooms.length], pt = W.randomFreePoint(room);
@@ -54,9 +56,16 @@
       });
       this.carrying = null;          // NPC al hombro (Actor) o null
       this.partners = [];            // ids reclutados (máx. 3)
-      // Puestos de espera junto al armario (la zona segura) para los ya
-      // reclutados: visibles, en idle, viendo cómo crece el equipo.
-      this.waitSpots = [[566, 398], [634, 398], [600, 434]];
+      // Guardado en el armario: cola de entregas y secuencia en curso.
+      // Las entregas se registran AL INSTANTE (el partner cuenta aunque
+      // la puerta esté ocupada con el anterior) y la animación de
+      // abrir → entrar → cerrar se procesa de una en una.
+      this.stashQueue = [];          // Actores 'entering' esperando su turno
+      this.stashBusy = null;         // Actor en plena secuencia de guardado
+      this.stashT = 0;               // temporizador de la fase en curso
+      // Puestos de cola frente al armario para los que esperan turno.
+      this.queueSpots = [[600, 376], [558, 386], [642, 386]];
+      W.closet.k = 0; W.closet.target = 0; W.closet.wobble = 0;
       this.cat = new Actor('pollito', 880, 150); this.cat.speed = 110; this.catWait = 7; this.catMoves = 0; this.catItem = null;
       this.cheer = 4; this.stashed = 0; this.msg = null;
       this.cam = { x: 510, y: 0, z: 440, dist: 560, pitch: 0.78, fov: 34 };
@@ -91,14 +100,46 @@
     }
     recruit(o) {
       const p = this.p; this.carrying = null; p.carryWalk = false;
-      o.state = 'waiting'; o.carriedPose = false; o.elev = 0; o.jy = 0; o.jv = 0; o.expr = 'happy';
+      o.carriedPose = false; o.elev = 0; o.jy = 0; o.jv = 0; o.expr = 'happy';
       o.x = p.x; o.y = p.y;
-      const spot = this.waitSpots[this.partners.length];
+      // El reclutamiento se REGISTRA ya (partner +1, hombro libre): la
+      // secuencia del armario es solo la puesta en escena. El roomie se
+      // pone en la cola frente al armario y updateStash lo mete dentro.
+      o.state = 'entering'; o.enterPhase = 'queue';
       this.partners.push(o.id);
-      if (spot) o.goTo(spot[0], spot[1], 130);
-      G.after(2.5, () => { if (o.state === 'waiting') o.expr = null; });
-      this.msg = { text: `✔ ¡${G.CHARS[o.id].name} se queda para la fiesta! Partners ${this.partners.length}/3`, t: 2.2 };
+      this.stashQueue.push(o);
+      const spot = this.queueSpots[(this.stashQueue.length - 1) % this.queueSpots.length];
+      o.goTo(spot[0], spot[1], 150);
+      G.after(2.5, () => { if (o.state === 'entering') o.expr = null; });
+      this.msg = { text: `✔ ¡${G.CHARS[o.id].name} se metió al armario! Partners ${this.partners.length}/3`, t: 2.2 };
       G.sfx('ok'); W.puff(o.x, o.y - 10, 5, true);
+    }
+    // Secuencia de guardado (una entrega a la vez, ~0,85 s por partner):
+    // el de la cola camina al frente del armario → la puerta se ABRE →
+    // salta y se mete en la oscuridad (se encoge un pelo al entrar) →
+    // la puerta se CIERRA con un toquecito del mueble y el reclutado
+    // queda 'inside': oculto, sin sprite ni sombra, intocable.
+    updateStash(dt) {
+      const C = W.closet;
+      if (!this.stashBusy && this.stashQueue.length) {
+        const o = this.stashQueue.shift();
+        this.stashBusy = o; o.enterPhase = 'toDoor';
+        o.goTo(600, 354, 175);
+      }
+      const o = this.stashBusy; if (!o) return;
+      if (o.enterPhase === 'toDoor') {
+        if (o.arrived) { o.enterPhase = 'open'; this.stashT = 0.26; C.target = 1; G.sfx('door'); }
+      } else if (o.enterPhase === 'open') {
+        if ((this.stashT -= dt) <= 0) { o.enterPhase = 'enter'; this.stashT = 0.38; o.dir = 'up'; o.hop(130); }
+      } else if (o.enterPhase === 'enter') {
+        o.y += (346 - o.y) * Math.min(1, dt * 10);
+        o.scale += (0.86 - o.scale) * Math.min(1, dt * 8);
+        if ((this.stashT -= dt) <= 0) {
+          o.state = 'inside'; o.hidden = true; o.scale = 1; o.enterPhase = 'close'; this.stashT = 0.24; C.target = 0;
+        }
+      } else if (o.enterPhase === 'close') {
+        if ((this.stashT -= dt) <= 0) { C.wobble = 1; G.sfx('door'); o.enterPhase = null; this.stashBusy = null; }
+      }
     }
     update(dt) {
       const p = this.p; p.update(dt); this.others.forEach((o) => o.update(dt)); this.cat.update(dt); W.updateFx(dt);
@@ -137,6 +178,7 @@
           else o.dir = ['down', 'left', 'right', 'up'][(Math.random() * 4) | 0];
         }
       });
+      this.updateStash(dt);
       W.camLerp(this.cam, p.x, p.y - 20, dt, 5);
       if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
       if (this.count > 0) { this.count -= dt; G.input.flush(); return; }
@@ -197,14 +239,18 @@
       }
       if ((this.cheer -= dt) <= 0) {
         this.cheer = 5 + Math.random() * 4;
-        const free = this.others.filter((o) => o.state === 'free');
-        const o = (free.length ? free : this.others)[(Math.random() * (free.length ? free.length : this.others.length)) | 0];
-        const lines = this.time < 15
-          ? ['¡YA VIENE!', '¡Escucho el ascensor!', '¡Guarda lo que tengas!', '¡Si no me reclutaste, me voy!']
-          : this.partners.length < 3
-            ? ['¡Apúrate!', '¡El pastel, el pastel!', 'Yo vigilo la puerta.', '¡No te olvides de guardar!', '¿Dónde quedaron los globos?', '¡Elige a tus 3 partners!', '¡A mí, al armario, porfa!']
-            : ['¡Ya estamos los que somos!', '¡El pastel, el pastel!', 'Yo vigilo la puerta.', '¡No te olvides de guardar!'];
-        if (o.state !== 'carried') { o.say(lines[(Math.random() * lines.length) | 0], 2.2); o.hop(130); }
+        // Solo hablan los que están a la vista: libres o en la cola del
+        // armario. Los de DENTRO ('inside') callan — están escondidos.
+        const pool = this.others.filter((o) => o.state === 'free' || o.state === 'entering');
+        if (pool.length) {
+          const o = pool[(Math.random() * pool.length) | 0];
+          const lines = this.time < 15
+            ? ['¡YA VIENE!', '¡Escucho el ascensor!', '¡Guarda lo que tengas!', '¡Si no me reclutaste, me voy!']
+            : this.partners.length < 3
+              ? ['¡Apúrate!', '¡El pastel, el pastel!', 'Yo vigilo la puerta.', '¡No te olvides de guardar!', '¿Dónde quedaron los globos?', '¡Elige a tus 3 partners!', '¡A mí, al armario, porfa!']
+              : ['¡Ya estamos los que somos!', '¡El pastel, el pastel!', 'Yo vigilo la puerta.', '¡No te olvides de guardar!'];
+          o.say(lines[(Math.random() * lines.length) | 0], 2.2); o.hop(130);
+        }
       }
       if (this.time <= 0) {
         this.over = true; G.sfx('bell'); this.others.forEach((o) => o.emo('!', 1.5)); p.emo('!', 1.5);
@@ -220,7 +266,7 @@
         sprites: (t) => { ring(W.STASH.x, W.STASH.y, 40 + Math.sin(t * 5) * 3, p.carry.length ? [0.4, 1, 0.5] : [1, 1, 1], p.carry.length ? 0.75 : 0.3); },
         over: (c, t) => {
           if (this.count <= 0 && !this.over) {
-            if (this.nearStash && this.carrying) { const h = p.head(40); G.prompt(c, `ESPACIO: ${G.CHARS[this.carrying.id].name} se queda ✔`, h.x, h.y); }
+            if (this.nearStash && this.carrying) { const h = p.head(40); G.prompt(c, `ESPACIO: ${G.CHARS[this.carrying.id].name} al armario ✔`, h.x, h.y); }
             else if (this.nearStash && p.carry.length) { const h = p.head(34); G.prompt(c, 'ESPACIO: guardar', h.x, h.y); }
             else if (this.near && (!this.nearRoomie || dist(p, this.near) <= dist(p, this.nearRoomie))) { const q = R.project(this.near.x, 46, this.near.y); G.prompt(c, 'ESPACIO: ' + G.ITEMS[this.near.id].name, q.x, q.y); }
             else if (this.carrying) { const h = p.head(40); G.prompt(c, 'Al ARMARIO con tu partner · ESPACIO: bajarlo', h.x, h.y); }
@@ -237,7 +283,7 @@
           c.fillStyle = '#7dff8a'; c.fillRect(mx + W.STASH.x * k - 1, my + W.STASH.y * k - 3, 6, 4);
           this.items.forEach((it) => { c.fillStyle = '#ffd23f'; c.fillRect(mx + 1 + it.x * k, my + 1 + it.y * k, 3, 3); });
           c.fillStyle = '#f0a04a'; c.fillRect(mx + 1 + this.cat.x * k, my + 1 + this.cat.y * k, 3, 3);
-          this.others.forEach((o) => { if (o.state === 'carried') return; c.fillStyle = o.state === 'waiting' ? '#7dff8a' : '#b9b0d6'; c.fillRect(mx + 1 + o.x * k, my + 1 + o.y * k, 3, 3); });
+          this.others.forEach((o) => { if (o.state === 'carried' || o.state === 'inside') return; c.fillStyle = o.state === 'entering' ? '#7dff8a' : '#b9b0d6'; c.fillRect(mx + 1 + o.x * k, my + 1 + o.y * k, 3, 3); });
           c.fillStyle = '#fff'; c.beginPath(); c.arc(mx + 2 + p.x * k, my + 2 + p.y * k, 2.6, 0, 6.3); c.fill();
           if (this.msg) G.text(c, this.msg.text, 320, 338, { size: 11, color: '#fff' });
           // reloj
@@ -254,7 +300,7 @@
             const n = Math.ceil(this.count - 0.3);
             G.text(c, n > 0 ? String(n) : '¡YA!', 320, 160, { size: 70, color: '#ffd23f', lw: 9 });
             G.text(c, 'Recoge objetos (ESPACIO) y guárdalos en el ARMARIO del pasillo', 320, 226, { size: 11 });
-            G.text(c, 'Carga roomies (ESPACIO junto a ellos) y déjalos en el ARMARIO: tus 3 partners se quedan toda la noche', 320, 244, { size: 9, bold: false });
+            G.text(c, 'Carga roomies (ESPACIO junto a ellos) y mételos en el ARMARIO: tus 3 partners se quedan toda la noche', 320, 244, { size: 9, bold: false });
             G.text(c, 'Moverse: WASD o flechas  ·  Manos: 2 espacios  ·  Hombro: 1 roomie', 320, 260, { size: 9, bold: false });
           }
           if (this.over) { c.fillStyle = 'rgba(20,16,30,.5)'; c.fillRect(0, 0, 640, 360); G.text(c, '¡LLEGÓ XIMENA!', 320, 170, { size: 42, color: '#ff6b7a', lw: 8 }); }
@@ -280,6 +326,12 @@
       this.xi = new Actor('ximena', 510, 640); this.xi.hidden = true; this.xi.speed = 62;
       this.jose = new Actor('jose', 510, 640); this.jose.hidden = true;
       this.xState = 'away'; this.wander = false; this.confetti = null; this.wt = this.roomies.map((_, i) => 1 + i * 1.3); this.catT = 3; this.title = null;
+      // OJOS EN EL ARMARIO: durante la llegada de Ximena, los partners
+      // están DENTRO del armario (hidden) y solo asoman los ojos por la
+      // rendija entreabierta. closetPeek = ids en orden de guardado
+      // (se apilan de abajo arriba en la rendija); null = nadie mira.
+      this.closetPeek = null;
+      W.closet.k = 0; W.closet.target = 0; W.closet.wobble = 0;
       this.cam = { ...VIEWS.todo, y: 0, fov: 34 }; this.view = VIEWS.todo; this.followA = null; this.T = Math.random() * 9;
       this.lightA = W.LIGHT.noche; this.lightB = W.LIGHT.noche; this.lk = 1; this.lightKey = 'noche';
     }
@@ -313,6 +365,45 @@
       if (this.confetti) this.confetti.forEach((p) => { p.vy += 60 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += dt * 6; if (p.y > 370) { p.y = -10; p.vy = 20 + Math.random() * 40; p.x = Math.random() * 640; } });
       if (this.title && (this.title.t -= dt) <= 0) this.title = null;
     }
+    // Los ojos de los partners asomando por la rendija del armario:
+    // para cada guardado se dibuja la BANDA DE SUS OJOS recortada de
+    // su frame idle frontal (Sp.eyeBand: son SUS ojos, con su forma),
+    // atenuada por la sombra del interior, apilados a distintas
+    // alturas dentro de la rendija (como si se hubieran subido unos
+    // sobre otros para mirar). Parpadean con el blink de su actor y
+    // se mecen apenas, siguiendo a Ximena con la mirada. Fallback si
+    // un personaje no tuviera ojos en su metadata: ojos por código
+    // con el iris de su color.
+    drawClosetEyes(c, t) {
+      const ids = this.closetPeek; if (!ids || !ids.length) return;
+      ids.forEach((id, i) => {
+        const a = this.roomies.find((r) => r.id === id);
+        const q = R.project(600, 34 + i * 21, 341);
+        if (!q.ok) return;
+        const sway = Math.sin(t * 0.7 + i * 1.9) * 1.3;
+        const blink = !!(a && a.blink < 0);
+        const band = Sp.eyeBand(id);
+        if (band && band.width > 2) {
+          const wpx = 30, hpx = Math.max(3, (wpx * band.height) / band.width);
+          const hh = blink ? Math.max(1.6, hpx * 0.16) : hpx;
+          c.globalAlpha = 0.95;
+          c.drawImage(band, q.x - wpx / 2 + sway, q.y - hh / 2, wpx, hh);
+          c.globalAlpha = 1;
+          c.fillStyle = 'rgba(10,6,16,0.35)'; // la sombra del interior del armario
+          c.fillRect(q.x - wpx / 2 + sway, q.y - hh / 2, wpx, hh);
+        } else {
+          const col = (G.CHARS[id] || {}).color || '#fff', ex = q.x + sway, ey = q.y;
+          if (blink) { c.fillStyle = '#d8d2c4'; c.fillRect(ex - 10, ey - 0.7, 8, 1.4); c.fillRect(ex + 2, ey - 0.7, 8, 1.4); }
+          else {
+            [-6, 6].forEach((dx) => {
+              c.fillStyle = '#f4f1ea'; c.beginPath(); c.ellipse(ex + dx, ey, 4.6, 3.4, 0, 0, 6.3); c.fill();
+              c.fillStyle = col; c.beginPath(); c.ellipse(ex + dx, ey, 2.2, 2.2, 0, 0, 6.3); c.fill();
+              c.fillStyle = '#14100c'; c.beginPath(); c.ellipse(ex + dx, ey, 1.1, 1.1, 0, 0, 6.3); c.fill();
+            });
+          }
+        }
+      });
+    }
     startConfetti() {
       const cols = ['#e23b4e', '#ffd23f', '#3fa0f0', '#58c46a', '#b48cf0', '#f08cc0'];
       this.confetti = Array.from({ length: 170 }, () => ({ x: Math.random() * 640, y: Math.random() * 200 - 60, vx: -30 + Math.random() * 60, vy: -60 + Math.random() * 120, c: cols[(Math.random() * 6) | 0], s: 3 + ((Math.random() * 4) | 0), r: Math.random() * 6 }));
@@ -327,6 +418,7 @@
         boxes: (mb) => { if (sleeping) { mb.box(876, 27, 384, 58, 7, 72, '#b48cf0', { top: '#c9a9f7' }); mb.box(884, 33, 392, 42, 4, 54, '#c9a9f7'); } },
         sprites: () => { if (sleeping) R.sprite(Sp.headC('ximena', 'sleep'), 905, 20, 366, { roll: 0.16 }); },
         over: (c, t) => {
+          if (this.closetPeek) this.drawClosetEyes(c, t);
           if (sleeping) { const q = R.project(915, 60, 356), sl = G.S ? G.S.sleep : 0; for (let i = 0; i < 3; i++) { const k = (t * 0.6 + i / 3) % 1; G.text(c, sl >= 4 ? '!' : sl >= 3 ? '~' : 'z', q.x + 6 + k * 16, q.y - k * 30, { size: 7 + k * 7, color: sl >= 3 ? '#ffb86b' : '#fff' }); } }
           if (this.confetti) this.confetti.forEach((p) => { c.fillStyle = p.c; c.fillRect(p.x | 0, p.y | 0, p.s, Math.max(1, p.s * Math.abs(Math.sin(p.r)))); });
           if (this.title) { const a = Math.min(1, this.title.t, (this.title.d - this.title.t) * 2); c.globalAlpha = Math.max(0, a); c.fillStyle = 'rgba(20,16,30,.75)'; c.fillRect(0, 135, 640, 90); G.text(c, this.title.a, 320, 164, { size: 13, color: '#ffd23f' }); G.text(c, this.title.b, 320, 192, { size: 26, lw: 6 }); c.globalAlpha = 1; }

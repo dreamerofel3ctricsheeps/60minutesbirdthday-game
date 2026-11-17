@@ -351,6 +351,35 @@
       if (!cache[key]) cache[key] = this.portraitC(id, expr).toDataURL();
       return cache[key];
     },
+    // BANDA DE LOS OJOS del frame idle frontal: el recorte exacto que
+    // rodea AMBOS ojos según la metadata de ojos detectados por
+    // mkdefined (m.eyes[celda] = [{x, y, r}]). La usa la llegada de
+    // Ximena: los partners guardados en el armario solo asoman ESTA
+    // banda por la rendija oscura — son los ojos de cada personaje,
+    // no unos genéricos. Devuelve null si el personaje no tiene ojos
+    // registrados en su idle (p. ej. Pollito): el llamador cae a su
+    // fallback dibujado por código.
+    eyeBand(id) {
+      const key = `eb:${id}`;
+      if (key in cache) return cache[key];
+      let out = null;
+      try {
+        const m = M.chars[id], cell = m && m.anims.idle && m.anims.idle[0];
+        const es = m && cell != null ? (m.eyes || {})[cell] : null;
+        if (m && es && es.length && typeof document !== 'undefined') {
+          const src = frameCanvas(id, 'idle', 0, false, null);
+          const x0 = Math.max(0, Math.floor(Math.min(...es.map((e) => e.x - e.r))) - 3), x1 = Math.min(m.fw, Math.ceil(Math.max(...es.map((e) => e.x + e.r))) + 3);
+          const y0 = Math.max(0, Math.floor(Math.min(...es.map((e) => e.y - e.r))) - 2), y1 = Math.min(m.fh, Math.ceil(Math.max(...es.map((e) => e.y + e.r))) + 2);
+          if (x1 - x0 > 2 && y1 - y0 > 2) {
+            const c = document.createElement('canvas'); c.width = x1 - x0; c.height = y1 - y0;
+            c.getContext('2d').drawImage(src, x0, y0, c.width, c.height, 0, 0, c.width, c.height);
+            out = c;
+          }
+        }
+      } catch (e) { out = null; }
+      cache[key] = out;
+      return out;
+    },
     full(id, expr) { const key = `f:${id}:${expr || ''}`; if (!cache[key]) cache[key] = (id === 'pollito' ? this.catAnim('idle', 0) : this.char(id, 'down', 0, expr)).toDataURL(); return cache[key]; },
     itemURL(id) {
       const key = 'iu:' + id;

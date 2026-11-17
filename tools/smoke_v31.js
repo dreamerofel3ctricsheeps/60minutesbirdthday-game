@@ -24,9 +24,12 @@
       pierde) y resultado por altura máxima (win/tie/lose).
    G) Party (diseño original retomado): roster de 7 elegibles,
       reclutar partners en la recolección (cargar/entregar, tope
-      3, bajar no recluta, ítems conviven), la huida al llegar
-      Ximena deja la escena solo con la party, y las asignaciones
-      posteriores ofrecen solo a la party.
+      3, bajar no recluta, ítems conviven) GUARDÁNDOLOS DENTRO
+      del armario (puerta que se abre, entran, puerta que se
+      cierra: quedan 'inside', invisibles; entregas en cola si
+      la puerta está ocupada), la huida al llegar Ximena deja la
+      escena solo con la party, y las asignaciones posteriores
+      ofrecen solo a la party.
    H) Repisas al aterrizar + iconografía propia: la repisa nueva
       de cada columna nace SOLO cuando el escalador aterriza en su
       máxima (nunca antes, nunca en banda lejana), la cámara del
@@ -40,8 +43,13 @@
       puntos y flechas del teclado, sin ninguna barra de scroll,
       desde el que se alcanzan los 7 roomies. Y el STAGING de la
       llegada: Ximena parada en (510, 548) se ve ENTERA — ningún
-      presente en su caja de visión (|x-510| < 80 con y > 500) ni
-      a menos de 40 u de otro presente (bug: Itzel la tapaba).
+      presente VISIBLE en su caja de visión (|x-510| < 80 con
+      y > 500) ni a menos de 40 u de otro visible (bug: Itzel la
+      tapaba). Los partners ya no esperan en las esquinas: están
+      DENTRO del armario y solo asoman los ojos por la rendija
+      (un par por partner, recortados de su propio idle); al
+      dormirse Ximena salen de uno en uno y la noche arranca
+      con la party completa y el armario cerrado.
    J) Spawns seguros (bug «Atrapa a Pollito»): el jugador nacía
       SOBRE la mesa de fiesta en la ronda 2 (spawn (900, 240)
       dentro de ptable) y no podía moverse en ninguna dirección.
@@ -607,14 +615,33 @@ const tick = () => new Promise((r) => setImmediate(r));
   csc.p.x = it0.x; csc.p.y = it0.y; tap('Space'); cstep();
   check('cargando un roomie, las manos siguen libres: se puede recoger un ítem', csc.p.carry.includes(it0.id) && csc.carrying === npcA, 'manos=' + csc.p.carry.join(','));
   csc.p.x = W.STASH.x; csc.p.y = W.STASH.y; tap('Space'); cstep();
-  check('en el armario, ESPACIO recluta al partner (queda waiting, partner +1)', csc.carrying === null && csc.partners.includes(npcA.id) && npcA.state === 'waiting' && csc.p.carryWalk === false);
+  check('en el armario, ESPACIO recluta al partner (queda entrando, partner +1, hombro libre)', csc.carrying === null && csc.partners.includes(npcA.id) && npcA.state === 'entering' && csc.p.carryWalk === false);
   tap('Space'); cstep();
   check('otro ESPACIO en el armario guarda los ítems de las manos (convivencia)', csc.p.carry.length === 0 && S.inv[it0.id] === true);
+  // la secuencia del armario corre hasta el final: puerta abierta,
+  // el partner ENTRA y la puerta se cierra — queda DENTRO e invisible
+  for (let i = 0; i < 300 && (npcA.state !== 'inside' || csc.stashBusy); i++) cstep();
+  check('guardado: la secuencia termina con el partner DENTRO del armario (inside + oculto, sin sprite en la casa)',
+    npcA.state === 'inside' && npcA.hidden === true && csc.stashBusy === null && W.closet.target === 0,
+    'state=' + npcA.state + ' hidden=' + npcA.hidden);
   const npcB = csc.others.find((o) => o.state === 'free');
   goNear(npcB); tap('Space'); cstep();
   const wasCarrying = csc.carrying === npcB;
   csc.p.x = 200; csc.p.y = 150; tap('Space'); cstep();
   check('bajarlo fuera del armario NO lo recluta: vuelve a free donde quedó', wasCarrying && csc.carrying === null && npcB.state === 'free' && !csc.partners.includes(npcB.id));
+  // COLA de entregas: reclutar a otro MIENTRAS la puerta está ocupada
+  // no pierde la entrega — el segundo espera su turno y también entra
+  const npcQ1 = csc.others.find((o) => o.state === 'free');
+  goNear(npcQ1); tap('Space'); cstep();
+  csc.p.x = W.STASH.x; csc.p.y = W.STASH.y; tap('Space'); cstep(); // entrega 1: la puerta arranca su secuencia
+  const npcQ2 = csc.others.find((o) => o.state === 'free');
+  goNear(npcQ2); tap('Space'); cstep();
+  csc.p.x = W.STASH.x; csc.p.y = W.STASH.y; tap('Space'); cstep(); // entrega 2: con la puerta OCUPADA
+  check('cola: la entrega con la puerta ocupada se registra igual (partner +1 al instante)',
+    csc.partners.includes(npcQ2.id) && npcQ2.state === 'entering', 'partners=' + csc.partners.join(','));
+  for (let i = 0; i < 480 && (npcQ1.state !== 'inside' || npcQ2.state !== 'inside'); i++) cstep();
+  check('cola: ambos terminan DENTRO del armario, de uno en uno', npcQ1.state === 'inside' && npcQ2.state === 'inside' && npcQ1.hidden && npcQ2.hidden,
+    `q1=${npcQ1.state} q2=${npcQ2.state}`);
   for (const o of csc.others.filter((x) => x.state === 'free')) {
     if (csc.partners.length >= 3) break;
     goNear(o); tap('Space'); cstep();
@@ -666,8 +693,9 @@ const tick = () => new Promise((r) => setImmediate(r));
       dsc.draw(0.016);
       check('draw sin errores: CollectScene cargando un partner al hombro', dsc.carrying === dn);
       dsc.p.x = W.STASH.x; dsc.p.y = W.STASH.y; tap('Space'); dsc.update(0.016);
+      for (let i = 0; i < 240 && dn.state !== 'inside'; i++) dsc.update(0.016); // la secuencia del armario, hasta cerrarse
       dsc.draw(0.016);
-      check('draw sin errores: CollectScene con el partner reclutado esperando', dn.state === 'waiting');
+      check('draw sin errores: CollectScene con el partner guardado DENTRO del armario', dn.state === 'inside' && dn.hidden === true);
     } catch (e) {
       check('draw sin errores en CollectScene (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
     } finally { W.render = realRender; G.R.project = realProject; }
@@ -698,14 +726,51 @@ const tick = () => new Promise((r) => setImmediate(r));
   check('huida: la escena queda SOLO con la party (4 actores)', G.home.roomies.length === 4 && G.home.roomies.every((r) => S.party.includes(r.id)), G.home.roomies.map((r) => r.id).join(','));
   // STAGING DE LA LLEGADA (playtest de Jose: Itzel tapaba a Ximena):
   // Ximena se queda parada en (510, 548) diciendo sus líneas y la
-  // cámara mira desde el sur — en la prueba no corre el bucle de
-  // frames, así que los roomies conservan su posición de staging.
-  check('llegada: ningún presente queda DELANTE de Ximena en su caja de visión (|x-510| < 80 con y > 500)',
-    !G.home.roomies.some((r) => Math.abs(r.x - 510) < 80 && r.y > 500),
+  // cámara mira desde el sur. Los partners ya no esperan en las
+  // esquinas: están DENTRO del armario y solo asoman los ojos. Como
+  // en la prueba no corre el bucle de frames, se dejan correr unos
+  // pasos de la escena para que los partners completen su SALIDA del
+  // armario (la puerta se abre al dormirse Ximena y salen de uno en
+  // uno): al final deben estar visibles, junto al armario.
+  for (let i = 0; i < 14; i++) G.home.update(0.05);
+  check('llegada: ningún presente VISIBLE queda DELANTE de Ximena en su caja de visión (|x-510| < 80 con y > 500)',
+    !G.home.roomies.some((r) => !r.hidden && Math.abs(r.x - 510) < 80 && r.y > 500),
     G.home.roomies.map((r) => r.id + '@' + r.x + ',' + r.y).join(' '));
-  { let minPair = Infinity; const rs = G.home.roomies;
+  { let minPair = Infinity; const rs = G.home.roomies.filter((r) => !r.hidden);
     for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) minPair = Math.min(minPair, Math.hypot(rs[i].x - rs[j].x, rs[i].y - rs[j].y));
-    check('llegada: los presentes quedan separados entre sí (≥40 u: ningún sprite solapa a otro)', minPair >= 40, 'mín=' + minPair.toFixed(0) + ' u'); }
+    check('llegada: los presentes visibles quedan separados entre sí (≥40 u: ningún sprite solapa a otro)', minPair >= 40, 'mín=' + minPair.toFixed(0) + ' u'); }
+  check('llegada: las esquinas de los partners quedan VACÍAS (ya no esperan ahí: están en el armario)',
+    !G.home.roomies.some((r) => [[415, 505], [605, 505], [415, 568]].some((sp) => r.x === sp[0] && r.y === sp[1])),
+    G.home.roomies.map((r) => r.id + '@' + r.x + ',' + r.y).join(' '));
+  check('armario: al dormirse Ximena, los guardados SALIERON del armario (visibles, junto a él) y la noche arranca con la party completa',
+    S.partners.every((id) => { const a = G.home.actor(id); return a && !a.hidden && a.x > 540 && a.x < 660 && a.y > 370 && a.y < 430; }),
+    S.partners.map((id) => { const a = G.home.actor(id); return id + '@' + (a ? a.x + ',' + a.y + ' hid=' + a.hidden : '—'); }).join(' '));
+  check('armario: tras la salida, la rendija se cerró (sin ojos mirando y puerta con target 0)',
+    !G.home.closetPeek && W.closet.target === 0, 'peek=' + JSON.stringify(G.home.closetPeek) + ' target=' + W.closet.target);
+
+  // --- Los ojos de la rendija: un par por partner, y son SUS ojos ---
+  check('ojos del armario: la banda de ojos se recorta del frame idle de CADA roomie (metadata de ojos definida)',
+    G.PLAYABLE.every((id) => { const b = G.Sprites.eyeBand(id); return b && b.width > 2 && b.height > 2; }),
+    G.PLAYABLE.map((id) => { const b = G.Sprites.eyeBand(id); return id + ':' + (b ? b.width + 'x' + b.height : 'null'); }).join(' '));
+  {
+    const home2 = new Sc.HomeScene();
+    home2.closetPeek = S.partners.slice();
+    check('ojos del armario: la escena expone TANTOS pares de ojos como partners guardados (3)', home2.closetPeek.length === 3, 'peek=' + home2.closetPeek.join(','));
+    const realRender = W.render, realProject = G.R.project;
+    const ctx2d = new FakeCtx();
+    W.render = (opts) => { if (opts.boxes) opts.boxes(new G.R.MB(), 0); if (opts.sprites) opts.sprites(0); if (opts.over) opts.over(ctx2d, 0); };
+    G.R.project = () => ({ x: 320, y: 180, ok: true });
+    try {
+      home2.draw(0.016);
+      check('draw sin errores: HomeScene con los 3 pares de ojos asomando por la rendija del armario', true);
+      home2.closetPeek = [];
+      home2.draw(0.016);
+      check('draw sin errores: HomeScene con el armario cerrado (0 partners, sin ojos)', true);
+    } catch (e) {
+      check('draw sin errores con ojos en el armario (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
+    } finally { W.render = realRender; G.R.project = realProject; }
+    check('ojos del armario: la rendija es una rendija (CLOSET_PEEK entre 0 y 0,5 de apertura)', W.CLOSET_PEEK > 0 && W.CLOSET_PEEK < 0.5, 'peek=' + W.CLOSET_PEEK);
+  }
 
   // --- Asignaciones posteriores: solo la party ---
   let settledW = false, cardCount = -1;

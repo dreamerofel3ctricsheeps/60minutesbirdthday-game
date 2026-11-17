@@ -403,7 +403,7 @@
       const modal = el('div', 'modal wide noscroll');
       modal.appendChild(el('h2', '', '¿A quién controlas en el minuto de recolección?'));
       modal.appendChild(car.node); modal.appendChild(car.dots);
-      modal.appendChild(el('p', 'dim', 'Usa los botones de los lados (o las flechas ← →) para ver a todos. En el departamento estarán los 7 roomies. Durante el minuto podrás cargar hasta <b>3 partners</b> al hombro y dejarlos en el armario: ellos se quedan para toda la noche. Los demás… ya verás.'));
+      modal.appendChild(el('p', 'dim', 'Usa los botones de los lados (o las flechas ← →) para ver a todos. En el departamento estarán los 7 roomies. Durante el minuto podrás cargar hasta <b>3 partners</b> al hombro y meterlos en el armario: ellos se quedan para toda la noche. Los demás… ya verás.'));
       overlay.innerHTML = ''; overlay.appendChild(modal); overlay.classList.add('show');
       function finish(id) { if (done) return; done = true; un(); overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok'); res(id); }
     });
@@ -595,18 +595,24 @@
     const home = (G.home = new Sc.HomeScene(G.PLAYABLE));
     home.setLight('dia', true);
     const me = home.actor(S.player); me.carry = res.inHand.slice();
-    // STAGING DE LA LLEGADA (corrección de playtest de Jose, 2026-11-14):
-    // Ximena entra y se queda parada en (510, 548) diciendo sus líneas;
-    // la cámara la mira desde el sur, así que NADIE presente puede
-    // quedar en su línea de visión ni solapar su sprite (antes un
-    // partner en (510, 556) quedaba pegado DELANTE de ella y la tapaba
-    // entera — el caso reportado fue Itzel). La party espera en las
-    // ESQUINAS del pasillo, con |dx| ≥ 95 de su eje: el jugador al SE
-    // (605, 568) y los partners en (415, 505), (605, 505) y (415, 568).
-    // Al terminar la escena cada quien sigue a su sitio normal (la
-    // casa pasa a modo wander / control del jugador).
+    // STAGING DE LA LLEGADA: Ximena entra y se queda parada en
+    // (510, 548) diciendo sus líneas; la cámara la mira desde el sur,
+    // así que NADIE visible puede quedar en su línea de visión ni
+    // solapar su sprite (antes un partner en (510, 556) quedaba pegado
+    // DELANTE de ella y la tapaba entera — el caso reportado fue
+    // Itzel). Los partners ya NO esperan en las esquinas: están
+    // DENTRO DEL ARMARIO, donde quedaron guardados en la recolección
+    // (pedido de Jose, 2026-11-16) — el mueble queda entreabierto
+    // (W.CLOSET_PEEK) y por la rendija oscura solo asoman sus ojos
+    // mirándola (home.closetPeek los dibuja). El armario está en la
+    // pared norte del pasillo (560–640 × 310–340), muy lejos de la
+    // caja de visión de Ximena: la rendija y los ojos no invaden su
+    // silueta. El protagonista NO se guarda: espera visible en su
+    // esquina SE (605, 568), con |dx| = 95 de su eje.
     me.x = 605; me.y = 568; me.dir = 'down';
-    S.partners.map((id) => home.actor(id)).filter(Boolean).forEach((a, i) => { const sp = [[415, 505], [605, 505], [415, 568]][i]; a.x = sp[0]; a.y = sp[1]; a.dir = 'down'; });
+    S.partners.map((id) => home.actor(id)).filter(Boolean).forEach((a) => { a.x = 600; a.y = 346; a.dir = 'down'; a.hidden = true; });
+    home.closetPeek = S.partners.slice();
+    if (S.partners.length) W.closet.target = W.CLOSET_PEEK; // con 0 partners el armario queda cerrado, sin ojos
     const fledSpots = [[300, 150], [700, 220], [180, 470], [820, 180], [368, 430], [240, 244]];
     const fledActors = S.fled.map((id) => home.actor(id)).filter(Boolean);
     fledActors.forEach((a, i) => { const sp = fledSpots[i % fledSpots.length]; a.x = sp[0]; a.y = sp[1]; a.dir = 'down'; });
@@ -616,7 +622,7 @@
     home.cam.x = 510; home.cam.z = 470; home.cam.dist = 620; home.cam.pitch = 0.8; home.follow(xi, 560);
     ui.header('Acto 1', 'Llegada de Ximena');
     ui.system('🔑 La puerta se abre.');
-    home.roomies.forEach((r) => { r.expr = 'surprised'; r.hop(150); r.emo('!', 1); });
+    home.roomies.forEach((r) => { if (r.hidden) return; r.expr = 'surprised'; r.hop(150); r.emo('!', 1); }); // los guardados no reaccionan a la vista: están dentro del armario
     xi.route = [[510, 548]]; await G.until(() => xi.arrived); xi.dir = 'up';
     xi.say('Ya llegué… 36 horas de guardia. No siento las piernas.', 3.2); await G.wait(3.4);
     // ---- LA HUIDA: los roomies NO reclutados salen despavoridos --------
@@ -647,8 +653,10 @@
       // Ximena, extrañada; alguien de la party la despista como puede.
       xi.expr = 'suspicious'; xi.emo('?', 1.4);
       xi.say('¿Y ellos? ¿Por qué se fueron corriendo? 🤔', 3); await G.wait(3.2);
-      const voice = (S.partners.length ? home.actor(S.partners[0]) : me) || me;
-      voice.say('Es que… ¡tenían examen mañana! Todos. El mismo examen. A la misma hora.', 2.8); await G.wait(3);
+      // El despiste lo dice el PROTAGONISTA: los partners están dentro
+      // del armario y si hablaran se delatarían. Casi se le escapa lo
+      // de «guardados»… que es literalmente donde están los demás.
+      me.say('Es que… ¡tenían examen mañana! Todos. El mismo examen. Y los demás ya están guardados— ¡DURMIENDO! En sus cuartos.', 3.4); await G.wait(3.6);
       xi.say('Mmm. Qué raro. Bueno… ya fue, estoy muerta de cansancio.', 2.4); await G.wait(2.5);
       xi.expr = 'tired';
       ui.system('Ximena se quedó un poco extrañada con la estampida.');
@@ -667,6 +675,28 @@
     await G.until(() => xi.arrived);
     xi.hidden = true; home.xState = 'sleeping'; W.xDoorOpen = false; G.sfx('door');
     home.roomies.forEach((r) => (r.expr = null));
+    // SALIDA DEL ARMARIO (2026-11-16): Ximena ya duerme, así que los
+    // guardados salen de su escondite — la puerta se abre, salen de
+    // uno en uno con micro-retrasos y un saltito, la puerta se cierra —
+    // y la noche arranca con la party completa, exactamente como
+    // siempre (asignaciones, casa y chat usan S.party). La secuencia
+    // completa dura ~1,5 s con 3 partners; con 0, ni se abre.
+    if (S.partners.length) {
+      home.closetPeek = null;
+      W.closet.target = 1; G.sfx('door');
+      await G.wait(0.3);
+      const outs = S.partners.map((id) => home.actor(id)).filter(Boolean);
+      const outSpots = [[556, 404], [600, 394], [644, 404]];
+      for (let i = 0; i < outs.length; i++) {
+        const a = outs[i], sp = outSpots[i % outSpots.length];
+        a.hidden = false; a.x = 600; a.y = 348; a.dir = 'down'; a.expr = 'happy'; a.hop(150);
+        a.goTo(sp[0], sp[1], 130, true);
+        await G.wait(0.28);
+      }
+      await G.until(() => outs.every((a) => a.arrived));
+      W.closet.target = 0; G.sfx('door');
+      outs.forEach((a) => (a.expr = null));
+    }
     S.phase = 'act2'; home.setLight('noche'); home.setView('todo'); home.wander = true; recalc();
     await G.wait(1.2);
     home.showTitle('ACTO 2', 'OPERACIÓN: NO LA DESPIERTEN', 3.6);

@@ -77,6 +77,13 @@
   const World = {
     FLOORS, OPEN, FURN, SPAWNS, STASH, DECO_SPOTS, furn, WALL_H,
     xDoorOpen: false, doorK: 0, midK: 1, fx: [],
+    // ARMARIO del pasillo (560–640 × 310–340, frente al sur en z=340):
+    // sus puertas correderas son dinámicas. k = apertura animada
+    // (0 cerrada, 1 abierta del todo), target = apertura deseada y
+    // wobble = el toquecito/bamboleo al cerrarse con alguien dentro.
+    // CLOSET_PEEK es la rendija de la llegada de Ximena: entreabierto
+    // lo justo para que asomen los ojos de los partners guardados.
+    closet: { k: 0, target: 0, wobble: 0 }, CLOSET_PEEK: 0.23,
 
     roomAt(x, y) {
       for (const k in FLOORS) { const r = FLOORS[k]; if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return k; }
@@ -432,7 +439,7 @@
     m.flat(324, 284, 360, 300, -0.1, '#b8996c'); m.flat(470, 284, 80, 32, 0, '#d2b07f'); m.flat(470, 578, 80, 24, 0, '#d2b07f');
     m.flat(482, 336, 56, 196, 0.4, '#5f73b8'); m.flat(487, 341, 46, 186, 0.5, '#7f93d8'); for (let i = 0; i < 9; i++) m.flat(495, 350 + i * 20, 30, 6, 0.6, '#aebcf0');
     m.flat(478, 546, 64, 26, 0.5, '#8d7a5c'); m.flat(483, 550, 54, 18, 0.6, '#a8946f');
-    B(560, 0, 310, 80, 98, 30, '#94694a', { top: '#a67957' }); B(564, 4, 340, 34, 88, 0.9, '#a97c58'); B(602, 4, 340, 34, 88, 0.9, '#a97c58'); B(594, 44, 341, 3, 9, 1.5, '#f2c230'); B(603, 44, 341, 3, 9, 1.5, '#f2c230');
+    B(560, 0, 310, 80, 98, 30, '#94694a', { top: '#a67957' }); // el cuerpo del armario; sus PUERTAS son dinámicas (drawCloset): se abren para guardar partners y quedan entreabiertas en la llegada
     B(366, 0, 310, 74, 3, 20, '#b98a55'); B(366, 12, 310, 74, 3, 20, '#b98a55'); B(366, 24, 310, 74, 3, 20, '#b98a55', { top: '#c99a66' }); B(366, 0, 310, 3, 26, 20, '#8f6238'); B(437, 0, 310, 3, 26, 20, '#8f6238');
     [['#e23b4e', 372, 3], ['#f4f4f8', 392, 3], ['#3fa0f0', 414, 3], ['#c8f02a', 380, 15], ['#ff5bd1', 404, 15], ['#2f3138', 422, 15]].forEach(([c, x, y]) => { B(x, y, 314, 14, 6, 11, c); });
     B(356, 0, 530, 28, 28, 40, '#b98a55', { top: '#c99a66' }); m.cyl(370, 28, 548, 8, 10, '#d07c4c', { r2: 10 }); m.cyl(370, 38, 548, 13, 12, '#3f8f4f', { r2: 5 }); B(360, 28, 534, 12, 2, 9, '#f4f4f8');
@@ -494,6 +501,30 @@
     mb.box(700, y(44), 309.5, 34, y(44), 1.5, '#f4efe2'); mb.wallQuad(710, y(52), 311.2, 14, y(28), '#f08cc0'); mb.wallQuad(714, y(78), 311.2, 6, y(6), '#f08cc0');
     mb.box(880, y(48), 309.5, 26, y(20), 1.5, '#5b4636'); mb.wallQuad(882, y(50), 311.2, 22, y(16), '#fdfdf5');
     mb.box(912, y(48), 309.5, 26, y(20), 1.5, '#5b4636'); mb.wallQuad(914, y(50), 311.2, 22, y(16), '#fdfdf5');
+  }
+
+  // ---------- Puertas del armario (dinámicas) ----------
+  // Las dos hojas correderas del armario del pasillo: se deslizan hacia
+  // los lados según World.closet.k (animado hacia closet.target). Al
+  // abrirse dejan ver el interior OSCURO (un panel casi negro apenas
+  // delante del frente del mueble, con una repisa insinuada): ahí se
+  // meten los partners en la recolección y por la rendija de la llegada
+  // (k = CLOSET_PEEK) asoman sus ojos (los dibuja HomeScene en 2D).
+  // El wobble es el toquecito del mueble al cerrarse con alguien dentro.
+  function drawCloset(mb, dt) {
+    const C = World.closet;
+    C.k += (C.target - C.k) * Math.min(1, dt * 9);
+    if (Math.abs(C.target - C.k) < 0.002) C.k = C.target;
+    C.wobble = Math.max(0, C.wobble - dt * 2.4);
+    const wob = Math.sin(C.wobble * 30) * 2.4 * C.wobble, shift = C.k * 27;
+    if (C.k > 0.01) {
+      mb.box(565, 5, 340.2, 70, 86, 0.5, '#150f1c');            // la oscuridad de dentro
+      mb.box(568, 62, 340.8, 64, 2, 0.4, '#251a31');            // una repisa apenas insinuada en la penumbra
+    }
+    mb.box(564 - shift + wob, 4, 341, 34, 88, 0.9, '#a97c58', { top: '#8a6248' });
+    mb.box(602 + shift + wob, 4, 341, 34, 88, 0.9, '#a97c58', { top: '#8a6248' });
+    mb.box(594 - shift + wob, 44, 341.9, 3, 9, 1.2, '#f2c230');
+    mb.box(603 + shift + wob, 44, 341.9, 3, 9, 1.2, '#f2c230');
   }
 
   // ---------- Elementos dinámicos del departamento ----------
@@ -559,6 +590,7 @@
       staticMesh = staticMesh || buildStatic();
       R.mesh(staticMesh);
       drawWalls(R.dyn, dt, opts.focusZ == null ? opts.cam.z : opts.focusZ);
+      drawCloset(R.dyn, dt);
       drawDynamic(R.dyn, t, opts);
       drawPartySprites(t, opts);
     }
