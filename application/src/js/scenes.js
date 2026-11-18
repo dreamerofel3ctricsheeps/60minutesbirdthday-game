@@ -1130,6 +1130,11 @@
   // =========================================================
   const SH = 27, U_PER_M = 25, CLIMB_TIME = 60;
   const TECHO_E = 14 * SH, AZOTEA_E = 750, CIELO_E = 2250, ESPACIO_E = 5000;
+  // El cohete de los huidos tiene su PROPIO umbral (pedido de Jose,
+  // 2026-11-17): aparece desde los 145 m, por debajo de la zona
+  // espacio (200 m) — cruza ya en la estratósfera alta. La zona
+  // espacio (galaxias, ingravidez, clave de luz) NO se mueve.
+  const ROCKET_E = 145 * U_PER_M;
   // Lado CRUDO de la repisa k-ésima (k = saltos dados): hash
   // determinista del índice, O(1) y sin memoria para cualquier k. El
   // lado JUGABLE lo deriva ClimbDuel.sideOf con una regla
@@ -1263,10 +1268,10 @@
       this.spawnFx = { p: { 1: 0, 2: 0.18 }, c: { 1: 0, 2: 0.18 } }; // nº de repisa -> instante de nacimiento (pop)
       this.puffs = []; // polvo del nacimiento de cada repisa
       this.stun = 0; this.ct = 1; this.banner = null; this.debris = []; this.zoneSeen = 0; this.catZone = 0;
-      // EL COHETE DE LOS HUIDOS (solo en el espacio): null = fuera de
-      // escena; rocketWait = cuenta atrás para el próximo pase (el
-      // primero llega a los ~6 s de estar en la zona; luego cada
-      // 12–18 s). rocketDir alterna el sentido de cada pase.
+      // EL COHETE DE LOS HUIDOS (desde los 145 m, ROCKET_E): null =
+      // fuera de escena; rocketWait = cuenta atrás para el próximo
+      // pase (el primero llega a los ~6 s de cruzar el umbral; luego
+      // cada 12–18 s). rocketDir alterna el sentido de cada pase.
       this.rocket = null; this.rocketWait = 6; this.rocketDir = -1; this.rocketSeen = false;
       this._sb = 0; this._sv = []; // ventana de lados generados desde el índice _sb (se poda: ver pruneSides)
       this.cstep = 0.44 * (G.S.flags.pollitoOfendido ? 0.93 : 1) + (10 - stat(this.who, 'velocidad')) * -0.004;
@@ -1402,7 +1407,12 @@
         { a: '¡YA SE VE TODO LIMA!', b: 'Las nubes quedan abajo', icon: 'ciudad' },
         { a: 'ESTRATÓSFERA', b: 'El cielo se oscurece…', icon: 'luna' },
         { a: '¡FUERA DEL PLANETA!', b: 'Pollito también flota. Nadie entiende nada.', icon: 'planeta' }][z];
-      if (B) this.banner = { a: B.a, b: B.b, icon: B.icon, t: 0, d: 3 };
+      // d breve (~1,4 s): el anuncio se dibuja como CHIP compacto en
+      // la franja superior (ver draw), no como la banda central de
+      // antes, que tapaba el juego durante 3 s (pedido de Jose,
+      // 2026-11-17). El subtítulo b ya no se muestra: el chip lleva
+      // solo ícono + titular.
+      if (B) this.banner = { a: B.a, b: B.b, icon: B.icon, t: 0, d: 1.4 };
     }
     update(dt) {
       const p = this.p, cat = this.cat;
@@ -1423,13 +1433,14 @@
       this.cam.y += (ty - this.cam.y) * Math.min(1, dt * (ty > this.cam.y ? 4.5 : 2));
       this.pruneSides(Math.min(this.pi, this.ci, Math.max(0, Math.floor((this.cam.y - 300) / SH)))); // la ventana de lados no crece con la altura
       if (!this.tick(dt)) return;
-      // EL COHETE DE LOS HUIDOS: solo con la cámara en el ESPACIO.
-      // Cruza en horizontal por el FONDO (z=-182..-160, detrás de
-      // repisas y actores), a la altura de la banda de la cámara como
-      // el satélite, sin colisionar ni tapar el prompt. La primera vez
+      // EL COHETE DE LOS HUIDOS: solo con la cámara sobre su umbral
+      // propio (ROCKET_E = 145 m, bajo la zona espacio). Cruza en
+      // horizontal por el FONDO (z=-182..-160, detrás de repisas y
+      // actores), a la altura de la banda de la cámara como el
+      // satélite, sin colisionar ni tapar el prompt. La primera vez
       // el protagonista reacciona: el chiste es que los que "ya se
       // iban"… se fueron LEJOS de verdad.
-      if (climbZone(this.cam.y) >= 4) {
+      if (this.cam.y >= ROCKET_E) {
         if (this.rocket) {
           this.rocket.x += this.rocket.dir * 135 * dt;
           if (Math.abs(this.rocket.x) > 620) { this.rocket = null; this.rocketWait = 12 + climbHash(Math.floor(this.T)) * 6; }
@@ -1520,12 +1531,12 @@
         mb.box(sx, sy, -160, 26, 9, 9, '#c9cedd'); mb.box(sx - 34, sy + 2, -160, 30, 1.5, 13, '#3f6fd8'); mb.box(sx + 30, sy + 2, -160, 30, 1.5, 13, '#3f6fd8');
         if (Math.sin(t * 6) > 0) mb.box(sx + 11, sy + 9, -160, 3, 3, 3, '#ff5f6b', { emit: true });
       }
-      // EL COHETE DE LOS HUIDOS cruzando el espacio: cuerpo por cajas
-      // (las CARAS de las ventanillas van como billboards en el
-      // callback sprites de draw, a z=-160, sobre estos aros). Vuela a
-      // la altura de la banda de la cámara, como el satélite, y por el
-      // fondo: no tapa el prompt ni colisiona con nada.
-      if (zone >= 4 && this.rocket) {
+      // EL COHETE DE LOS HUIDOS cruzando (desde los 145 m, ROCKET_E):
+      // cuerpo por cajas (las CARAS de las ventanillas van como
+      // billboards en el callback sprites de draw, a z=-160, sobre
+      // estos aros). Vuela a la altura de la banda de la cámara, como
+      // el satélite, y por el fondo: no tapa el prompt ni colisiona.
+      if (cy >= ROCKET_E && this.rocket) {
         const rk = this.rocket, ry = cy + 135, n = rk.crew.length, L = 44 + n * 30, x0 = rk.x - L / 2, dir = rk.dir;
         mb.box(x0, ry - 12, -182, L, 24, 13, '#e9edf5', { top: '#f8fafc' }); // cuerpo
         mb.box(x0 + 4, ry - 12, -183, L - 8, 6, 15, '#e23b4e'); // franja roja
@@ -1592,15 +1603,18 @@
             // creciente con la altura (ver climbGalaxies)
             for (const gx of climbGalaxies(cy)) R.sprite(galaxyCv(gx.v), gx.x, gx.y - gx.s / 2, -470, { w: gx.s, h: gx.s, roll: gx.roll, alpha: gx.a * (0.86 + 0.14 * Math.sin(t * 0.6 + gx.x * 0.05)), lit: 0, nostretch: true });
             R.flat(R.glowTex, -30, cy - 320, -280, 330, { tint: [0.30, 0.50, 1], alpha: 0.5 }); // el planeta, brillando abajo
-            // las CARAS de la tripulación saludando desde las
-            // ventanillas del cohete (vaivén y balanceo suaves)
-            if (this.rocket) {
-              const ry = cy + 135, n = this.rocket.crew.length;
-              this.rocket.crew.forEach((id, i) => {
-                const wx = this.rocket.x + (i - (n - 1) / 2) * 30;
-                R.sprite(rocketFaceCv(id), wx, ry - 8 + Math.sin(t * 3.1 + i * 1.35) * 1.3, -160, { nostretch: true, lit: 0, roll: Math.sin(t * 2.3 + i * 1.1) * 0.07 });
-              });
-            }
+          }
+          // las CARAS de la tripulación saludando desde las
+          // ventanillas del cohete (vaivén y balanceo suaves). El
+          // cohete vuela desde los 145 m (ROCKET_E), antes de la zona
+          // espacio: sus caras se dibujan con su mismo umbral, no con
+          // el de las galaxias.
+          if (this.rocket && cy >= ROCKET_E) {
+            const ry = cy + 135, n = this.rocket.crew.length;
+            this.rocket.crew.forEach((id, i) => {
+              const wx = this.rocket.x + (i - (n - 1) / 2) * 30;
+              R.sprite(rocketFaceCv(id), wx, ry - 8 + Math.sin(t * 3.1 + i * 1.35) * 1.3, -160, { nostretch: true, lit: 0, roll: Math.sin(t * 2.3 + i * 1.1) * 0.07 });
+            });
           }
         },
         over: (c, t) => {
@@ -1616,12 +1630,29 @@
             if (this.stun > 0) G.text(c, '¡Resbalaste!', h.x, h.y, { size: 10, color: '#ff6b7a' });
             else { const dir = this.sideOf(this.pi); G.prompt(c, dir < 0 ? '←' : '→', h.x + dir * 30, h.y); }
           }
-          if (this.banner) { const b = this.banner, a = Math.min(1, b.t * 3, (b.d - b.t) * 1.5); c.globalAlpha = Math.max(0, a); c.fillStyle = 'rgba(20,16,30,.78)'; c.fillRect(0, 122, 640, 104); if (b.icon) G.icon(c, b.icon, 320, 146, 34); G.text(c, b.a, 320, 178, { size: 24, color: '#ffd23f', lw: 7 }); G.text(c, b.b, 320, 208, { size: 11 }); c.globalAlpha = 1; }
+          if (this.banner) {
+            // CHIP DE ZONA (pedido de Jose, 2026-11-17): pastilla
+            // compacta en la FRANJA SUPERIOR, bajo el HUD del duelo
+            // (paneles hasta y=48) y la línea «vas ganando» (ícono
+            // y=54, texto y=74): la caja queda confinada a y 88–114 y
+            // solo es tan ancha como su texto. Antes era una banda a
+            // todo ancho en el centro (y 122–226, 3 s) que tapaba las
+            // repisas siguientes y distraía en plena subida.
+            const b = this.banner, a = Math.min(1, b.t * 4, (b.d - b.t) * 2.5);
+            c.globalAlpha = Math.max(0, a);
+            c.font = `bold 13px ${G.FONT}`;
+            const w = c.measureText(b.a).width + 48, x = 320 - w / 2;
+            c.fillStyle = 'rgba(20,16,30,.8)'; c.beginPath(); c.roundRect(x, 88, w, 26, 13); c.fill();
+            if (b.icon) G.icon(c, b.icon, x + 21, 101, 17);
+            G.text(c, b.a, x + 34, 101.5, { size: 13, color: '#ffd23f', align: 'left', lw: 4 });
+            c.globalAlpha = 1;
+          }
         },
       });
     }
   }
   ClimbDuel.SHELF_H = SH; // expuesto para la prueba de humo (los lados se piden a una instancia: sideOf)
+  ClimbDuel.ROCKET_E = ROCKET_E; // ídem: el umbral propio del cohete (145 m en unidades)
   ClimbDuel.galaxiesAt = climbGalaxies; // ídem: el campo de galaxias visible a una altura de cámara
 
   // =========================================================

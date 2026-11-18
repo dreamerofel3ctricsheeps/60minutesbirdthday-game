@@ -947,7 +947,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('galaxias: el campo es determinista (misma altura, mismo campo)',
       JSON.stringify(Sc.ClimbDuel.galaxiesAt(12345)) === JSON.stringify(Sc.ClimbDuel.galaxiesAt(12345)));
 
-    // --- El cohete: tripulación según modo, y solo en el espacio ---
+    // --- El cohete: tripulación según modo, y solo desde los 145 m (ROCKET_E) ---
     const mkClimbAtSpace = (who) => {
       const d = new Sc.ClimbDuel(who, () => {});
       d.st = 'play'; d.time = 1e9; d.cstep = 1e9; d.ct = 1e9; // Pollito congelado
@@ -987,12 +987,35 @@ const tick = () => new Promise((r) => setImmediate(r));
         !!d.rocket && d.rocket.crew.length === 6, d.rocket && d.rocket.crew.join(','));
     }
     G.practiceMode = false;
-    // fuera del espacio: jamás pasa
+    // bajo el umbral de 145 m: jamás pasa
     {
       const d = new Sc.ClimbDuel('natalia', () => {});
       d.st = 'play'; d.time = 1e9; d.cstep = 1e9; d.ct = 1e9; d.rocketWait = 0;
       for (let i = 0; i < 40; i++) d.update(0.05);
-      check('cohete: fuera de la zona espacio NUNCA se dispara (ni con la espera agotada)', d.rocket === null && d.cam.y < 5000, `cam.y=${d.cam.y.toFixed(0)}`);
+      check('cohete: bajo su umbral (145 m) NUNCA se dispara (ni con la espera agotada)', d.rocket === null && d.cam.y < Sc.ClimbDuel.ROCKET_E, `cam.y=${d.cam.y.toFixed(0)}`);
+    }
+    // umbral propio: 145 m, desacoplado de la zona espacio (200 m)
+    check('cohete: su umbral propio es 145 m (3625 u), bajo la zona espacio (5000 u)',
+      Sc.ClimbDuel.ROCKET_E === 145 * 25 && Sc.ClimbDuel.ROCKET_E < 5000, `ROCKET_E=${Sc.ClimbDuel.ROCKET_E}`);
+    const mkClimbAt = (elev) => {
+      const d = new Sc.ClimbDuel('natalia', () => {});
+      d.st = 'play'; d.time = 1e9; d.cstep = 1e9; d.ct = 1e9; // Pollito congelado
+      d.p.elev = elev; d.p.te = elev; d.pi = d.pMax = Math.round(elev / Sc.ClimbDuel.SHELF_H); d.cam.y = elev;
+      return d;
+    };
+    // entre 145 y 200 m (estratósfera alta, aún NO espacio): el cohete SÍ pasa
+    {
+      const d = mkClimbAt(4200); // 168 m
+      d.rocketWait = 0; d.update(0.05);
+      check('cohete: entre 145 y 200 m (cámara a 4200 u) SÍ se dispara, sin estar en la zona espacio',
+        !!d.rocket && d.cam.y >= Sc.ClimbDuel.ROCKET_E && d.cam.y < 5000, `cam.y=${d.cam.y.toFixed(0)} rocket=${!!d.rocket}`);
+    }
+    // a 120 m (bajo el umbral): no pasa ni con la espera agotada
+    {
+      const d = mkClimbAt(3000); // 120 m
+      d.rocketWait = 0;
+      for (let i = 0; i < 40; i++) d.update(0.05);
+      check('cohete: a 120 m (3000 u) NO se dispara nunca', d.rocket === null && d.cam.y < Sc.ClimbDuel.ROCKET_E, `cam.y=${d.cam.y.toFixed(0)}`);
     }
     // draw con el cohete en pantalla y galaxias: sin excepciones
     {
@@ -1008,8 +1031,39 @@ const tick = () => new Promise((r) => setImmediate(r));
         d.rocket = { x: 120, dir: -1, crew: G.PLAYABLE.filter((id) => id !== 'natalia') };
         d.draw(0.016);
         check('draw sin errores: cohete en sentido contrario y con 6 tripulantes', true);
+        const dLow = mkClimbAt(4200); // 168 m: sobre el umbral del cohete, bajo la zona espacio
+        dLow.rocket = { x: 0, dir: 1, crew: dLow.rocketCrew() };
+        dLow.draw(0.016);
+        check('draw sin errores: el cohete se dibuja entre 145 y 200 m (cuerpo y caras, aún sin galaxias)', dLow.rocket.crew.length === 3);
       } catch (e) {
         check('draw sin errores con cohete/galaxias (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
+      } finally { W.render = realRender; G.R.project = realProject; }
+    }
+    // --- Chip de zona: anuncio compacto en la franja superior, duración breve ---
+    {
+      const realRender = W.render, realProject = G.R.project;
+      const ctx2d = new FakeCtx();
+      const rects = [];
+      ctx2d.fillRect = (x, y, w, h) => rects.push({ m: 'fillRect', x, y, w, h });
+      ctx2d.roundRect = (x, y, w, h) => rects.push({ m: 'roundRect', x, y, w, h });
+      W.render = (opts) => { if (opts.boxes) opts.boxes(new G.R.MB(), 0); if (opts.sprites) opts.sprites(0); if (opts.over) opts.over(ctx2d, 0); };
+      G.R.project = () => ({ x: 320, y: 180, ok: true });
+      try {
+        const d = new Sc.ClimbDuel('natalia', () => {});
+        d.st = 'play'; d.time = 1e9;
+        d.zoneBanner(2);
+        check('chip de zona: el anuncio dura ~1,4 s (breve; la banda antigua duraba 3 s)',
+          !!d.banner && d.banner.d > 0 && d.banner.d <= 1.5, 'd=' + (d.banner && d.banner.d));
+        d.banner.t = 0.4; // en plena visibilidad
+        d.draw(0.016);
+        check('chip de zona: sin banda a todo ancho — el fondo del anuncio es una pastilla en la franja superior (y 80–122, h ≤ 30, w < 400)',
+          !rects.some((r) => r.w >= 600) && rects.some((r) => r.m === 'roundRect' && r.y >= 80 && r.y + r.h <= 122 && r.h <= 30 && r.w < 400),
+          JSON.stringify(rects.filter((r) => r.w >= 600 || (r.y >= 80 && r.y <= 130))));
+        check('chip de zona: ningún fondo de anuncio invade la zona central de juego (y 130–300)',
+          !rects.some((r) => r.y >= 130 && r.y <= 300 && r.h > 20 && r.w > 200),
+          JSON.stringify(rects.filter((r) => r.y >= 130 && r.y <= 300)));
+      } catch (e) {
+        check('draw del chip de zona sin errores (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
       } finally { W.render = realRender; G.R.project = realProject; }
     }
   }
