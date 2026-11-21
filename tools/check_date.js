@@ -22,6 +22,11 @@
    G) Modo libre: input mueve al activo y la cámara lo sigue,
       TAB alterna con Jose, el otro sigue a su puesto, y ni el
       tiempo ni el fin de la canción disparan onDone.
+   H) Correcciones del segundo playtest: la tabla CELL_FIT de
+      Ximena (su walk_down/run_down venía más alto que el resto
+      de la hoja y «pulsaba» al bajar), el acompañante sin
+      parpadeo walk/idle al caminar juntos (histéresis), y Jose
+      ya sin ramo en la plaza (sin drawBouquet en date.js).
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -291,6 +296,49 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // Ni el tiempo ni el fin nominal de la canción cierran el modo libre:
   for (let i = 0; i < 200; i++) sc.update(0.05);
   check("el modo libre NO termina solo (ni onDone ni 'done' tras 10 s más)", sc.phase === 'free' && sc.doneFired === false && DM.state.state === 'plaza-arrived' && sandbox.location.href === '', 'phase=' + sc.phase);
+
+  console.log('\nH) CELL_FIT de Ximena, acompañante sin parpadeo y Jose sin ramo');
+  // (a) La hoja definida de Ximena trae walk_down (celdas 4–7) y
+  // run_down (14–17) con la figura MÁS ALTA que el resto (medido
+  // con PIL: idle/walk_up/walk_right = 202–206, referencia 204;
+  // walk_down = 221/202/217/223 y run_down = 202/204/216/215):
+  // al caminar hacia abajo «se hacía grande» y oscilaba dentro
+  // del ciclo. CELL_FIT (sprites.js) escala esas celdas a 204 al
+  // construir el frame, anclado en los pies.
+  const CF = G.Sprites.CELL_FIT, fitX = CF && CF.ximena;
+  const medido = { 4: 221, 6: 217, 7: 223, 16: 216, 17: 215 };
+  check('CELL_FIT de ximena existe con los 5 factores esperados (204/medida, ±0,005)',
+    !!fitX && Object.keys(medido).every((k) => Math.abs(fitX.cells[k] - 204 / medido[k]) < 0.005),
+    fitX ? JSON.stringify(fitX.cells) : 'sin tabla');
+  check('las alturas efectivas (medida × factor) quedan en 204 ± 4',
+    !!fitX && Object.keys(medido).every((k) => Math.abs(medido[k] * fitX.cells[k] - 204) <= 4));
+  check('las celdas ya correctas (5, 14, 15) NO llevan factor ni se toca a otros personajes',
+    !!fitX && fitX.cells[5] === undefined && fitX.cells[14] === undefined && fitX.cells[15] === undefined && Object.keys(CF).length === 1);
+  // (c) Jose ya no lleva flores a la plaza:
+  const dateSrc = fs.readFileSync(path.join(SRC, 'date.js'), 'utf8');
+  check('date.js ya no dibuja el ramo de Jose (sin drawBouquet ni menciones)', !dateSrc.includes('drawBouquet') && !dateSrc.includes('ramo'));
+  // (b) Caminando juntos, el acompañante no debe parpadear entre
+  // caminata e idle. Escenario controlado: Ximena activa, Jose
+  // en su puesto; Ximena camina a la derecha 3 s sostenidos.
+  sc.switchActive(); // el activo vuelve a ser Ximena (en G quedó Jose)
+  X.x = 300; X.y = 316; J.x = 370; J.y = 316; J.follow = false; J.animWalk = false; J.idleT = 0;
+  for (let i = 0; i < 10; i++) sc.update(0.05); // se asientan quietos
+  key('ArrowRight', true);
+  let trans = 0, prevW = J.animWalk;
+  for (let i = 0; i < 60; i++) { sc.update(0.05); if (J.animWalk !== prevW) trans++; prevW = J.animWalk; }
+  key('ArrowRight', false);
+  check('caminando juntos 3 s: el acompañante entra en caminata UNA vez y no parpadea a idle (≤1 transición)',
+    trans <= 1 && J.animWalk === true, `transiciones=${trans}`);
+  // Al detenerse el activo, el acompañante llega a su puesto y
+  // se queda en idle ESTABLE (la gracia de 0,12 s no cuenta como
+  // parpadeo: tras ella, cero transiciones).
+  for (let i = 0; i < 40; i++) sc.update(0.05);
+  const dPost = Math.hypot((X.x + 70) - J.x, X.y - J.y);
+  check('al detenerse el activo, el acompañante llega a su puesto (< 6 px) y su animación cae a idle', dPost < 6 && J.animWalk === false, `hueco=${dPost.toFixed(1)} px`);
+  let trans2 = 0; prevW = J.animWalk;
+  for (let i = 0; i < 20; i++) { sc.update(0.05); if (J.animWalk !== prevW) trans2++; prevW = J.animWalk; }
+  check('y se queda en idle estable (0 transiciones en 1 s más)', J.animWalk === false && trans2 === 0, `transiciones=${trans2}`);
+  sc.draw(0.016); // el modo libre se sigue dibujando sin explotar
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);

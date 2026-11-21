@@ -266,8 +266,8 @@
       this.free = {
         active: 'ximena',
         chars: {
-          ximena: { id: 'ximena', x: 258, y: 316, dist: 0, dir: 'right', moving: false },
-          jose: { id: 'jose', x: 328, y: 316, dist: 0, dir: 'left', moving: false },
+          ximena: { id: 'ximena', x: 258, y: 316, dist: 0, dir: 'right', moving: false, animWalk: false, idleT: 0, follow: false },
+          jose: { id: 'jose', x: 328, y: 316, dist: 0, dir: 'left', moving: false, animWalk: false, idleT: 0, follow: false },
         },
       };
     }
@@ -377,6 +377,16 @@
     // controla al personaje activo (TAB alterna Ximena ⇄ Jose);
     // el otro SIGUE al activo hacia su puesto junto a él (Jose va
     // 70 px a la derecha de Ximena) y se queda en idle al llegar.
+    // El seguimiento va con HISTÉRESIS y llegada suave: arranca
+    // cuando el puesto se aleja > 12 px y no se detiene hasta
+    // quedar a < 3 px, con velocidad proporcional (tope 190).
+    // Con umbral único y velocidad fija (175 contra 150 del
+    // activo) alcanzaba el puesto, paraba un frame y volvía a
+    // arrancar: el sprite de idle parpadeaba entre la caminata.
+    // Y la ANIMACIÓN (animWalk, lo que decide el dibujo) tiene
+    // una gracia de 0,12 s tras el último movimiento real, para
+    // que ni un roce con el tope de la franja ni un cambio de
+    // dirección meta un frame de idle en mitad de la caminata.
     updateFree(dt) {
       const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
       const clampX = (x) => Math.max(40, Math.min(this.worldW - 40, x));
@@ -392,21 +402,35 @@
       const dA = Math.hypot(A.x - ox, A.y - oy);
       A.moving = dA > 0.01;
       if (A.moving) { A.dist += dA; if (Math.abs(A.x - ox) > 0.01) A.dir = A.x > ox ? 'right' : 'left'; }
-      // --- el acompañante sigue a su puesto ---
+      this.animStep(A, A.moving, dt);
+      // --- el acompañante sigue a su puesto (histéresis) ---
       const tx = clampX(B.id === 'jose' ? A.x + 70 : A.x - 70), ty = clampY(A.y);
       const bx = B.x, by = B.y, dx = tx - bx, dy = ty - by, dB = Math.hypot(dx, dy);
+      if (!B.follow && dB > 12) B.follow = true;   // arranca solo si el puesto se alejó de verdad
       B.moving = false;
-      if (dB > 3) {
-        const step = Math.min(dB, 175 * dt);
-        B.x += (dx / dB) * step; B.y += (dy / dB) * step;
-        B.dist += step; B.moving = true;
-        if (Math.abs(dx) > 1) B.dir = dx > 0 ? 'right' : 'left';
+      if (B.follow) {
+        if (dB <= 3) B.follow = false;             // …y no se detiene hasta estar encima del puesto
+        else {
+          const step = Math.min(dB, Math.min(190, dB * 7) * dt); // llegada suave: frena al acercarse
+          B.x += (dx / dB) * step; B.y += (dy / dB) * step;
+          B.dist += step; B.moving = true;
+          if (Math.abs(dx) > 1) B.dir = dx > 0 ? 'right' : 'left';
+        }
       }
+      this.animStep(B, B.follow, dt);
       // --- la cámara sigue al activo dentro de la franja ---
       const camT = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
       this.pan += (camT - this.pan) * Math.min(1, dt * 6);
       if (Math.abs(camT - this.pan) < 0.05) this.pan = camT;
       D.tap = false;
+    }
+    // Estado de ANIMACIÓN de caminata de un personaje del modo
+    // libre: se enciende con el movimiento real y se apaga con
+    // 0,12 s de gracia desde la última vez que se movió (o, el
+    // acompañante, desde que su seguimiento se detuvo).
+    animStep(ch, physically, dt) {
+      if (physically) { ch.animWalk = true; ch.idleT = 0; }
+      else if (ch.animWalk) { ch.idleT += dt; if (ch.idleT >= 0.12) ch.animWalk = false; }
     }
     draw(dt) {
       if (this.phase === 'depa' || this.phase === 'door') {
@@ -493,7 +517,7 @@
       const tileOff = -(pan % 32);
       for (let x = tileOff; x < 640; x += 32) { c.beginPath(); c.moveTo(x, horizon + 4); c.lineTo(x - 8, 360); c.stroke(); }
       for (let y = horizon + 16; y < 360; y += 18) { c.beginPath(); c.moveTo(0, y); c.lineTo(640, y); c.stroke(); }
-      // L4 · la Puerta (fija en su mundo) + Ximena + Jose (con su ramo)
+      // L4 · la Puerta (fija en su mundo) + Ximena + Jose
       const groundY = this.groundY;
       const openK = this.phase === 'plaza' && this.phaseT < 0.9 ? 1 - this.phaseT / 0.9 : 0;
       this.drawDoor2D(c, this.doorX - pan, groundY, openK);
@@ -507,10 +531,9 @@
       const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
       for (const ch of chars) {
         let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
-        if (this.phase === 'free' && ch.moving) { anim = 'walk_right'; idx = this.walkIdx(ch.id, ch.dist); bobY = 0; }
+        if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = this.walkIdx(ch.id, ch.dist); bobY = 0; }
         if (ch.id === 'jose' && hop) bobY = -hop;
         this.drawChar2D(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
-        if (ch.id === 'jose' && this.joseReacted) this.drawBouquet(c, ch.x - pan + (ch.dir === 'left' ? -17 : 17), ch.y - 52 + bobY);
       }
       // L5 · poste en primer plano (desenfocado por código: alpha + sombra)
       const postX = ((566 - pan * 1.4) % 700 + 700) % 700 - 30;
@@ -538,12 +561,6 @@
       if (!fr || !fr.width) return;
       const w = h * fr.width / fr.height;
       c.drawImage(fr, x - w / 2, baseY - h + (bobY || 0), w, h);
-    }
-    drawBouquet(c, x, y) {
-      c.strokeStyle = '#3a7d44'; c.lineWidth = 2;
-      c.beginPath(); c.moveTo(x, y + 12); c.lineTo(x - 4, y + 2); c.moveTo(x, y + 12); c.lineTo(x + 1, y); c.moveTo(x, y + 12); c.lineTo(x + 5, y + 3); c.stroke();
-      const cols = ['#e56b8c', '#d94f4f', '#f2e6f0', '#e56b8c', '#d94f4f'];
-      [[-4, 0], [1, -3], [6, 1], [-1, 3], [4, 5]].forEach((p, i) => { c.fillStyle = cols[i]; c.beginPath(); c.arc(x + p[0], y + p[1], 3.4, 0, 6.3); c.fill(); });
     }
     drawDoor2D(c, x, baseY, openK) {
       // LA Puerta: la misma en todas las escenas (madera, marco claro).
