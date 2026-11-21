@@ -103,7 +103,7 @@
     try {
       song = document.createElement('audio');
       song.preload = 'auto';
-      const s1 = document.createElement('source'); s1.src = 'assets/audio/and-i-love-her.m4a'; s1.type = 'audio/mp4';
+      const s1 = document.createElement('source'); s1.src = 'assets/audio/and-i-love-her.ogg'; s1.type = 'audio/ogg';
       const s2 = document.createElement('source'); s2.src = 'assets/audio/and-i-love-her.mp3'; s2.type = 'audio/mpeg';
       song.appendChild(s1); song.appendChild(s2);
       if (song.addEventListener) {
