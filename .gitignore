@@ -3,4 +3,8 @@
 # El LEEME.txt de la carpeta SÍ se versiona (no casa con *.m4a/*.mp3).
 application/src/assets/audio/*.m4a
 application/src/assets/audio/*.mp3
-application/src/assets/audio/*.ogg
+# La vista de San Ángel es arte de la película El Libro de la Vida
+# (con derechos), aportada por Jose para uso personal: como la
+# canción, vive SOLO en la copia local y nunca se sube al repo.
+# El código tolera que falte (simplemente no se dibuja la vista).
+application/src/assets/date/sanangel-vista.png
