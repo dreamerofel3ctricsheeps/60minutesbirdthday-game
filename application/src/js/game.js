@@ -114,11 +114,15 @@
       // los menciona es como ausentes). Ximena, José y Pollito no son
       // roomies reclutables y siempre pueden hablar.
       if (S.party.length && G.PLAYABLE.includes(m.who) && !S.party.includes(m.who)) return;
-      const ch = G.CHARS[m.who];
+      // Personajes especiales (Alebrije/Teodora): no están en G.CHARS
+      // ni tienen hoja definida; su nombre/color salen de G.SPECIALS y
+      // su avatar es el retrato dibujado por código (G.specialURL).
+      const ch = G.CHARS[m.who] || (G.SPECIALS && G.SPECIALS[m.who]);
+      if (!ch) return;
       const typing = ui.raw(`<div class="typing">${ch.name} está escribiendo…</div>`);
       await G.wait(ui.fast ? 0.05 : clamp(0.45 + m.text.length * 0.013, 0.5, 1.4));
       typing.remove();
-      ui.raw(`<div class="msg ${m.direct ? 'direct' : ''}"><img class="av" src="${Sp.portrait(m.who, m.mood)}" alt=""><div class="bubble"><b style="color:${ch.color}">${ch.name}${m.direct ? ' <i>· chat directo</i>' : ''}</b>${m.text}</div></div>`);
+      ui.raw(`<div class="msg ${m.direct ? 'direct' : ''}"><img class="av" src="${G.CHARS[m.who] ? Sp.portrait(m.who, m.mood) : G.specialURL(m.who)}" alt=""><div class="bubble"><b style="color:${ch.color}">${ch.name}${m.direct ? ' <i>· chat directo</i>' : ''}</b>${m.text}</div></div>`);
       G.sfx('msg');
       await G.wait(ui.fast ? 0.05 : 0.35);
     },
@@ -227,7 +231,7 @@
   // partida, la partida se ABANDONA (enterPractice descarta los
   // temporizadores de la historia): al terminar se va a la lista o al
   // título, nunca de vuelta a la run.
-  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'apagon', 'pizza', 'sonambula', 'memoria', 'imagen', 'cactus', 'cactus2', 'repisas', 'pisoton', 'globos', 'azotea'];
+  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'apagon', 'pizza', 'sonambula', 'memoria', 'imagen', 'cactus', 'cactus2', 'repisas', 'pisoton', 'globos', 'azotea', 'patron', 'trazo', 'soga', 'finalleyendas'];
   const DUEL_DESC = {
     decoracion: 'Cuelga la decoración en su zona antes de que Pollito la tire.',
     pollito: 'Persigue al gato por la sala y recupera lo que robó.',
@@ -243,7 +247,16 @@
     pisoton: 'Cambia de cojín y esquiva los pisotones de Pollito.',
     globos: 'Pollito dirige con banderas (¡y hace fintas!): espera el ¡YA! y levanta el globo indicado. Quien elige mal, sale volando.',
     azotea: 'Esquiva las pasadas del dron sobre la azotea.',
+    patron: 'Final Leyendas · casting: repite el patrón de resplandores del Alebrije (memoria, 5 rondas).',
+    trazo: 'Final Leyendas · boss 2A: traza la leyenda con precisión y corre a los hexágonos seguros contra Teodora.',
+    soga: 'Final Leyendas · boss 2B: salta la soga de fuego sin quemarte; Teodora flota, pero se distrae con selfies.',
+    finalleyendas: 'Final Leyendas completo: revelación del set, las dos pruebas de Teodora y los créditos de la película.',
   };
+  // Jefes especiales (Alebrije/Teodora): NO están en G.CHARS (no tienen
+  // hoja definida y check_defined la exigiría); sus datos salen de
+  // G.SPECIALS y su imagen, del retrato dibujado por código.
+  function bossChar(ev) { return G.CHARS[ev.boss] || (G.SPECIALS && G.SPECIALS[ev.boss]) || { name: ev.boss, color: '#fff' }; }
+  function bossImgOf(ev) { return G.CHARS[ev.boss] ? Sp.full(ev.boss) : G.specialURL(ev.boss); }
   function menuShow(html) { G.menuOpen = true; overlay.innerHTML = `<div class="modal wide">${html}</div>`; overlay.classList.add('show'); }
   function menuHide() { G.menuOpen = false; overlay.classList.remove('show'); overlay.innerHTML = ''; }
   function enterPractice() {
@@ -256,7 +269,7 @@
   }
   function duelListScreen(from) {
     return new Promise((res) => {
-      const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = G.CHARS[ev.boss]; return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${ev.bossLabel || boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
+      const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = bossChar(ev); return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${ev.bossLabel || boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
       menuShow(`<h2><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos — práctica</h2><p class="dim">Los duelos contra los jefes, directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
       overlay.querySelectorAll('.duel').forEach((b) => (b.onclick = () => { G.sfx('pick'); res(b.dataset.id); }));
       $('#mback').onclick = () => { G.sfx('pick'); res('back'); };
@@ -309,7 +322,7 @@
       const un = charKeys(car, off);
       const modal = el('div', 'modal wide noscroll');
       modal.appendChild(el('h2', '', ev.title));
-      modal.appendChild(el('p', 'dim', `¿Quién se enfrenta a ${G.CHARS[ev.boss].name}?`));
+      modal.appendChild(el('p', 'dim', `¿Quién se enfrenta a ${bossChar(ev).name}?`));
       modal.appendChild(car.node); modal.appendChild(car.dots);
       const back = el('button', 'big alt', '← Lista de minijuegos');
       back.onclick = () => finish(null);
@@ -320,8 +333,8 @@
   }
   function vsScreen(ev, who) {
     return new Promise((res) => {
-      const c = G.CHARS[who], boss = G.CHARS[ev.boss];
-      menuShow(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${Sp.full(ev.boss)}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
+      const c = G.CHARS[who], boss = bossChar(ev);
+      menuShow(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${bossImgOf(ev)}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
         <h2>${ev.title}</h2><p>${ev.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${ev.goal}</p>
         <p class="dim">${!G.practiceMode && S.phase !== 'title' ? 'Modo práctica: al empezar, la partida actual se abandona.' : 'Modo práctica: sin consecuencias en la historia.'}</p>
         <div class="pbtns"><button class="big" id="mstart">¡EMPEZAR!</button><button class="big alt" id="mback">← Volver</button></div>`);
@@ -331,7 +344,7 @@
   }
   function resultScreen(ev, r) {
     return new Promise((res) => {
-      const boss = G.CHARS[ev.boss];
+      const boss = bossChar(ev);
       const ico = r.win === 'win' ? 'trofeo' : r.win === 'tie' ? 'empate' : 'derrota'; // ícono PROPIO del resultado
       const txt = r.win === 'win' ? `¡VENCISTE A ${boss.name.toUpperCase()}!` : r.win === 'tie' ? 'EMPATE' : `GANÓ ${boss.name.toUpperCase()}`;
       menuShow(`<h2>${ev.title}</h2><div class="roll ${r.win === 'win' ? 'good' : r.win === 'tie' ? 'mid' : 'bad'}"><img class="res-ico" src="assets/icons/${ico}.png" alt="">${txt}</div>
@@ -517,6 +530,11 @@
     pizza: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.PizzaRace, note: () => 'Sigilo = mejor equilibrio', setup() {} },
     sonambula: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.SleepwalkDuel, note: () => 'Sigilo = más margen al frenar', setup() {} },
     globos: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.BalloonDuel, note: () => 'Pollito dirige: no caigas en sus fintas', setup() {} },
+    // ----- Final LEYENDAS (práctica y cadena del clímax) -----
+    patron: { stats: ['logica', 'carisma'], Scene: () => Sc.PatronDuel, note: () => 'Casting del Alebrije: memoria de secuencias', setup() {} },
+    trazo: { stats: ['velocidad', 'logica'], Scene: () => Sc.TrazoDuel, note: () => 'Boss Teodora: precisión de trazo y hexágonos seguros', setup() {} },
+    soga: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.SogaDuel, note: () => 'Boss Teodora: mantén y suelta para saltar la soga', setup() {} },
+    finalleyendas: { stats: ['velocidad', 'carisma'], Scene: () => Sc.LegendsEndingScene, note: () => 'La cadena completa del clímax de Leyendas (sin condiciones)', setup() {} },
   };
 
   // SORTEO DEL EVENTO CACTUS (decisión de Jose, 2026-11-14): en la
@@ -538,11 +556,11 @@
       S.flags.cactusVariant = variant;
       if (variant === 'cactus2') { mg = MG.cactus2; evShow = G.EVENTS.cactus2; }
     }
-    const boss = G.CHARS[ev.boss];
+    const boss = bossChar(ev);
     const who = await ui.assign(`¿Quién se enfrenta a ${boss.name}?`, (c) => ({ stats: statLine(c, mg.stats), note: mg.note ? mg.note(c) : '' }));
     mg.setup();
     const c = G.CHARS[who];
-    const bossImg = Sp.full(ev.boss);
+    const bossImg = bossImgOf(ev);
     await ui.modal(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${bossImg}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
       <h2>${evShow.title}</h2>${variant ? '<p class="goal">Sorteo de cactus: esta partida toca la variante «' + (variant === 'cactus2' ? 'Cactus en carrera' : 'Cactus rodantes') + '».</p>' : ''}<p>${evShow.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${evShow.goal}</p>`, '¡EMPEZAR!');
     G.captureKeys = true; $('#phone').classList.add('dim');
@@ -704,15 +722,62 @@
     await G.wait(3.4);
   }
 
+  // =========================================================
+  // FINAL LEYENDAS en la HISTORIA (pedido de Jose, 2026-11-21)
+  // =========================================================
+  // Habilitación (las 3 condiciones del guion, evaluadas al llegar
+  // el clímax de las 00:00, ANTES del final estándar):
+  //  1. Casting ganado al Alebrije (S.flags.casting): aparece UNA
+  //     sola vez ~18:00 en la sala (beat tras el evento «cactus»),
+  //     solo si la decoración ya va bien encaminada (≥2 zonas reales
+  //     colocadas); si se pierde el casting, no reaparece.
+  //  2. Decoración: ≥4 de las 6 zonas de la sala colocadas con
+  //     ítems REALES recolectados (S.deco: placed && !improv) — el
+  //     sistema real de Decoración Express; nada de un solo ítem.
+  //  3. Preparación (S.quality, el stat real del HUD) ≥ 70 a las 23:00.
+  // Si se cumplen las 3, corre la cadena del set (revelación →
+  // pruebas de Teodora → resolución por regla de boss: ganar ≥1 =
+  // final de película; 0/2 = se cae al final normal sin derrota).
+  // PRIORIDAD: Leyendas se evalúa ANTES que el final estándar. La
+  // prioridad ENTRE finales alternativos (J1407b vs Leyendas, si
+  // algún día se cumplen ambos a la vez) queda PENDIENTE de Jose;
+  // hoy J1407b ni siquiera está enganchado a la historia.
+  function legendsDecoCount(st) { return (st.deco || []).filter((d) => d.placed && !d.improv).length; }
+  function legendsReady(st) { return !!(st.flags && st.flags.casting) && legendsDecoCount(st) >= 4 && st.quality >= 70; }
+  G.legendsDecoCount = legendsDecoCount; G.legendsReady = legendsReady; // expuestas para la prueba de humo
+  G.startLegendsEnding = (done) => { // equivalente a G.startSpaceEnding de J1407b: cadena sin exigir condiciones
+    const sc = new Sc.LegendsEndingScene(S.protagonist || S.player || 'natalia', done);
+    G.setScene(sc);
+    return sc;
+  };
+  async function legendsBeats(id) {
+    // Siembra ~15:00 (tras «La imagen distinta»): el rumor del barrio
+    if (id === 'imagen' && !S.flags.leyendasRumor) {
+      S.flags.leyendasRumor = true;
+      await ui.postAll([{ who: 'itzel', text: 'Oigan… dicen que están grabando una película de leyendas por el barrio 👀' }, { who: 'alan', text: '¿Con el Alebrije y todo? Ese ni existe.' }, { who: 'pollito', text: '😼' }]);
+    }
+    // Aparición del Alebrije ~18:00 (tras «Cactus en carrera»): una
+    // sola vez y solo si la decoración va bien encaminada
+    if (id === 'cactus' && !S.flags.alebrijeSeen && !S.flags.casting && legendsDecoCount(S) >= 2) {
+      S.flags.alebrijeSeen = true;
+      G.home.setView('sala');
+      await runEvent('patron');
+      const d = S.duels[S.duels.length - 1];
+      if (d && d.game === 'patron' && d.win === 'win') S.flags.casting = true;
+      else { S.flags.alebrijeGone = true; await ui.postAll([{ who: 'sistema', text: 'El Alebrije se escondió de nuevo entre la decoración. No va a volver.' }]); }
+    }
+  }
+
   async function actNight() {
     ui.raw('<div class="group">🎂 OPERACIÓN: NO LA DESPIERTEN</div>');
     const n = Object.keys(S.inv).length;
-    await ui.postAll([{ who: 'majo', text: `Inventario: ${n} de 10 cosas. ${n >= 7 ? 'Mejor de lo que esperaba.' : n >= 4 ? 'Vamos a tener que improvisar.' : 'Esto va a ser un desastre hermoso.'}` }]);
+    await ui.postAll([{ who: 'majo', text: `Inventario: ${n} de ${Object.keys(G.ITEMS).length} cosas. ${n >= 9 ? 'Mejor de lo que esperaba.' : n >= 5 ? 'Vamos a tener que improvisar.' : 'Esto va a ser un desastre hermoso.'}` }]);
     for (const id of G.STORY) {
       if (await reactive()) return true;
       const ev = G.EVENTS[id];
       if (ev.when && !ev.when(S)) continue;
       await runEvent(id);
+      await legendsBeats(id);
       if (await tick()) return true;
       await G.wait(0.6);
     }
@@ -765,7 +830,7 @@
     if (S.flags.regalo === 'cupones') extras.push('Ximena guardó los cupones de Saulo en su billetera.');
     ui.header('Final', e.title);
     await ui.modal(`<div class="ending ${e.tone}"><small>FINAL</small><h1>${e.title}</h1><p>${text}</p>${extras.length && key !== 'ruina' ? `<p class="dim">${extras.join(' ')}</p>` : ''}
-      <div class="stats"><div><b>${'★'.repeat(lvl)}${'☆'.repeat(4 - lvl)}</b><span>Calidad de la fiesta (${S.quality})</span></div><div><b>${S.sus}%</b><span>Sospecha</span></div><div><b>${Object.keys(S.inv).length}/10</b><span>Objetos</span></div><div><b>${S.duels.filter((d) => d.win === 'win').length}/${S.duels.length}</b><span>Duelos ganados</span></div></div></div>`, 'JUGAR OTRA VEZ');
+      <div class="stats"><div><b>${'★'.repeat(lvl)}${'☆'.repeat(4 - lvl)}</b><span>Calidad de la fiesta (${S.quality})</span></div><div><b>${S.sus}%</b><span>Sospecha</span></div><div><b>${Object.keys(S.inv).length}/${Object.keys(G.ITEMS).length}</b><span>Objetos</span></div><div><b>${S.duels.filter((d) => d.win === 'win').length}/${S.duels.length}</b><span>Duelos ganados</span></div></div></div>`, 'JUGAR OTRA VEZ');
     location.reload();
   }
 
@@ -794,6 +859,18 @@
     S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
     await actArrival(res);
     const ruina = await actNight();
+    // CLÍMAX DE LEYENDAS: si se cumplen las 3 condiciones, la cadena
+    // del set reemplaza a la revelación estándar; si Teodora gana
+    // las dos pruebas (movie=false), se cae al final normal.
+    if (!ruina && legendsReady(S)) {
+      ui.header('Final', 'La casa era un set');
+      G.captureKeys = true;
+      const out = await new Promise((r) => G.startLegendsEnding(r));
+      G.captureKeys = false;
+      G.setScene(G.home);
+      if (out && out.movie) { await showEnding('leyendas'); return; }
+      await ui.postAll([{ who: 'sistema', text: 'El set se desmonta en silencio. La fiesta sigue… como fiesta.' }]);
+    }
     const key = await actReveal(ruina);
     await showEnding(key);
   }
