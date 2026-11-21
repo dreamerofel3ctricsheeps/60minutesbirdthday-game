@@ -15,8 +15,13 @@
       nace con TODOS escondidos (armario con ojos, Pollito y
       Jose ocultos) y Ximena visible y controlable.
    F) Sin archivo de audio: reloj de respaldo corriendo, pausa
-      del modo que lo congela, y la cadena completa de la
-      Parte 1: puerta → plaza → 'plaza-arrived' → 'done'.
+      del modo que lo congela, y la cadena de la Parte 1:
+      puerta → plaza → 'plaza-arrived' en modo libre ('free').
+   E3) Compensación de escala de Ximena en el depa: su altura
+      proyectada es la misma en el spawn, arriba y abajo.
+   G) Modo libre: input mueve al activo y la cámara lo sigue,
+      TAB alterna con Jose, el otro sigue a su puesto, y ni el
+      tiempo ni el fin de la canción disparan onDone.
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -209,6 +214,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('su velocidad efectiva es de caminata (< RUN_SPD 178, sin entrar en run_*)', spdFin > 120 && spdFin < 178, `spd=${spdFin.toFixed(1)} u/s`);
   xi.vx = xi.vy = 0;
 
+  console.log('\nE3) Compensación de escala en el depa (tamaño en pantalla constante)');
+  // La cámara se deja FIJA en el encuadre del spawn (el peor caso:
+  // el retardo total al moverse) y Ximena se mide en el spawn, muy
+  // abajo (cerca de la cámara: sin compensar se vería más grande)
+  // y muy arriba (lejos: se vería más chica). Con la compensación
+  // activa (compensateScale corre en cada update de la fase depa)
+  // su altura proyectada debe ser la misma en las tres posiciones.
+  home.cam.x = 800; home.cam.z = 440; home.cam.dist = 560; home.cam.pitch = 0.8;
+  xi.x = 800; xi.y = 470; xi.vx = xi.vy = 0; xi.scale = 1;
+  sc.update(0.001);
+  const hSpawn = sc.projectedHeight(), sSpawn = xi.scale;
+  xi.y = 560; xi.vx = xi.vy = 0;
+  sc.update(0.001);
+  const hDown = sc.projectedHeight(), sDown = xi.scale;
+  xi.y = 360; xi.vx = xi.vy = 0;
+  sc.update(0.001);
+  const hUp = sc.projectedHeight(), sUp = xi.scale;
+  check('abajo (cerca de la cámara) su altura difiere < 5% de la del spawn', Math.abs(hDown - hSpawn) / hSpawn < 0.05, `spawn=${hSpawn.toFixed(1)} abajo=${hDown.toFixed(1)} scale=${sDown.toFixed(3)}`);
+  check('arriba (lejos de la cámara) su altura difiere < 5% de la del spawn', Math.abs(hUp - hSpawn) / hSpawn < 0.05, `spawn=${hSpawn.toFixed(1)} arriba=${hUp.toFixed(1)} scale=${sUp.toFixed(3)}`);
+  // Nota de geometría (medida, no supuesta): con esta cámara
+  // (dist 560, pitch 0,8) la altura cruda varía poco (±1,3%): al
+  // acercarse, la ganancia por distancia casi se cancela con el
+  // acortamiento del billboard vertical. La compensación es por
+  // eso FINA: basta verificar que se activa en los extremos
+  // (scale ≠ la del spawn) y que respeta el clamp [0,8, 1,25].
+  check('la compensación se activa en los extremos y respeta el clamp [0,8, 1,25]', Math.abs(sDown - sSpawn) > 0.005 && Math.abs(sUp - sSpawn) > 0.005 && [sSpawn, sDown, sUp].every((s) => s >= 0.8 && s <= 1.25), `spawn=${sSpawn.toFixed(3)} abajo=${sDown.toFixed(3)} arriba=${sUp.toFixed(3)}`);
+  xi.x = 800; xi.y = 470; xi.vx = xi.vy = 0;
+
   console.log('\nF) Puerta, reloj de respaldo y llegada a la plaza');
   xi.x = 510; xi.y = 560; xi.vx = xi.vy = 0;
   sc.update(0.016);
@@ -229,8 +262,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (let i = 0; i < 100 && DM.state.state !== 'plaza-arrived'; i++) sc.update(0.05);
   check("el revelado de ~4 s alcanza el estado 'plaza-arrived'", DM.state.state === 'plaza-arrived' && DM.state.arrived === true, 'state=' + DM.state.state);
   check('Jose reaccionó y se sumó (joseJoined)', DM.state.joseJoined === true && sc.joseReacted === true);
-  for (let i = 0; i < 40 && DM.state.state !== 'done'; i++) sc.update(0.05);
-  check("la Parte 1 cierra en 'done' (vuelta al título)", DM.state.state === 'done', 'state=' + DM.state.state);
+  check("tras el revelado la escena queda en modo libre ('free'), sin cerrar sola", sc.phase === 'free' && sc.doneFired === false && sandbox.location.href === '', 'phase=' + sc.phase);
+
+  console.log('\nG) Modo libre de la plaza: control, TAB, seguidor y sin fin automático');
+  const F = sc.free, X = F.chars.ximena, J = F.chars.jose;
+  check('el personaje activo inicial es Ximena', F.active === 'ximena');
+  const fx0 = X.x;
+  key('ArrowRight', true);
+  for (let i = 0; i < 60; i++) sc.update(0.05);
+  key('ArrowRight', false);
+  check('input sostenido mueve al activo (Ximena) por la franja', X.x > fx0 + 200, `x ${fx0} → ${X.x.toFixed(0)}`);
+  check('la cámara sigue al activo y no se sale de la franja (0..510)', sc.pan > 100 && sc.pan <= 510.01, `pan=${sc.pan.toFixed(1)}`);
+  check('el activo camina con su ciclo lateral al moverse (moving + distancia acumulada)', X.dist > 200, `dist=${X.dist.toFixed(0)}`);
+  sc.draw(0.016); // el modo libre se dibuja sin explotar (walk_right incluido)
+  key('Tab', true); key('Tab', false);
+  check('TAB alterna el personaje activo a Jose', F.active === 'jose', 'active=' + F.active);
+  const jx0 = J.x;
+  key('ArrowLeft', true);
+  for (let i = 0; i < 20; i++) sc.update(0.05);
+  key('ArrowLeft', false);
+  check('con Jose activo, el input lo mueve a él', J.x < jx0 - 60, `x ${jx0.toFixed(0)} → ${J.x.toFixed(0)}`);
+  // El seguidor (ahora Ximena) debe acercarse a su puesto junto a Jose:
+  J.x = 1000; J.y = 316; X.x = 300; X.y = 316;
+  const gap0 = Math.abs((J.x - 70) - X.x);
+  for (let i = 0; i < 20; i++) sc.update(0.05);
+  const gap1 = Math.abs((J.x - 70) - X.x);
+  check('el seguidor se acerca a su puesto cuando el activo se aleja', gap1 < gap0 - 100, `hueco ${gap0.toFixed(0)} → ${gap1.toFixed(0)}`);
+  // Ni el tiempo ni el fin nominal de la canción cierran el modo libre:
+  for (let i = 0; i < 200; i++) sc.update(0.05);
+  check("el modo libre NO termina solo (ni onDone ni 'done' tras 10 s más)", sc.phase === 'free' && sc.doneFired === false && DM.state.state === 'plaza-arrived' && sandbox.location.href === '', 'phase=' + sc.phase);
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);
