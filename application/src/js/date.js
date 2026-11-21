@@ -12,8 +12,12 @@
      con performance.now() y la secuencia corre en silencio.
    - En esta parte solo se ejecutan la APERTURA (depa, sin
      reloj: la cita arranca al abrir la puerta) y la LLEGADA
-     a la plaza (revelado de ~4 s). El resto de la tabla se
-     ejecutará en las partes siguientes.
+     a la plaza (revelado de ~4 s). Tras el revelado la escena
+     queda en MODO LIBRE ('free'): Jose pidió revisarla a
+     detalle moviendo a los personajes, así que NO se acaba
+     sola — se controla a Ximena (TAB alterna con Jose, el
+     otro sigue) y se sale a mano desde la pausa. El resto de
+     la tabla se ejecutará en las partes siguientes.
    ============================================================ */
 (function () {
   'use strict';
@@ -170,6 +174,48 @@
     if (typeof Image !== 'undefined') { catedralImg = new Image(); catedralImg.src = 'assets/date/catedral.png'; }
   } catch (e) { catedralImg = null; }
 
+  // ---------- TAB en el modo libre de la plaza ----------
+  // G.input no mapea Tab (no es tecla del juego): el modo cita
+  // escucha por su cuenta y solo actúa en la fase 'free'.
+  try {
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Tab' && D.active && D.scene && D.scene.phase === 'free') {
+        if (e.preventDefault) e.preventDefault();
+        D.scene.switchActive();
+      }
+    });
+  } catch (e) { /* sin ventana: el modo libre igual funciona con un solo personaje */ }
+
+  // ---------- Proyección analítica (réplica de la VP de gl3d.js) ----------
+  // Para compensar la escala de Ximena en el depa necesito medir
+  // alturas proyectadas en cualquier momento, también antes del
+  // primer render (cuando la VP global de gl3d aún no existe o es
+  // de otra escena). Estas tres funciones replican EXACTAMENTE
+  // perspective/lookAt/mul de gl3d.js y el ojo que calcula R.begin
+  // (D = dist × 1,324; eye sobre la esfera de pitch). El alto en
+  // pantalla (coordenadas lógicas 640×360) no depende del aspecto,
+  // así que la razón entre dos mediciones es robusta.
+  function vpFromCam(cam) {
+    const fov = (26 * Math.PI) / 180, asp = (G.R && G.R.w > 0 && G.R.h > 0) ? G.R.w / G.R.h : 16 / 9;
+    const t = 1 / Math.tan(fov / 2), n = 140, f = 4200;
+    const P = [t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, (2 * f * n) / (n - f), 0];
+    const Dd = cam.dist * 1.324;
+    const e = [cam.x, (cam.y || 0) + Math.sin(cam.pitch) * Dd, cam.z + Math.cos(cam.pitch) * Dd];
+    const c = [cam.x, cam.y || 0, cam.z];
+    let z = [e[0] - c[0], e[1] - c[1], e[2] - c[2]]; let l = Math.hypot(z[0], z[1], z[2]); z = z.map((v) => v / l);
+    let x = [0 * z[2] - 1 * z[1], 1 * z[0] - 0 * z[2], 0 * z[1] - 0 * z[0]]; l = Math.hypot(x[0], x[1], x[2]); x = x.map((v) => v / l);
+    const y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+    const L = [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0,
+      -(x[0] * e[0] + x[1] * e[1] + x[2] * e[2]), -(y[0] * e[0] + y[1] * e[1] + y[2] * e[2]), -(z[0] * e[0] + z[1] * e[1] + z[2] * e[2]), 1];
+    const o = new Array(16);
+    for (let cc = 0; cc < 4; cc++) for (let r = 0; r < 4; r++) o[cc * 4 + r] = P[r] * L[cc * 4] + P[4 + r] * L[cc * 4 + 1] + P[8 + r] * L[cc * 4 + 2] + P[12 + r] * L[cc * 4 + 3];
+    return o;
+  }
+  function projectWithCam(m, x, y, z) {
+    const w = m[3] * x + m[7] * y + m[11] * z + m[15];
+    return { x: ((m[0] * x + m[4] * y + m[8] * z + m[12]) / w * 0.5 + 0.5) * 640, y: (1 - ((m[1] * x + m[5] * y + m[9] * z + m[13]) / w * 0.5 + 0.5)) * 360, ok: w > 0 };
+  }
+
   // =========================================================
   // ESCENA DEL EASTER EGG (Parte 1): depa → puerta → plaza
   // =========================================================
@@ -197,6 +243,70 @@
       home.follow(xi, 560);
       home.cam.x = xi.x; home.cam.z = xi.y - 30; home.cam.dist = 560;
       this.home = home; this.xi = xi;
+      // --- Compensación de escala de Ximena en el depa (SOLO modo
+      // cita): el render 3D proyecta con perspectiva y al bajar
+      // hacia la cámara su sprite se ve MÁS GRANDE (en el juego
+      // normal es intencional; aquí Jose lo reportó como defecto).
+      // Referencia: la altura proyectada de su sprite en el spawn
+      // (800,470) con la cámara de seguimiento ya asentada (la que
+      // fija home.follow: dist 560, pitch 0,8, centrada en ella).
+      // Cada frame se mide la altura proyectada actual con la
+      // cámara real (que la sigue con retardo) y se ajusta
+      // xi.scale = ref/actual para cancelarla. Ver
+      // compensateScale() y rawProjectedHeight().
+      this.scaleRef = this.rawProjectedHeight(800, 470, { x: 800, y: 0, z: 440, dist: 560, pitch: 0.8 });
+      // --- La plaza como mundo navegable (modo libre, ver
+      // updateFree): la franja mide 1150 px de mundo; la cámara
+      // (this.pan, en px de mundo a velocidad L4) se desplaza
+      // 0..(1150−640). La Puerta queda FIJA donde quedó al llegar
+      // (mundo x=174) y los personajes parten de sus posiciones
+      // de mundo del revelado (al final del paneo, cámara=90:
+      // Ximena en pantalla 168 → mundo 258; Jose 238 → 328).
+      this.worldW = 1150; this.doorX = 174; this.groundY = 316;
+      this.free = {
+        active: 'ximena',
+        chars: {
+          ximena: { id: 'ximena', x: 258, y: 316, dist: 0, dir: 'right', moving: false },
+          jose: { id: 'jose', x: 328, y: 316, dist: 0, dir: 'left', moving: false },
+        },
+      };
+    }
+    // Altura en pantalla (px lógicos) de un segmento vertical con
+    // la altura del sprite de Ximena, plantado en (x, z), visto
+    // con la cámara `cam`. Réplica analítica de R.project sobre
+    // la VP de esa cámara (ver vpFromCam). El billboard se estira
+    // ×R.stretch (= min(1,4, 1/cos(pitch)), como en R.end), así
+    // que el segmento medido lleva ese factor, igual que el
+    // sprite real al dibujarse.
+    rawProjectedHeight(x, z, cam) {
+      const m = vpFromCam(cam);
+      const stretch = Math.min(1.4, 1 / Math.cos(cam.pitch));
+      const H = (Sp.charTop('ximena') || 80) * stretch;
+      const p0 = projectWithCam(m, x, 0, z), p1 = projectWithCam(m, x, H, z);
+      return Math.abs(p0.y - p1.y);
+    }
+    // Altura proyectada ACTUAL de Ximena, ya con su scale aplicado
+    // (el alto del billboard es proporcional a actor.scale).
+    projectedHeight() {
+      return this.rawProjectedHeight(this.xi.x, this.xi.y, this.home.cam) * this.xi.scale;
+    }
+    // Ajusta xi.scale para que su altura en pantalla sea la del
+    // spawn, mueva donde la mueva dentro del depa. Se llama al
+    // final de cada update de la fase 'depa' (con la cámara ya
+    // actualizada por HomeScene). Clamp [0,8, 1,25]: si la
+    // corrección pidiera más (p. ej. cámara aún muy lejos en los
+    // primeros frames), se aplica lo que se puede sin deformar.
+    compensateScale() {
+      if (!this.scaleRef) return;
+      const actual = this.rawProjectedHeight(this.xi.x, this.xi.y, this.home.cam);
+      if (!(actual > 0)) return;
+      const s = this.scaleRef / actual;
+      this.xi.scale = Math.max(0.8, Math.min(1.25, s));
+    }
+    switchActive() {
+      if (this.phase !== 'free') return;
+      this.free.active = this.free.active === 'ximena' ? 'jose' : 'ximena';
+      if (G.input && G.input.flush) G.input.flush();
     }
     openDoor() {
       if (this.phase !== 'depa') return;
@@ -214,6 +324,7 @@
         // definida y no los run_* — va a una cita, no huyendo.
         this.xi.walk(ix, iy, 165, dt);
         this.home.update(dt);
+        this.compensateScale(); // tamaño en pantalla constante (solo modo cita)
         this.nearDoor = Math.hypot(this.xi.x - MAIN_DOOR.x, this.xi.y - MAIN_DOOR.y) < 52;
         if (this.nearDoor && (G.input.hit('action') || D.tap)) this.openDoor();
         D.tap = false;
@@ -235,23 +346,67 @@
       if (this.phase === 'plaza') {
         this.phaseT += dt;
         const k = Math.min(1, this.phaseT / 4);
-        this.pan = k * k * (3 - 2 * k); // paneo suave (smoothstep) del revelado
+        // El paneo del revelado ES la cámara (this.pan, en px de
+        // mundo): arranca en 0 y se asienta en 90, el encuadre de
+        // la llegada. En 'free' la misma variable sigue a quien
+        // se controle.
+        this.pan = (k * k * (3 - 2 * k)) * 90; // paneo suave (smoothstep) del revelado
         if (this.phaseT >= 1.2 && !this.joseReacted) {
           this.joseReacted = true; this.joseExpr = 'happy'; D.joseJoined = true;
         }
         if (this.phaseT >= 4) {
-          this.phase = 'fadeout'; this.phaseT = 0;
-          D.state = 'plaza-arrived'; D.arrived = true; // ← fin de la Parte 1
+          // La llegada NO cierra la escena: se entra al modo
+          // libre de revisión ('free'). D.state sigue siendo
+          // 'plaza-arrived' y onDone NO se dispara solo jamás:
+          // se sale a mano desde el menú de pausa (Esc → Salir,
+          // que recarga al título como en el resto del juego).
+          this.phase = 'free'; this.phaseT = 0;
+          D.state = 'plaza-arrived'; D.arrived = true;
         }
         return;
       }
-      if (this.phase === 'fadeout') {
+      if (this.phase === 'free') {
         this.phaseT += dt;
-        if (this.phaseT >= 1.2 && !this.doneFired) {
-          this.doneFired = true; D.state = 'done';
-          if (this.onDone) this.onDone();
-        }
+        this.updateFree(dt);
       }
+    }
+    // ---------- Modo libre de la plaza (revisión a detalle) ----------
+    // Sin fin automático: ni el fin de la canción ni el paso del
+    // tiempo cierran la escena (el reloj puede agotarse y el modo
+    // sigue en silencio; la canción NO entra en loop). Se
+    // controla al personaje activo (TAB alterna Ximena ⇄ Jose);
+    // el otro SIGUE al activo hacia su puesto junto a él (Jose va
+    // 70 px a la derecha de Ximena) y se queda en idle al llegar.
+    updateFree(dt) {
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      const clampX = (x) => Math.max(40, Math.min(this.worldW - 40, x));
+      const clampY = (y) => Math.max(this.groundY - 26, Math.min(this.groundY + 26, y));
+      // --- el activo, con el input del jugador ---
+      const ax = G.input.axis();
+      const ix = ax.x || (touchVec ? touchVec.x : 0), iy = ax.y || (touchVec ? touchVec.y : 0);
+      const ox = A.x, oy = A.y;
+      if (ix || iy) {
+        A.x = clampX(A.x + ix * 150 * dt);
+        A.y = clampY(A.y + iy * 150 * dt);
+      }
+      const dA = Math.hypot(A.x - ox, A.y - oy);
+      A.moving = dA > 0.01;
+      if (A.moving) { A.dist += dA; if (Math.abs(A.x - ox) > 0.01) A.dir = A.x > ox ? 'right' : 'left'; }
+      // --- el acompañante sigue a su puesto ---
+      const tx = clampX(B.id === 'jose' ? A.x + 70 : A.x - 70), ty = clampY(A.y);
+      const bx = B.x, by = B.y, dx = tx - bx, dy = ty - by, dB = Math.hypot(dx, dy);
+      B.moving = false;
+      if (dB > 3) {
+        const step = Math.min(dB, 175 * dt);
+        B.x += (dx / dB) * step; B.y += (dy / dB) * step;
+        B.dist += step; B.moving = true;
+        if (Math.abs(dx) > 1) B.dir = dx > 0 ? 'right' : 'left';
+      }
+      // --- la cámara sigue al activo dentro de la franja ---
+      const camT = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
+      this.pan += (camT - this.pan) * Math.min(1, dt * 6);
+      if (Math.abs(camT - this.pan) < 0.05) this.pan = camT;
+      D.tap = false;
     }
     draw(dt) {
       if (this.phase === 'depa' || this.phase === 'door') {
@@ -276,7 +431,7 @@
       const c = G.ovCtx; if (!c) return;
       c.setTransform(2, 0, 0, 2, 0, 0);
       c.clearRect(0, 0, 640, 360);
-      const t = this.t, pan = this.pan * 90; // recorrido total del paneo (px a velocidad L4)
+      const t = this.t, pan = this.pan; // cámara en px de mundo (velocidad L4); cada capa aplica su factor
       const horizon = 252;
       // L0 · cielo de tarde dorada + nubes dibujadas
       const sky = c.createLinearGradient(0, 0, 0, horizon);
@@ -338,15 +493,27 @@
       const tileOff = -(pan % 32);
       for (let x = tileOff; x < 640; x += 32) { c.beginPath(); c.moveTo(x, horizon + 4); c.lineTo(x - 8, 360); c.stroke(); }
       for (let y = horizon + 16; y < 360; y += 18) { c.beginPath(); c.moveTo(0, y); c.lineTo(640, y); c.stroke(); }
-      // L4 · la Puerta + Ximena + Jose (con su ramo)
-      const groundY = 316;
-      this.drawDoor2D(c, 84 - pan * 0.35, groundY, this.phaseT < 0.9 ? 1 - this.phaseT / 0.9 : 0);
-      this.drawChar2D(c, 'ximena', 168, groundY, 96, Math.floor(t * 1.4), null, false, Math.sin(t * 2.2) * 1.2);
-      const jx = 238, hop = this.joseReacted ? Math.abs(Math.sin(t * 5)) * 3 : 0;
-      this.drawChar2D(c, 'jose', jx, groundY, 96, Math.floor(t * 1.4), this.joseExpr, false, -hop);
-      if (this.joseReacted) this.drawBouquet(c, jx + 17, groundY - 52 - hop);
+      // L4 · la Puerta (fija en su mundo) + Ximena + Jose (con su ramo)
+      const groundY = this.groundY;
+      const openK = this.phase === 'plaza' && this.phaseT < 0.9 ? 1 - this.phaseT / 0.9 : 0;
+      this.drawDoor2D(c, this.doorX - pan, groundY, openK);
+      const hop = this.joseReacted && this.phase === 'plaza' ? Math.abs(Math.sin(t * 5)) * 3 : 0;
+      // Se dibujan de atrás hacia adelante (menor y primero). En
+      // el revelado ambos están en idle; en 'free' quien se mueve
+      // usa su caminata lateral (walk_right, espejo a la
+      // izquierda) con el frame avanzando por DISTANCIA recorrida
+      // a la cadencia del juego (~9,8 u/frame, ciclos de 3 en
+      // ping-pong como en world.js); en reposo, idle.
+      const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
+      for (const ch of chars) {
+        let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
+        if (this.phase === 'free' && ch.moving) { anim = 'walk_right'; idx = this.walkIdx(ch.id, ch.dist); bobY = 0; }
+        if (ch.id === 'jose' && hop) bobY = -hop;
+        this.drawChar2D(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
+        if (ch.id === 'jose' && this.joseReacted) this.drawBouquet(c, ch.x - pan + (ch.dir === 'left' ? -17 : 17), ch.y - 52 + bobY);
+      }
       // L5 · poste en primer plano (desenfocado por código: alpha + sombra)
-      const postX = 566 - pan * 1.4;
+      const postX = ((566 - pan * 1.4) % 700 + 700) % 700 - 30;
       c.save();
       c.shadowColor = 'rgba(20,14,26,0.9)'; c.shadowBlur = 9;
       c.fillStyle = 'rgba(24,18,32,0.88)';
@@ -354,12 +521,20 @@
       c.beginPath(); c.arc(postX + 6.5, 26, 10, 0, 6.3); c.fill();
       c.restore();
       c.fillStyle = 'rgba(255,214,140,0.5)'; c.beginPath(); c.arc(postX + 6.5, 26, 5, 0, 6.3); c.fill();
-      // luz de llegada (se disipa) y fundido de salida de la Parte 1
+      // luz de llegada (se disipa al inicio del revelado)
       if (this.phase === 'plaza' && this.phaseT < 0.8) { c.fillStyle = `rgba(255,244,214,${(1 - this.phaseT / 0.8).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
-      if (this.phase === 'fadeout') { c.fillStyle = `rgba(12,10,20,${Math.min(1, this.phaseT / 1.2).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
     }
-    drawChar2D(c, id, x, baseY, h, idx, expr, flip, bobY) {
-      const fr = Sp.frame(id, 'idle', idx, { expr, flip });
+    // Índice del ciclo de caminata lateral según la distancia
+    // recorrida: ~9,8 u por frame (la cadencia de world.js);
+    // ciclos de 3 frames en ping-pong (0,1,2,1), otros en loop.
+    walkIdx(id, dist) {
+      const len = Sp.animLen(id, 'walk_right') || 1;
+      const beat = Math.floor(dist / 9.8);
+      if (len === 3) { const per = 4, k = ((beat % per) + per) % per; return k < 3 ? k : per - k; }
+      return ((beat % len) + len) % len;
+    }
+    drawChar2D(c, id, x, baseY, h, anim, idx, expr, flip, bobY) {
+      const fr = Sp.frame(id, anim, idx, { expr, flip });
       if (!fr || !fr.width) return;
       const w = h * fr.width / fr.height;
       c.drawImage(fr, x - w / 2, baseY - h + (bobY || 0), w, h);
