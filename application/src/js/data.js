@@ -415,6 +415,56 @@
       },
     },
 
+    // ----- Final alternativo J1407b (SPACE_RINGS_ENDING) -----
+    // Entradas de PRÁCTICA y de la cadena del final. La condición de
+    // desbloqueo en la historia sigue pendiente de las decisiones de
+    // guion A–D de Jose (ver el HOOK en game.js): estas entradas NO
+    // están en G.STORY y ningún evento las dispara todavía.
+    anillos: {
+      title: 'Anillos de J1407b', kind: 'Duelo', type: 'minigame', game: 'anillos', boss: 'jose', bossLabel: 'José · copiloto Pollito', view: 'todo',
+      chat: [
+        { who: 'sistema', text: 'El cohete de los que se fueron volvió por ustedes. La pista de carrera es un anillo de J1407b.' },
+        { who: 'jose', text: 'Carrera de cohetes sobre el anillo, 2 contra 2. Pollito va de copiloto conmigo y no acepta reclamos.', direct: true },
+      ],
+      intro: 'Carrera en cohete sobre un anillo de J1407b, el «Súper Saturno» de los 37 anillos. Tu cohete acelera solo: cambia de carril con ← → (o tocando el lado de la pantalla) para esquivar los meteoritos, que ocupan 1 o 2 de los 3 carriles y avisan con su sombra. Tu copiloto (tu primer partner) te sugiere el carril seguro: si vas al contrario, el cohete DUDA 0,3 s y cambia tarde. Chocar no elimina: frena. José corre con Pollito de copiloto, que se ríe si chocas tú y se asusta si chocan ellos.',
+      goal: 'Cruza el aro de luz al final del anillo antes que el cohete de José.',
+      results: {
+        win: { effects: { quality: 5 }, reply: (who) => [{ who, text: '¡Les ganamos la carrera del anillo! El copiloto y yo somos un equipo de NASCAR espacial.', mood: 'happy' }, { who: 'jose', text: 'Pollito jura que él manejaba. Manejaba yo. Solo conste.', direct: true }] },
+        tie: { effects: { noise: 4 }, reply: () => [{ who: 'alan', text: 'Empate en el anillo. Dos cohetes llegaron al aro a la vez a 434 años luz de la sala.' }] },
+        lose: { effects: { quality: -4 }, reply: () => [{ who: 'jose', text: '¡Primer lugar en J1407b! Lo voy a poner en mi currículum.', direct: true }, { who: 'pollito', text: '😼' }] },
+      },
+    },
+
+    cinturon: {
+      title: 'Cinturón de asteroides', kind: 'Duelo', type: 'minigame', game: 'cinturon', boss: 'jose', view: 'todo',
+      chat: [
+        { who: 'sistema', text: 'Los dos cohetes quedaron averiados. El último tramo a la fiesta se hace flotando.' },
+        { who: 'jose', text: 'Flotando, con inercia, entre asteroides. El primero que cruce el aro se queda con el descubrimiento del planeta.', direct: true },
+      ],
+      intro: 'Duelo 1 vs 1 flotando en un cinturón de asteroides: impulsa tu mochila con las flechas (o WASD). No hay freno de mano: la inercia manda y el arrastre apenas ayuda, así que impulsa en contra para frenar. Chocar con un asteroide te deja aturdido girando 1,5 s (y aparta el asteroide). Hay asteroides con formas de fiesta — pastel, globo, regalo — y Pollito flota libre empujando rocas sin querer. Si ganaste la carrera de los Anillos, sales adelantado: más cerca del aro.',
+      goal: 'Cruza primero el aro a cuadros al final del cinturón.',
+      results: {
+        win: { effects: { quality: 5 }, reply: (who) => [{ who, text: '¡Crucé el aro primero! El cinturón de asteroides tiene dueño y no es José.', mood: 'happy' }, { who: 'jose', text: 'Ok. Pero el planeta lo nombré yo primero. Se llama José-1.', direct: true }] },
+        tie: { effects: { noise: 4 }, reply: () => [{ who: 'majo', text: 'Empate en el aro. Cruzaron flotando al mismo tiempo, como dos medias sincronizadas.' }] },
+        lose: { effects: { quality: -4 }, reply: () => [{ who: 'jose', text: '¡DESCUBRÍ UN PLANETA! Bueno, crucé el aro primero. Es casi lo mismo.', direct: true }, { who: 'itzel', text: 'José llegó primero flotando y ya se autonombró descubridor. Nadie lo baja de ahí.', mood: 'angry' }] },
+      },
+    },
+
+    finalj1407b: {
+      title: 'Final J1407b', kind: 'Final', type: 'minigame', game: 'finalj1407b', boss: 'jose', bossLabel: 'José · copiloto Pollito', view: 'todo',
+      chat: [
+        { who: 'sistema', text: '00:00. La fiesta está lista, pero nadie grita «sorpresa»: se escucha un cohete aterrizar en el techo.' },
+        { who: 'majo', text: 'Carguen a Ximena dormida. Nos vamos… un poquito más lejos que la sala.' },
+      ],
+      intro: 'La cadena COMPLETA del final alternativo: despegue desde la azotea con Ximena dormida, carrera «Anillos de J1407b» (2 vs 2 en cohete), el tramo flotando del «Cinturón de asteroides» (1 vs 1 contra José) y la fiesta en gravedad baja sobre el anillo mayor, con su foto de grupo. Ganar los Anillos te da salida adelantada en el Cinturón; perder el Cinturón no te quita el final: cambia el cierre (y el estado del pastel).',
+      goal: 'Llega a la fiesta sobre el anillo mayor: SPACE_RINGS_ENDING.',
+      results: {
+        win: { effects: { quality: 8 }, reply: (who) => [{ who, text: 'Hicimos la fiesta sobre los anillos de J1407b. No cabía en el planeta. Literal.', mood: 'happy' }] },
+        tie: { effects: { quality: 4 }, reply: () => [{ who: 'majo', text: 'La fiesta espacial salió, con empate y todo. J1407b aprobó.' }] },
+        lose: { effects: { quality: 2 }, reply: () => [{ who: 'jose', text: 'Llegué primero, pero admito: la fiesta en el anillo quedó mejor que mi plan.', direct: true }] },
+      },
+    },
+
     // ----- eventos reactivos -----
     vuelta: {
       title: 'La vuelta', kind: 'Sueño', type: 'decision', reactive: true, timer: 9, view: 'xroom',
@@ -488,6 +538,10 @@
       text: (s) => s.quality >= 75 && s.sus < 35
         ? 'Ximena abre la puerta de su cuarto y la sala entera estalla. Luces, comida, su gente. Tarda un segundo en entender, y otro en ponerse a llorar de la risa. Por una noche, son sus amigos quienes cuidan de ella.'
         : 'Ximena sale de su cuarto y todos gritan a la vez. No es la fiesta más elegante del mundo, pero es para ella, y lo sabe. Se queda mirando un rato largo antes de decir: "No puedo creer que hicieran todo esto".',
+    },
+    espacio: {
+      title: 'FIESTA EN J1407B', tone: 'good',
+      text: 'La fiesta no se hizo en la sala: se hizo sobre los anillos de J1407b, el «Súper Saturno» de los 37 anillos, a 434 años luz. Ximena despertó flotando sobre un anillo, con los otros 36 detrás, y solo atinó a decir: "¿Esto… sigue siendo mi casa?". Hiciste una fiesta tan buena que no cabía en el planeta.',
     },
     caos: {
       title: 'EL CAOS PERFECTO', tone: 'mixed',
