@@ -2658,5 +2658,636 @@
     }
   }
 
-  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, CactusRaceDuel, ImageDuel, BalloonDuel, buildDecoSet, CandleGame };
+  // =========================================================
+  // 15. FINAL LEYENDAS — «La nueva película de Las Leyendas»
+  // (LEYENDAS_MOVIE_ENDING · pedido de Jose, 2026-11-21)
+  // =========================================================
+  // Segundo final alternativo, con el mismo patrón que J1407b
+  // (sección 14 de la rama feat/final-j1407b): escenas PROGRAMADAS
+  // EN 3D (la sala-set con la casa existente, el patio de hexágonos
+  // y el patio nocturno de la soga se construyen con cajas/planos
+  // por código; NADA de imágenes de fondo).
+  //
+  // Alebrije y Teodora NO tienen hoja definida en el repo: se
+  // dibujan POR CÓDIGO (canvas) siguiendo el mapa de sprites
+  // aprobado (files/diseno-leyendas/mapa-sprites-teodora-alebrije-v1.md):
+  //  · Alebrije = adaptación de Jose: cabeza amarilla, hocico
+  //    naranja, ojos NEGROS enormes, lengua roja rizada fuera,
+  //    antenas verdes, crines rojo/naranja, cuerpo morado con panza
+  //    magenta, mancha roja con puntos en SU flanco izquierdo
+  //    visible en frontal, aleta dorsal amarilla, extremidades
+  //    verdes, cola anillada. NUNCA ojos verdes.
+  //  · Teodora: pelo naranja cobrizo, sombrero rosa con banda a
+  //    cuadros y moño lila en SU lado izquierdo (derecha del
+  //    observador; nunca espejar), piel pálida con pecas, vestido
+  //    en capas morado/rosa, medias a rayas moradas, botas magenta;
+  //    siempre FLOTA (sin contacto con el suelo).
+  // HOOK: cuando se produzcan las hojas definidas de ambos, basta
+  // sustituir albCv/teoCv por frames de la hoja (o moverlos a
+  // G.CHARS y borrar G.SPECIALS de data.js); los duelos solo usan
+  // los canvas de este bloque y G.specialFace/G.specialURL.
+  const clamp15 = (v, a, b) => Math.max(a, Math.min(b, v));
+  function codeCv(w, h, fn) { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; fn(cv.getContext('2d')); return cv; }
+  function ell(x, cx, cy, rx, ry, fill, stroke) { x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, 6.3); if (fill) { x.fillStyle = fill; x.fill(); } if (stroke) { x.strokeStyle = stroke; x.lineWidth = 4; x.stroke(); } }
+  function circ(x, cx, cy, r, fill, stroke) { ell(x, cx, cy, r, r, fill, stroke); }
+
+  // ----- El Alebrije (figura completa en un lienzo de 200×220) -----
+  const ALB_ZONES = [
+    { id: 'cabeza', label: 'Cabeza', fx: 0.50, fy: 0.26 }, { id: 'crines', label: 'Crines', fx: 0.27, fy: 0.20 },
+    { id: 'antenas', label: 'Antenas', fx: 0.65, fy: 0.05 }, { id: 'aleta', label: 'Aleta', fx: 0.84, fy: 0.42 },
+    { id: 'panza', label: 'Panza', fx: 0.52, fy: 0.69 }, { id: 'cola', label: 'Cola', fx: 0.16, fy: 0.58 },
+  ];
+  function drawAlbFigure(x, o) {
+    o = o || {};
+    const W2 = '#ffffff';
+    // cola anillada (su lado derecho, detrás del cuerpo)
+    [[40, 158, 17], [30, 134, 15], [40, 112, 13]].forEach(([cx, cy, r], i) => circ(x, cx, cy, r, i % 2 ? '#e84393' : '#8b5cf6', W2));
+    // aleta dorsal amarilla (detrás, su lado izquierdo)
+    x.beginPath(); x.moveTo(146, 74); x.quadraticCurveTo(182, 92, 156, 118); x.quadraticCurveTo(146, 100, 146, 74); x.fillStyle = '#ffd23f'; x.fill(); x.strokeStyle = W2; x.lineWidth = 4; x.stroke();
+    // extremidades verdes
+    x.strokeStyle = '#58c46a'; x.lineWidth = 9; x.lineCap = 'round';
+    x.beginPath(); x.moveTo(66, 138); x.lineTo(50, 162); x.stroke(); // brazo (su derecho)
+    if (o.pose === 'director') { x.beginPath(); x.moveTo(140, 132); x.lineTo(168, 84); x.stroke(); }
+    else if (o.pose === 'duelo') { x.beginPath(); x.moveTo(140, 132); x.lineTo(164, 150); x.stroke(); }
+    else { x.beginPath(); x.moveTo(140, 132); x.lineTo(156, 158); x.stroke(); }
+    x.beginPath(); x.moveTo(88, 182); x.lineTo(84, 202); x.moveTo(122, 182); x.lineTo(128, 202); x.stroke();
+    // cuerpo morado con panza magenta
+    ell(x, 104, 138, 47, 53, '#7c4dbd', W2);
+    ell(x, 104, 152, 28, 37, '#e84393', null);
+    // mancha roja con puntos en SU flanco izquierdo (visible en frontal)
+    ell(x, 141, 126, 12, 21, '#e23b4e', null);
+    x.fillStyle = '#ffd7de'; [[138, 116], [145, 128], [139, 139]].forEach(([px, py]) => circ(x, px, py, 2.4, '#ffd7de'));
+    // crines rojo/naranja detrás de la cabeza
+    for (let i = 0; i < 6; i++) { const a = Math.PI * (0.95 + i * 0.34), cx = 100 + Math.cos(a) * 36, cy = 58 + Math.sin(a) * 34; x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a) * 20, cy + Math.sin(a) * 20); x.lineTo(cx + Math.cos(a + 0.5) * 8, cy + Math.sin(a + 0.5) * 8); x.closePath(); x.fillStyle = i % 2 ? '#ff8a3c' : '#e23b4e'; x.fill(); }
+    // antenas verdes con punta redonda
+    x.strokeStyle = '#58c46a'; x.lineWidth = 5; x.beginPath(); x.moveTo(86, 30); x.quadraticCurveTo(76, 12, 70, 8); x.moveTo(116, 30); x.quadraticCurveTo(128, 12, 134, 10); x.stroke();
+    circ(x, 69, 7, 6, '#58c46a', W2); circ(x, 135, 9, 6, '#58c46a', W2);
+    // cabeza amarilla redonda
+    circ(x, 100, 58, 35, '#f7c948', W2);
+    // hocico naranja y lengua roja rizada fuera
+    ell(x, 100, 76, 17, 12, '#ff8a3c', W2);
+    x.fillStyle = '#7a4416'; circ(x, 94, 72, 2, '#7a4416'); circ(x, 106, 72, 2, '#7a4416');
+    x.strokeStyle = '#e23b4e'; x.lineWidth = 6; x.beginPath(); x.moveTo(100, 86); x.quadraticCurveTo(94, 98, 104, 102); x.quadraticCurveTo(112, 105, 106, 110); x.stroke();
+    x.strokeStyle = '#ff8fa3'; x.lineWidth = 2; x.beginPath(); x.moveTo(100, 88); x.quadraticCurveTo(96, 97, 103, 100); x.stroke();
+    // ojos NEGROS enormes (identidad de la adaptación de Jose)
+    if (o.pose === 'triste') { ell(x, 85, 54, 9, 5, '#14101c'); ell(x, 115, 54, 9, 5, '#14101c'); }
+    else { ell(x, 85, 52, 9, 13, '#14101c'); ell(x, 115, 52, 9, 13, '#14101c'); circ(x, 88, 46, 2.8, '#fff'); circ(x, 118, 46, 2.8, '#fff'); }
+    if (o.pose === 'director') { // claqueta en la mano levantada
+      x.save(); x.translate(172, 62); x.rotate(-0.3); x.fillStyle = '#23232e'; x.fillRect(-16, -12, 32, 24); x.fillStyle = '#e9eefb'; for (let i = 0; i < 4; i++) x.fillRect(-16 + i * 8, -12, 4, 6); x.restore();
+    }
+    if (o.glow != null && o.glow >= 0) { // resplandor TEMPORAL del casting: la paleta base nunca cambia
+      const z = ALB_ZONES[o.glow], gx = z.fx * 200, gy = z.fy * 220, t = o.t || 0;
+      const gr = x.createRadialGradient(gx, gy, 2, gx, gy, 34 + Math.sin(t * 9) * 5);
+      gr.addColorStop(0, o.glowColor || 'rgba(255,235,150,0.95)'); gr.addColorStop(1, 'rgba(255,235,150,0)');
+      x.fillStyle = gr; x.beginPath(); x.arc(gx, gy, 42, 0, 6.3); x.fill();
+      x.strokeStyle = o.glowColor || '#ffe96a'; x.lineWidth = 3; x.beginPath(); x.arc(gx, gy, 24 + Math.sin(t * 9) * 3, 0, 6.3); x.stroke();
+    }
+  }
+  const albCvCache = {};
+  function albCv(pose, glow, glowColor) {
+    const key = (pose || 'idle') + '|' + (glow == null ? -1 : glow) + '|' + (glowColor || '');
+    if (!albCvCache[key]) albCvCache[key] = codeCv(200, 220, (x) => drawAlbFigure(x, { pose, glow, glowColor, t: 1 }));
+    return albCvCache[key];
+  }
+  function albFaceCv() {
+    if (!albCvCache.face) albCvCache.face = codeCv(96, 96, (x) => { x.scale(2.4, 2.4); x.translate(-52, -14); drawAlbFigure(x, {}); });
+    return albCvCache.face;
+  }
+
+  // ----- Teodora (figura completa en un lienzo de 170×210; flota) -----
+  function drawTeoFigure(x, o) {
+    o = o || {};
+    const W2 = '#ffffff', tilt = o.pose === 'derrotada' ? 0.16 : 0;
+    x.save(); x.translate(85, 105); x.rotate(tilt); x.translate(-85, -105);
+    // pelo naranja cobrizo detrás
+    ell(x, 85, 88, 53, 64, '#d96c33', W2);
+    // moño grande del vestido (atrás, asoma a los lados)
+    x.fillStyle = '#f08cc0'; x.beginPath(); x.moveTo(52, 118); x.lineTo(28, 104); x.lineTo(30, 132); x.closePath(); x.fill(); x.beginPath(); x.moveTo(118, 118); x.lineTo(142, 104); x.lineTo(140, 132); x.closePath(); x.fill();
+    // medias a rayas moradas y botas magenta (cuelgan: ella flota)
+    [70, 94].forEach((lx) => { for (let i = 0; i < 4; i++) { x.fillStyle = i % 2 ? '#8e44ad' : '#e9d8ff'; x.fillRect(lx, 168 + i * 6, 10, 6); } x.fillStyle = '#d6336c'; x.fillRect(lx - 2, 192, 14, 12); x.fillRect(lx - 2, 200, 18, 5); });
+    // vestido en capas morado/rosa
+    x.beginPath(); x.moveTo(58, 116); x.lineTo(112, 116); x.lineTo(124, 148); x.lineTo(46, 148); x.closePath(); x.fillStyle = '#f08cc0'; x.fill(); x.strokeStyle = W2; x.lineWidth = 3; x.stroke();
+    x.beginPath(); x.moveTo(50, 140); x.lineTo(120, 140); x.lineTo(130, 170); x.lineTo(40, 170); x.closePath(); x.fillStyle = '#8e44ad'; x.fill(); x.stroke();
+    x.fillStyle = '#5e2f73'; x.fillRect(60, 92, 50, 28); x.strokeStyle = W2; x.lineWidth = 3; x.beginPath(); x.rect(60, 92, 50, 28); x.stroke();
+    // brazos de piel pálida según pose
+    x.strokeStyle = '#ffe9dc'; x.lineWidth = 8; x.lineCap = 'round';
+    if (o.pose === 'selfie') { x.beginPath(); x.moveTo(108, 98); x.lineTo(138, 62); x.stroke(); x.beginPath(); x.moveTo(62, 98); x.lineTo(48, 124); x.stroke(); x.fillStyle = '#ff5e8a'; x.fillRect(132, 34, 14, 26); x.fillStyle = '#ffe3ee'; x.fillRect(134, 37, 10, 18); }
+    else if (o.pose === 'trazo') { x.beginPath(); x.moveTo(108, 98); x.lineTo(134, 116); x.stroke(); x.beginPath(); x.moveTo(62, 98); x.lineTo(48, 124); x.stroke(); x.strokeStyle = '#ffd23f'; x.lineWidth = 4; x.beginPath(); x.moveTo(134, 116); x.lineTo(148, 104); x.stroke(); circ(x, 149, 103, 4, '#ffe96a'); }
+    else if (o.pose === 'altiva') { x.beginPath(); x.moveTo(108, 98); x.lineTo(122, 118); x.stroke(); x.beginPath(); x.moveTo(62, 98); x.lineTo(46, 116); x.stroke(); }
+    else { x.beginPath(); x.moveTo(62, 98); x.lineTo(48, 126); x.moveTo(108, 98); x.lineTo(122, 126); x.stroke(); }
+    // cara pálida con pecas
+    circ(x, 85, 58, 27, '#ffe9dc', W2);
+    x.fillStyle = '#e8a37c'; [[70, 66], [76, 69], [97, 67], [101, 63]].forEach(([px, py]) => circ(x, px, py, 1.3, '#e8a37c'));
+    // pelo frontal (flequillo cobrizo)
+    x.beginPath(); x.ellipse(85, 44, 27, 13, 0, Math.PI, 6.3); x.fillStyle = '#d96c33'; x.fill();
+    // ojos grandes con pestañas (pose de derrotada: mareada)
+    if (o.pose === 'derrotada') { x.strokeStyle = '#2b2130'; x.lineWidth = 2.4; [[74, 58], [96, 58]].forEach(([ex, ey]) => { x.beginPath(); x.moveTo(ex - 5, ey - 5); x.lineTo(ex + 5, ey + 5); x.moveTo(ex + 5, ey - 5); x.lineTo(ex - 5, ey + 5); x.stroke(); }); }
+    else { ell(x, 74, 59, 4.6, 6.4, '#2b2130'); ell(x, 96, 59, 4.6, 6.4, '#2b2130'); circ(x, 75.5, 56.5, 1.5, '#fff'); circ(x, 97.5, 56.5, 1.5, '#fff'); x.strokeStyle = '#2b2130'; x.lineWidth = 1.8; x.beginPath(); x.moveTo(68, 51); x.lineTo(64, 48); x.moveTo(102, 51); x.lineTo(106, 48); x.stroke(); }
+    // boca según pose
+    x.strokeStyle = '#b04a5e'; x.lineWidth = 2.2; x.beginPath();
+    if (o.pose === 'feliz' || o.pose === 'selfie') { x.arc(85, 68, 6, 0.15 * Math.PI, 0.85 * Math.PI); }
+    else if (o.pose === 'derrotada') { x.arc(85, 76, 5, 1.15 * Math.PI, 1.85 * Math.PI); }
+    else { x.moveTo(80, 71); x.lineTo(90, 71); }
+    x.stroke();
+    // sombrero rosa: ala ancha, copa, banda a cuadros y moño lila en
+    // SU lado izquierdo (derecha del observador; NUNCA espejar)
+    ell(x, 85, 34, 46, 10, '#f78fb3', W2);
+    x.beginPath(); x.ellipse(85, 26, 24, 15, 0, Math.PI, 6.3); x.fillStyle = '#f78fb3'; x.fill(); x.strokeStyle = W2; x.lineWidth = 3; x.stroke();
+    for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#8e44ad' : '#ffffff'; x.fillRect(63 + i * 5.6, 29, 5.6, 6); }
+    ell(x, 124, 24, 9, 6, '#b48cf0', W2); ell(x, 136, 27, 9, 6, '#b48cf0', W2); circ(x, 129, 26, 4, '#9b6fe0', W2);
+    x.restore();
+  }
+  const teoCvCache = {};
+  function teoCv(pose) { const k = pose || 'idle'; if (!teoCvCache[k]) teoCvCache[k] = codeCv(170, 210, (x) => drawTeoFigure(x, { pose })); return teoCvCache[k]; }
+  function teoFaceCv() { if (!teoCvCache.face) teoCvCache.face = codeCv(96, 96, (x) => { x.scale(2.2, 2.2); x.translate(-41, -12); drawTeoFigure(x, {}); }); return teoCvCache.face; }
+  // Calaverita utilera de la soga (extra simple dibujado por código;
+  // NO es uno de los Hermanos Calavera, que son otro final).
+  function calCv() {
+    if (!teoCvCache.cal) teoCvCache.cal = codeCv(90, 110, (x) => {
+      circ(x, 45, 32, 21, '#f4f1e8', '#2b2130'); ell(x, 37, 32, 5, 7, '#2b2130'); ell(x, 53, 32, 5, 7, '#2b2130');
+      x.fillStyle = '#2b2130'; x.beginPath(); x.moveTo(45, 40); x.lineTo(41, 47); x.lineTo(49, 47); x.closePath(); x.fill();
+      x.strokeStyle = '#2b2130'; x.lineWidth = 1.6; for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(36 + i * 5, 52); x.lineTo(36 + i * 5, 58); x.stroke(); }
+      x.fillStyle = '#e23b4e'; x.fillRect(30, 62, 30, 20); x.fillStyle = '#3a2c50'; x.fillRect(30, 82, 30, 10);
+      x.strokeStyle = '#f4f1e8'; x.lineWidth = 6; x.lineCap = 'round'; x.beginPath(); x.moveTo(30, 66); x.lineTo(14, 52); x.moveTo(60, 66); x.lineTo(76, 52); x.stroke();
+    });
+    return teoCvCache.cal;
+  }
+  G.specialFace = (id) => (id === 'alebrije' ? albFaceCv() : teoFaceCv());
+  const specialURLs = {};
+  G.specialURL = (id) => { if (!specialURLs[id]) specialURLs[id] = G.specialFace(id).toDataURL(); return specialURLs[id]; };
+  // HUD propio de los duelos de Leyendas (el hud() base usa face(),
+  // que exige hoja definida; aquí el retrato sale del dibujo por código)
+  function legendsHud(d, c, title, lines) {
+    panel(c, 8, 8, 306, 46, 'rgba(20,16,32,.78)');
+    c.drawImage(G.specialFace(d.bossId), 13, 13, 36, 36);
+    G.text(c, title, 56, 22, { size: 13, align: 'left', color: '#ffd7f0', lw: 4 });
+    G.text(c, lines, 56, 40, { size: 10.5, align: 'left', color: '#fff', lw: 3 });
+    panel(c, 470, 8, 162, 12, '#4a4458'); c.fillStyle = '#ffd23f'; c.fillRect(472, 10, 158 * clamp15(d.time / d.timeMax, 0, 1), 8);
+    if (d.bubble) { const bw = Math.min(430, 26 + d.bubble.text.length * 6.4); panel(c, 320 - bw / 2, 58, bw, 24, 'rgba(20,16,32,.85)'); G.text(c, d.bubble.text, 320, 71, { size: 12.5, color: d.bubble.color, lw: 4 }); }
+  }
+
+  // ----- Minijuego de casting: «El patrón del Alebrije» -----
+  class PatronDuel extends Duel {
+    constructor(who, done) {
+      super(who, 'alebrije', done, { rounds: 1, need: 1, time: 300, label: 'CASTING', title: 'EL PATRÓN DEL ALEBRIJE', hint: 'Mira la secuencia · ← → elige zona · ESPACIO la marca (o toca la zona)', rendT: 1.8 });
+      this.timeMax = 300;
+      this.p = new Actor(who, 520, 238); this.p.dir = 'up';
+      this.cam = CAM_SALA();
+      this.albPos = { x: 655, y: 148 };
+      this.chipRects = []; this.zonePts = [];
+      try { // toques: zonas del cuerpo y chips inferiores (se retira en finish)
+        const cv = document.querySelector('#cv');
+        if (cv && cv.addEventListener) {
+          this.tapCv = cv;
+          this.tapH = (e) => {
+            if (this.st !== 'play' || this.phase !== 'input') return;
+            const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 640, height: 360 };
+            const lx = ((e.clientX - r.left) * 640) / Math.max(1, r.width), ly = ((e.clientY - r.top) * 360) / Math.max(1, r.height);
+            for (let i = 0; i < 6; i++) { const z = this.zonePts[i]; if (z && Math.hypot(lx - z.x, ly - z.y) < 30) return this.pickZone(i); }
+            const ci = this.chipRects.findIndex((rc) => lx >= rc.x && lx <= rc.x + rc.w && ly >= rc.y && ly <= rc.y + rc.h);
+            if (ci >= 0) this.pickZone(ci);
+          };
+          cv.addEventListener('pointerdown', this.tapH);
+        }
+      } catch (e) { /* sin canvas accesible: queda el teclado */ }
+      this.begin();
+    }
+    finish(res) { if (this.tapCv && this.tapH && this.tapCv.removeEventListener) this.tapCv.removeEventListener('pointerdown', this.tapH); super.finish(res); }
+    setup() { this.r = 0; this.lost = 0; this.doneR = 0; this.tOn = 0.55; this.tOff = 0.3; this.newRound(); }
+    newRound() {
+      this.seq = Array.from({ length: 3 + this.r }, () => (Math.random() * 6) | 0);
+      this.phase = 'show'; this.showT = 0; this.prog = 0; this.sel = 0; this.flash = null;
+    }
+    advance() { // fin de ronda (completa o fallada): 2 fallos = casting cerrado; con 4/5 se aprueba
+      if (this.lost >= 2) return this.endRound('b', 'Dos rondas falladas: el Alebrije cierra el casting.');
+      if (this.r >= 4) return this.endRound(this.doneR >= 4 ? 'p' : 'b', this.doneR >= 4 ? '¡Casting superado!' : `Solo ${this.doneR} de 5 secuencias: no alcanza.`);
+      this.r++; this.newRound();
+    }
+    pickZone(i) {
+      if (this.st !== 'play' || this.phase !== 'input') return;
+      if (i === this.seq[this.prog]) {
+        this.prog++; this.flash = { i, ok: true, t: 0.35 }; G.sfx('ok');
+        if (this.prog >= this.seq.length) { this.doneR++; this.say('¡Secuencia completa!', '#7dff8a', 1); this.phase = 'between'; this.bt = 1.0; }
+      } else {
+        this.flash = { i, ok: false, t: 0.5 }; G.sfx('bad'); this.lost++;
+        this.say('¡Esa zona no era!', '#ff6b7a', 1.1); this.phase = 'between'; this.bt = 1.2;
+      }
+    }
+    extra() { return { rounds: this.doneR, lost: this.lost }; }
+    update(dt) {
+      this.p.update(dt);
+      if (!this.tick(dt)) return;
+      if (this.flash && (this.flash.t -= dt) <= 0) this.flash = null;
+      if (this.phase === 'show') {
+        this.showT += dt;
+        const per = this.tOn + this.tOff;
+        if (this.showT >= this.seq.length * per + 0.35) { this.phase = 'input'; this.prog = 0; this.say('¡Tu turno!', '#ffd23f', 0.9); }
+      } else if (this.phase === 'input') {
+        if (G.input.hit('left')) this.sel = (this.sel + 5) % 6;
+        if (G.input.hit('right')) this.sel = (this.sel + 1) % 6;
+        if (G.input.hit('action')) this.pickZone(this.sel);
+      } else if (this.phase === 'between') { if ((this.bt -= dt) <= 0) this.advance(); }
+    }
+    draw(dt) {
+      const t = performance.now() / 1000;
+      let glow = -1, glowColor = null;
+      if (this.phase === 'show') { const per = this.tOn + this.tOff, idx = Math.floor(this.showT / per); if (idx < this.seq.length && this.showT - idx * per < this.tOn) glow = this.seq[idx]; }
+      if (this.flash) { glow = this.flash.i; glowColor = this.flash.ok ? '#7dff8a' : '#ff6b7a'; }
+      if (this.phase === 'input' && !this.flash) { glow = this.sel; glowColor = 'rgba(120,200,255,0.9)'; }
+      const alb = { x: this.albPos.x, y: this.albPos.y };
+      W.render({
+        cam: this.cam, dt, light: W.LIGHT.fiesta, actors: [this.p], focusZ: 0,
+        sprites: () => { R.sprite(albCv('idle', glow >= 0 ? glow : null, glowColor), alb.x, 0, alb.y, { w: 118, h: 130, feet: 0, lit: 0.25, nostretch: true }); },
+        over: (c) => {
+          const b = R.project(alb.x, 0, alb.y), tp = R.project(alb.x, 130, alb.y), lf = R.project(alb.x - 59, 0, alb.y), rt = R.project(alb.x + 59, 0, alb.y);
+          this.zonePts = ALB_ZONES.map((z) => ({ x: lf.x + z.fx * (rt.x - lf.x), y: tp.y + z.fy * (b.y - tp.y) }));
+          legendsHud(this, c, 'EL PATRÓN DEL ALEBRIJE', `Ronda ${Math.min(this.r + 1, 5)}/5 · Completas: ${this.doneR} · Fallos: ${this.lost}/2`);
+          if (this.phase === 'show') G.text(c, 'MIRA LA SECUENCIA…', 320, 84, { size: 15, color: '#ffe96a', lw: 6 });
+          else if (this.phase === 'input') G.text(c, `REPITE: ${this.prog}/${this.seq.length} · zona: ${ALB_ZONES[this.sel].label}`, 320, 84, { size: 15, color: '#bfe2ff', lw: 6 });
+          this.chipRects = ALB_ZONES.map((z, i) => {
+            const w = 98, x = 14 + i * 103, y = 322;
+            panel(c, x, y, w, 26, i === this.sel && this.phase === 'input' ? '#3f6fb5' : 'rgba(20,16,32,.8)');
+            G.text(c, `${i + 1} ${z.label}`, x + w / 2, y + 14, { size: 11.5, color: '#fff', lw: 3 });
+            return { x, y, w, h: 26 };
+          });
+          if (this.st === 'rend') this.endOverlay(c);
+        },
+      });
+    }
+    endOverlay(c) {
+      const w = this.result.win;
+      c.fillStyle = 'rgba(16,12,26,.85)'; c.fillRect(0, 0, 640, 360);
+      G.icon(c, w === 'win' ? 'trofeo' : 'derrota', 320, 84, 48);
+      G.text(c, w === 'win' ? '¡CASTING SUPERADO!' : 'SIN CASTING', 320, 138, { size: 36, color: w === 'win' ? '#7dff8a' : '#ff6b7a', lw: 9 });
+      G.text(c, `Secuencias completas: ${this.doneR} de 5 · Rondas falladas: ${this.lost}`, 320, 182, { size: 15, lw: 6 });
+      G.text(c, w === 'win' ? 'El Alebrije te acepta en la película' : 'El Alebrije se esconde de nuevo entre la decoración', 320, 208, { size: 11.5 });
+    }
+  }
+
+  // ----- Boss 2A: «El set se hunde / Traza la leyenda» -----
+  // Híbrido Hexagon Heat + Trace Race en UN minijuego con rondas
+  // alternas: (a) trazo de precisión sobre la línea guía que dibuja
+  // Teodora; (b) anuncio de color por flash y carrera a los
+  // hexágonos seguros (los de ese color que la línea cruzó); el
+  // resto del suelo se hunde. Caer 2 veces = fuera de la escena.
+  const HEX_COLORS = ['#ffd23f', '#4fd0ff', '#ff8ad6'], HEX_NAMES = ['ÁMBAR', 'CELESTE', 'ROSA'];
+  const hexCvCache = {};
+  function hexCv(ci) {
+    if (!hexCvCache[ci]) hexCvCache[ci] = codeCv(64, 64, (x) => {
+      x.beginPath(); for (let i = 0; i < 6; i++) { const a = (Math.PI / 3) * i + Math.PI / 6, px = 32 + Math.cos(a) * 29, py = 32 + Math.sin(a) * 29; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.closePath();
+      x.fillStyle = HEX_COLORS[ci]; x.globalAlpha = 0.92; x.fill(); x.globalAlpha = 1; x.strokeStyle = '#fff2cf'; x.lineWidth = 3; x.stroke();
+    });
+    return hexCvCache[ci];
+  }
+  function legendPath(kind) { // línea guía (puntos cada ~12 u) en el patio: x∈[-240,240], y∈[0,200]
+    const pts = [];
+    if (kind === 'luna') { for (let a = -2.4; a <= 2.4; a += 0.16) pts.push({ x: Math.sin(a) * 150, y: 100 - Math.cos(a) * 88 }); for (let a = 2.0; a >= -2.0; a -= 0.16) pts.push({ x: Math.sin(a) * 150 + 44, y: 100 - Math.cos(a) * 66 }); }
+    else if (kind === 'calavera') { for (let a = 0; a <= 6.28; a += 0.2) pts.push({ x: Math.sin(a) * 105, y: 92 - Math.cos(a) * 74 }); pts.push({ x: 40, y: 168 }, { x: 40, y: 192 }, { x: -40, y: 192 }, { x: -40, y: 168 }); }
+    else { for (let x = -235; x <= 190; x += 14) pts.push({ x, y: 104 + Math.sin(x / 42) * 48 }); for (let a = 0; a <= 6.28; a += 0.3) pts.push({ x: 218 + Math.sin(a) * 27, y: 96 - Math.cos(a) * 27 }); }
+    return pts;
+  }
+  class TrazoDuel extends Duel {
+    constructor(who, done) {
+      super(who, 'teodora', done, { rounds: 1, need: 1, time: 300, label: 'BOSS', title: 'EL SET SE HUNDE / TRAZA LA LEYENDA', hint: 'Recorre la línea luminosa · al anuncio, corre a un hexágono del color seguro', rendT: 1.8 });
+      this.timeMax = 300;
+      this.p = new Actor(who, -200, 190);
+      this.partners = (G.S && G.S.party ? G.S.party.filter((id) => id !== who) : []).slice(0, 2).map((id, i) => new Actor(id, -160 + i * 40, 205));
+      this.cam = { x: 0, y: 96, z: 6, dist: 470, pitch: 0.66, fov: 44 };
+      this.teo = { x: -235, y: 100 };
+      this.begin();
+    }
+    setup() {
+      this.r = 0; this.fallsP = 0; this.fallsT = 0; this.precP = []; this.precT = [];
+      this.tTrazo = 11; this.tAviso = 1.4; this.tCorre = 3.4; this.tCae = 1.1; // duraciones (el humo las acorta)
+      this.newRound();
+    }
+    newRound() {
+      const kinds = ['alebrije', 'calavera', 'luna'];
+      this.pathKind = kinds[this.r % 3]; this.pts = legendPath(this.pathKind);
+      this.hexes = [];
+      for (let row = 0; row < 4; row++) for (let col = 0; col < 6; col++) this.hexes.push({ x: -250 + col * 100 + (row % 2) * 50, y: 8 + row * 54, color: (Math.random() * 3) | 0, safe: false, sink: 0 });
+      // color seguro: el que más hexágonos tenga CERCA de la línea (mín. 3)
+      let best = 0, bestN = -1;
+      for (let ci = 0; ci < 3; ci++) { const n = this.hexes.filter((h) => h.color === ci && this.distPath(h) < 36).length; if (n > bestN) { bestN = n; best = ci; } }
+      this.safeColor = best;
+      this.hexes.forEach((h) => { h.safe = h.color === best && this.distPath(h) < 36; });
+      if (this.hexes.filter((h) => h.safe).length < 2) { const near = [...this.hexes].sort((a, b) => this.distPath(a) - this.distPath(b)).slice(0, 3); near.forEach((h) => { h.color = best; h.safe = true; }); }
+      this.phase = 'trazo'; this.pt = 0; this.sampleT = 0; this.accP = 0; this.accT = 0; this.samples = 0;
+      this.teoU = 0; this.teoSelfie = this.r === 1 || Math.random() < 0.35; // selfie: se detiene y se acerca a cámara (su precisión cae)
+      this.p.x = -235; this.p.y = 196; this.teo.x = this.pts[0].x; this.teo.y = this.pts[0].y;
+      this.partners.forEach((a, i) => { a.x = -180 + i * 46; a.y = 208; a.tx = null; });
+    }
+    distPath(o) { let m = 1e9; for (let i = 0; i < this.pts.length; i += 2) { const d = Math.hypot(o.x - this.pts[i].x, o.y - this.pts[i].y); if (d < m) m = d; } return m; }
+    moveActor(a, dt, sp) { const ax = G.input.axis(); a.x = clamp15(a.x + ax.x * sp * dt, -268, 268); a.y = clamp15(a.y + ax.y * sp * dt, -14, 222); if (ax.x) a.dir = ax.x < 0 ? 'left' : 'right'; else if (ax.y) a.dir = ax.y < 0 ? 'up' : 'down'; a.moving = !!(ax.x || ax.y); }
+    extra() { const avg = (arr) => (arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0); return { precP: avg(this.precP), precT: avg(this.precT), fallsP: this.fallsP, fallsT: this.fallsT }; }
+    update(dt) {
+      const p = this.p; p.update(dt); this.partners.forEach((a) => a.update(dt));
+      if (!this.tick(dt)) return;
+      this.pt += dt;
+      if (this.phase === 'trazo') {
+        this.moveActor(p, dt, 158);
+        // Teodora recorre la línea con ruido lateral; en su selfie se
+        // detiene a mitad de camino y deriva hacia la cámara.
+        const selfieNow = this.teoSelfie && this.teoU > 0.38 && this.teoU < 0.6;
+        if (!selfieNow) this.teoU = Math.min(1, this.teoU + dt / this.tTrazo);
+        const idx = Math.min(this.pts.length - 1, Math.floor(this.teoU * (this.pts.length - 1))), base = this.pts[idx];
+        const lat = Math.sin(this.teoU * 22 + this.r * 2) * (7 + this.r * 3.5);
+        this.teo.x = base.x + lat * 0.4; this.teo.y = base.y + lat + (selfieNow ? -52 : 0);
+        this.sampleT += dt;
+        if (this.sampleT >= 0.12) { this.sampleT = 0; this.samples++; this.accP += clamp15(1 - this.distPath(p) / 62, 0, 1); this.accT += clamp15(1 - this.distPath(this.teo) / 62, 0, 1); }
+        if (this.pt >= this.tTrazo) {
+          this.precP.push(this.samples ? (this.accP / this.samples) * 100 : 0); this.precT.push(this.samples ? (this.accT / this.samples) * 100 : 0);
+          this.phase = 'aviso'; this.pt = 0; G.sfx('msg'); this.say(`¡Al color ${HEX_NAMES[this.safeColor]}!`, '#ffd7f0', 1.3);
+          this.partners.forEach((a) => { const pool = Math.random() < 0.62 ? this.hexes.filter((h) => h.safe) : this.hexes; a.tx = pool[(Math.random() * pool.length) | 0]; });
+        }
+      } else if (this.phase === 'aviso') { if (this.pt >= this.tAviso) { this.phase = 'corre'; this.pt = 0; } }
+      else if (this.phase === 'corre' || this.phase === 'cae') {
+        this.moveActor(p, dt, 218);
+        // Teodora FLOTA: tarda ~0.9 s en "pisar" (su gracia), luego va al seguro más cercano
+        if (this.pt > 0.9 || this.phase === 'cae') { const tgt = this.hexes.filter((h) => h.safe).sort((a, b) => Math.hypot(a.x - this.teo.x, a.y - this.teo.y) - Math.hypot(b.x - this.teo.x, b.y - this.teo.y))[0]; if (tgt) { const d = Math.hypot(tgt.x - this.teo.x, tgt.y - this.teo.y), step = 165 * dt; if (d > 4) { this.teo.x += ((tgt.x - this.teo.x) / d) * Math.min(step, d); this.teo.y += ((tgt.y - this.teo.y) / d) * Math.min(step, d); } } }
+        this.partners.forEach((a) => { if (a.tx) { const d = Math.hypot(a.tx.x - a.x, a.tx.y - a.y); if (d > 5) { a.x += ((a.tx.x - a.x) / d) * 175 * dt; a.y += ((a.tx.y - a.y) / d) * 175 * dt; a.moving = true; a.dir = a.tx.x < a.x ? 'left' : 'right'; } else a.moving = false; } });
+        if (this.phase === 'corre' && this.pt >= this.tCorre) { this.phase = 'cae'; this.pt = 0; G.sfx('bad'); }
+        else if (this.phase === 'cae') {
+          this.hexes.forEach((h) => { if (!h.safe && h.sink < 1) h.sink = Math.min(1, h.sink + dt / 0.55); });
+          if (this.pt >= this.tCae) { // resolución de la caída (con la gracia de flotación de Teodora ya corrida)
+            const onSafe = (o) => { const h = this.hexes.reduce((m, hh) => (Math.hypot(o.x - hh.x, o.y - hh.y) < Math.hypot(o.x - m.x, o.y - m.y) ? hh : m), this.hexes[0]); return Math.hypot(o.x - h.x, o.y - h.y) < 34 && h.safe; };
+            if (!onSafe(p)) { this.fallsP++; p.emo('💦', 1); W.puff(p.x, p.y, 8, true); this.say('¡Te hundiste!', '#ff6b7a', 1); }
+            if (!onSafe(this.teo)) { this.fallsT++; this.say('¡Teodora también cayó!', '#7dff8a', 1); }
+            if (this.fallsP >= 2) return this.endRound('b', 'Caíste dos veces: fuera de la escena.');
+            if (this.fallsT >= 2) return this.endRound('p', 'Teodora cayó dos veces: ¡prueba superada!');
+            if (this.r >= 2) { const e = this.extra(); return this.endRound(e.precP > e.precT ? 'p' : e.precP < e.precT ? 'b' : 'tie', `Precisión — Tú: ${e.precP}% · Teodora: ${e.precT}%`); }
+            this.r++; this.newRound();
+          }
+        }
+      }
+    }
+    draw(dt) {
+      const t = performance.now() / 1000, p = this.p;
+      W.render({
+        cam: this.cam, dt, light: W.LIGHT.fiesta, noApartment: true, actors: [p, ...this.partners], focusZ: 0,
+        boxes: (mb) => {
+          mb.box(0, -5, 96, 620, 10, 330, '#5d4037'); // piso del patio de la casona
+          mb.box(0, 55, -64, 640, 130, 12, '#7a4a3a'); mb.box(0, 118, -64, 640, 16, 14, '#5d3427'); // fachada con cornisas
+          [-220, 0, 220].forEach((ax) => mb.box(ax, 42, -56, 64, 84, 6, '#4a2e22')); // arcos oscuros
+        },
+        sprites: () => {
+          for (const h of this.hexes) R.flat(hexCv(h.color), h.x, 1 - h.sink * 26, h.y, 60, 60, { lit: 0.25, alpha: h.safe && this.phase !== 'trazo' ? 1 : 0.55 + 0.2 * Math.sin(t * 3 + h.x) });
+          if (this.phase === 'trazo' || this.phase === 'aviso') for (let i = 0; i < this.pts.length; i += 2) R.flat(R.glowTex, this.pts[i].x, 1.6, this.pts[i].y, 15, 15, { color: [1, 0.85, 0.35], alpha: 0.5 + 0.3 * Math.sin(t * 5 + i) });
+          R.flat(R.glowTex, this.teo.x, 0.8, this.teo.y, 44, 30, { color: [0.1, 0.05, 0.16], alpha: 0.5 }); // sombra suave de fantasma
+          R.sprite(teoCv(this.phase === 'aviso' ? 'selfie' : 'trazo'), this.teo.x, 13 + Math.sin(t * 2.2) * 3, this.teo.y, { w: 56, h: 70, feet: 0, lit: 0.2, nostretch: true });
+        },
+        over: (c) => {
+          const e = this.extra();
+          legendsHud(this, c, 'EL SET SE HUNDE / TRAZA LA LEYENDA', `Ronda ${Math.min(this.r + 1, 3)}/3 · Precisión tú ${e.precP}% · Teodora ${e.precT}% · Caídas ${this.fallsP}/2`);
+          if (this.phase === 'trazo') G.text(c, `TRAZA LA LEYENDA (${this.pathKind.toUpperCase()}) — ${Math.max(0, this.tTrazo - this.pt).toFixed(0)}s`, 320, 84, { size: 14, color: '#ffe96a', lw: 6 });
+          else if (this.phase === 'aviso' || this.phase === 'corre') { panel(c, 190, 66, 260, 34, HEX_COLORS[this.safeColor]); G.text(c, `¡AL ${HEX_NAMES[this.safeColor]}!`, 320, 84, { size: 19, color: '#241a10', lw: 2, stroke: false }); if (this.phase === 'corre') G.text(c, `El set se hunde en ${Math.max(0, this.tCorre - this.pt).toFixed(1)}…`, 320, 116, { size: 13, color: '#ff6b7a', lw: 5 }); }
+          else if (this.phase === 'cae') G.text(c, '¡SE HUNDE!', 320, 84, { size: 19, color: '#ff6b7a', lw: 7 });
+          if (this.st === 'rend') this.endOverlay(c);
+        },
+      });
+    }
+    endOverlay(c) {
+      const w = this.result.win, e = this.extra();
+      c.fillStyle = 'rgba(16,12,26,.85)'; c.fillRect(0, 0, 640, 360);
+      G.icon(c, w === 'win' ? 'trofeo' : w === 'tie' ? 'empate' : 'derrota', 320, 84, 48);
+      G.text(c, w === 'win' ? '¡SUPERASTE A TEODORA!' : w === 'tie' ? 'EMPATE' : 'TEODORA SE QUEDA CON LA ESCENA', 320, 138, { size: 30, color: w === 'win' ? '#7dff8a' : w === 'tie' ? '#ffd23f' : '#ff6b7a', lw: 9 });
+      G.text(c, `Precisión — Tú: ${e.precP}% · Teodora: ${e.precT}% · Caídas tú ${this.fallsP} · ella ${this.fallsT}`, 320, 182, { size: 14.5, lw: 6 });
+      G.text(c, 'Prueba 2A de la boss final de Leyendas', 320, 208, { size: 11.5 });
+    }
+  }
+
+  // ----- Boss 2B: «La soga de fuego» (Hot Rope Jump) -----
+  class SogaDuel extends Duel {
+    constructor(who, done) {
+      super(who, 'teodora', done, { rounds: 1, need: 1, time: 240, label: 'BOSS', title: 'LA SOGA DE FUEGO', hint: 'Mantén ESPACIO para cargar el salto y SUELTA para saltar · la llama azul va lento, la naranja rápido', rendT: 1.8 });
+      this.timeMax = 240;
+      this.p = new Actor(who, -32, 0);
+      this.partners = (G.S && G.S.party ? G.S.party.filter((id) => id !== who) : []).slice(0, 2).map((id, i) => new Actor(id, i ? 118 : -112, 0));
+      this.cam = { x: 0, y: 0, z: 6, dist: 350, pitch: 0.3, fov: 42 };
+      this.begin();
+    }
+    setup() {
+      this.a = -Math.PI / 2; this.passes = 0; this.maxPasses = 40;
+      this.mk = (x) => ({ x, h: 0, v: 0, out: false, roces: 0, charge: 0, react: rnd(0.3, 0.48), smoke: 0 });
+      this.J = { p: this.mk(-32), t: this.mk(46), n: this.partners.map((a) => this.mk(a.x)) };
+      this.teoSelfieT = 0;
+      for (const a of [this.p, ...this.partners]) { a.dir = 'right'; }
+    }
+    period() { return Math.max(0.8, 1.5 - this.passes * 0.018); } // la soga acelera por tramos
+    omega() { // con amagues: algunos tramos parten lento y aprietan al final
+      const base = (Math.PI * 2) / this.period();
+      const ph = ((this.a + Math.PI / 2) % (Math.PI * 2)) / (Math.PI * 2);
+      const feint = this.passes % 6 === 4;
+      return base * (feint ? (ph < 0.45 ? 0.7 : 1.4) : 1);
+    }
+    timeToBottom() { const twoPi = Math.PI * 2, d = (Math.PI / 2 - (this.a % twoPi) + twoPi) % twoPi; return d / this.omega(); }
+    jumpP(charge) { const j = this.J.p; if (!j.out && j.h <= 0) { j.v = 335 + clamp15(charge, 0, 0.5) * 430; j.h = 0.01; } }
+    stepJumper(j, a, dt, grav, mine) {
+      if (j.out) { if (j.smoke > 0) j.smoke -= dt; if (a) { a.jy = 0; a.jv = 0; } return; }
+      if (j.h > 0 || j.v > 0) { j.v -= grav * dt; j.h += j.v * dt; if (j.h <= 0) { j.h = 0; j.v = 0; if (a) a.squash = 0.14; } }
+      if (a) { a.jy = j.h; a.jv = 0; }
+    }
+    extra() { return { passes: this.passes, rocesP: this.J.p.roces, rocesT: this.J.t.roces }; }
+    update(dt) {
+      const p = this.p; p.update(dt); this.partners.forEach((a) => a.update(dt));
+      if (!this.tick(dt)) return;
+      const J = this.J, prev = this.a;
+      this.a += this.omega() * dt;
+      const twoPi = Math.PI * 2, crossed = Math.floor((prev - Math.PI / 2) / twoPi) !== Math.floor((this.a - Math.PI / 2) / twoPi);
+      if (crossed) { // la soga pasa BAJO los pies: quien esté bajo, se quema
+        this.passes++;
+        for (const j of [J.p, J.t, ...J.n]) { if (j.out) continue; if (j.h < 20) { j.out = true; j.smoke = 1.6; j.v = 0; j.h = 0; } else if (j.h < 38) j.roces++; }
+        if (J.p.out) { G.sfx('bad'); this.say('¡Quemado cómico!', '#ff6b7a', 1.2); }
+        if (J.t.out) { G.sfx('ok'); this.say('¡Teodora se quemó!', '#7dff8a', 1.2); }
+      }
+      // jugador: mantener carga, soltar salta (tecla o toque vía 'action')
+      if (!J.p.out) {
+        if (G.input.held('action') && J.p.h <= 0) { J.p.charge = Math.min(0.5, J.p.charge + dt); if (J.p.charge >= 0.5) { this.jumpP(0.5); J.p.charge = 0; } }
+        else if (J.p.charge > 0) { this.jumpP(J.p.charge); J.p.charge = 0; }
+      }
+      // Teodora: flota (gravedad baja, aguanta más) pero cada ~10
+      // vueltas se toma una selfie y salta TARDE a propósito de guion.
+      if (!J.t.out && J.t.h <= 0) {
+        const selfiePass = (this.passes + 1) % 10 === 0, ttb = this.timeToBottom();
+        if (selfiePass) { this.teoSelfieT = 0.8; if (ttb < 0.05) { J.t.v = 430; J.t.h = 0.01; } }
+        else if (ttb < 0.4) { J.t.v = 430; J.t.h = 0.01; }
+      }
+      if (this.teoSelfieT > 0) this.teoSelfieT -= dt;
+      for (const j of J.n) if (!j.out && j.h <= 0 && this.timeToBottom() < j.react) { j.v = 560; j.h = 0.01; }
+      this.stepJumper(J.p, p, dt, 1050, true);
+      this.stepJumper(J.t, null, dt, 600, false);
+      J.n.forEach((j, i) => this.stepJumper(j, this.partners[i], dt, 1050, false));
+      if (J.p.out) return this.endRound(J.t.out ? 'p' : 'b', J.t.out ? 'Teodora también se quemó… ¡pero tú duraste más!' : 'Te quemaste: Teodora se queda con la escena.');
+      if (J.t.out) return this.endRound('p', '¡Teodora se quemó con su propia soga!');
+      if (this.passes >= this.maxPasses) return this.endRound(J.p.roces < J.t.roces ? 'p' : J.p.roces > J.t.roces ? 'b' : 'tie', `Tope de vueltas — Roces tú: ${J.p.roces} · Teodora: ${J.t.roces}`);
+    }
+    draw(dt) {
+      const t = performance.now() / 1000, J = this.J;
+      W.render({
+        cam: this.cam, dt, light: W.LIGHT.noche, noApartment: true, actors: [this.p, ...this.partners], focusZ: 0,
+        boxes: (mb) => {
+          mb.box(0, -5, 0, 560, 10, 130, '#4a3049'); // piso del patio nocturno
+          mb.box(0, 60, -78, 620, 140, 10, '#2c2138'); mb.box(0, 128, -78, 620, 14, 12, '#1d1626'); // pared de la casona
+          mb.box(-185, 26, 0, 12, 52, 12, '#6b4a2f'); mb.box(185, 26, 0, 12, 52, 12, '#6b4a2f'); // postes de la soga
+        },
+        sprites: () => {
+          R.sprite(calCv(), -185, 40, 0, { w: 40, h: 49, feet: 0, lit: 0.3, nostretch: true });
+          R.sprite(calCv(), 185, 40, 0, { w: 40, h: 49, feet: 0, lit: 0.3, nostretch: true });
+          R.flat(R.glowTex, J.t.x, 0.8, 0, 42, 28, { color: [0.1, 0.05, 0.16], alpha: 0.5 });
+          R.sprite(teoCv(this.teoSelfieT > 0 ? 'selfie' : 'idle'), J.t.x, 10 + J.t.h + Math.sin(t * 2.2) * 2.5, 0, { w: 54, h: 67, feet: 0, lit: 0.25, nostretch: true, alpha: J.t.out ? 0.45 : 1 });
+          for (const j of [J.p, J.t, ...J.n]) if (j.out && j.smoke > 0) R.sprite(R.glowTex, j.x, 26, 0, { w: 30, h: 30, feet: 0, lit: 0, nostretch: true, alpha: 0.4 });
+        },
+        over: (c) => {
+          // la soga de fuego: curva entre los postes; su punto medio
+          // baja hasta el suelo cuando sin(a) = 1 (el paso peligroso)
+          const pl = R.project(-185, 52, 0), pr = R.project(185, 52, 0), mid = R.project(0, 62 - Math.sin(this.a) * 60, 0);
+          const slow = this.period() > 1.15, col = slow ? '#4fd0ff' : '#ff8a3c';
+          c.strokeStyle = col; c.globalAlpha = 0.35; c.lineWidth = 11; c.beginPath(); c.moveTo(pl.x, pl.y); c.quadraticCurveTo(mid.x, mid.y, pr.x, pr.y); c.stroke();
+          c.globalAlpha = 1; c.lineWidth = 4.5; c.beginPath(); c.moveTo(pl.x, pl.y); c.quadraticCurveTo(mid.x, mid.y, pr.x, pr.y); c.stroke();
+          for (let i = 1; i < 8; i++) { const u = i / 8, qx = (1 - u) * (1 - u) * pl.x + 2 * (1 - u) * u * mid.x + u * u * pr.x, qy = (1 - u) * (1 - u) * pl.y + 2 * (1 - u) * u * mid.y + u * u * pr.y; imgStar(c, qx, qy, 5 + Math.sin(t * 17 + i * 2) * 1.6, col); }
+          legendsHud(this, c, 'LA SOGA DE FUEGO', `Vuelta ${Math.min(this.passes + 1, this.maxPasses)}/${this.maxPasses} · ${slow ? 'LLAMA AZUL: lento' : 'LLAMA NARANJA: ¡rápido!'} · Roces tú ${J.p.roces} · ella ${J.t.roces}`);
+          if (J.p.charge > 0) { const h = this.p.head(30); panel(c, h.x - 26, h.y, 52, 8, '#4a4458'); c.fillStyle = '#ffd23f'; c.fillRect(h.x - 24, h.y + 2, 48 * (J.p.charge / 0.5), 4); }
+          if (this.teoSelfieT > 0) { const q = R.project(J.t.x, 96 + J.t.h, 0); if (q.ok) G.text(c, '¡SELFIE!', q.x, q.y, { size: 12, color: '#ffd7f0', lw: 5 }); }
+          if (this.st === 'rend') this.endOverlay(c);
+        },
+      });
+    }
+    endOverlay(c) {
+      const w = this.result.win, e = this.extra();
+      c.fillStyle = 'rgba(16,12,26,.85)'; c.fillRect(0, 0, 640, 360);
+      G.icon(c, w === 'win' ? 'trofeo' : w === 'tie' ? 'empate' : 'derrota', 320, 84, 48);
+      G.text(c, w === 'win' ? '¡ÚLTIMO EN PIE!' : w === 'tie' ? 'EMPATE' : 'TE QUEMASTE', 320, 138, { size: 34, color: w === 'win' ? '#7dff8a' : w === 'tie' ? '#ffd23f' : '#ff6b7a', lw: 9 });
+      G.text(c, `Vueltas: ${e.passes} · Roces — Tú: ${e.rocesP} · Teodora: ${e.rocesT}`, 320, 182, { size: 15, lw: 6 });
+      G.text(c, 'Prueba 2B de la boss final de Leyendas', 320, 208, { size: 11.5 });
+    }
+  }
+
+  // ----- Cadena del clímax de Leyendas -----
+  // Revelación del set → 2A Trazo → 2B Soga → resolución por la
+  // regla de boss (ganar ≥1 = película; 2/2 = versión plena;
+  // 0/2 = "no apta para cine" y la partida sigue a su final normal).
+  function legendsSubtitle(c, text, color) {
+    if (!text) return;
+    panel(c, 70, 294, 500, 54, 'rgba(14,10,24,.88)');
+    wrap(c, text, 84, 308, 472, 13, color || '#fff');
+  }
+  class LegendsRevealScene {
+    constructor(done) { this.done = done; this.t = 0; this.who = (G.S && G.S.protagonist) || 'natalia'; G.captureKeys = true; }
+    cast() {
+      if (!this._cast) {
+        this._cast = {
+          p: new Actor(this.who, 520, 235),
+          party: (G.S && G.S.party ? G.S.party.filter((id) => id !== this.who) : []).slice(0, 3).map((id, i) => new Actor(id, 452 + i * 44, 252)),
+          xim: new Actor('ximena', 636, 196), jose: new Actor('jose', 838, 238), cat: new Actor('pollito', 806, 252),
+        };
+        this._cast.xim.dir = 'down'; this._cast.jose.dir = 'left';
+      }
+      return this._cast;
+    }
+    update(dt) {
+      const cs = this.cast(); cs.p.update(dt); cs.party.forEach((a) => a.update(dt)); cs.xim.update(dt); cs.jose.update(dt); cs.cat.update(dt);
+      this.t += dt;
+      if (this.t > 1 && G.input.hit('action')) this.t = Math.max(this.t, 8.2); // skippable
+      if (this.t >= 8.4) { const d = this.done; this.done = null; if (d) d(); }
+    }
+    draw(dt) {
+      const t = this.t, cs = this.cast();
+      const albX = t < 3.4 ? 380 : 380 + Math.min(1, (t - 3.4) / 1.2) * 120; // el Alebrije sale de su escondite entre la decoración
+      const teoElev = t < 4.6 ? 150 : Math.max(24, 150 - (t - 4.6) * 62); // Teodora desciende flotando
+      W.render({
+        cam: CAM_SALA(), dt, light: t < 1.6 && (t % 0.3) < 0.15 ? W.LIGHT.oscuro : W.LIGHT.fiesta, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
+        sprites: () => {
+          if (t > 3.2) R.sprite(albCv('director'), albX, 0, 168, { w: 104, h: 115, feet: 0, lit: 0.25, nostretch: true });
+          if (t > 4.4) { R.flat(R.glowTex, 772, 0.8, 168, 46, 30, { color: [0.1, 0.05, 0.16], alpha: 0.5 }); R.sprite(teoCv('altiva'), 772, teoElev, 168, { w: 62, h: 77, feet: 0, lit: 0.2, nostretch: true }); }
+        },
+        over: (c) => {
+          if (t > 1.8) { // reflectores del set apuntando a la sala
+            for (const sx of [70, 570]) { const grd = c.createLinearGradient(sx, 0, 320, 300); grd.addColorStop(0, 'rgba(255,240,180,0.30)'); grd.addColorStop(1, 'rgba(255,240,180,0)'); c.fillStyle = grd; c.beginPath(); c.moveTo(sx, 0); c.lineTo(sx + 26, 0); c.lineTo(400, 310); c.lineTo(240, 310); c.closePath(); c.fill(); }
+            G.text(c, 'SET DE FILMACIÓN · ESCENA 1 · TOMA 1', 320, 26, { size: 13, color: '#ffe96a', lw: 6 });
+          }
+          const line = t < 1.8 ? 'La sala se apaga un segundo…' : t < 3.4 ? '…y se enciende COMO UN SET DE CINE. Las paredes eran utilería.' : t < 5.4 ? 'EL ALEBRIJE: «¡Sorpresa! ¡Su casa era mi set! ¿O mi set era su casa?»' : t < 7 ? 'TEODORA: «A ver, a ver… ¿esta es la sorpresa? Yo he visto mejores.»' : 'TEODORA: «Si quieren su final de película, superen mis dos pruebas.»';
+          legendsSubtitle(c, line, t >= 5.4 ? '#ffd7f0' : '#fff');
+          if (t > 1) G.prompt(c, 'ESPACIO: saltar', 590, 344);
+        },
+      });
+    }
+  }
+  class LegendsFinaleScene {
+    constructor(results, who, done) { this.results = results; this.who = who; this.done = done; this.t = 0; G.captureKeys = true; }
+    wins() { return (this.results.trazo && this.results.trazo.win === 'win' ? 1 : 0) + (this.results.soga && this.results.soga.win === 'win' ? 1 : 0); }
+    cast() {
+      if (!this._cast) {
+        this._cast = {
+          p: new Actor(this.who, 520, 235),
+          party: (G.S && G.S.party ? G.S.party.filter((id) => id !== this.who) : []).slice(0, 3).map((id, i) => new Actor(id, 452 + i * 44, 252)),
+          xim: new Actor('ximena', 636, 196), jose: new Actor('jose', 838, 238), cat: new Actor('pollito', 806, 252),
+        };
+        this._cast.xim.dir = 'down'; this._cast.jose.dir = 'left';
+      }
+      return this._cast;
+    }
+    update(dt) {
+      const cs = this.cast(); cs.p.update(dt); cs.party.forEach((a) => a.update(dt)); cs.xim.update(dt); cs.jose.update(dt); cs.cat.update(dt);
+      this.t += dt;
+      const w = this.wins(), dur = w === 0 ? 5 : 13.5;
+      if (this.t > 4.5 && this.t < 6.5 && w > 0) cs.xim.goTo(655, 208, 90); // Ximena despierta y camina al centro del set
+      if (this.t > 1 && G.input.hit('action')) this.t = Math.max(this.t, dur - 0.05);
+      if (this.t >= dur) { const d = this.done; this.done = null; if (d) d({ movie: w >= 1, full: w === 2, wins: w }); }
+    }
+    draw(dt) {
+      const t = this.t, cs = this.cast(), w = this.wins();
+      W.render({
+        cam: CAM_SALA(), dt, light: W.LIGHT.fiesta, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
+        sprites: () => {
+          R.sprite(albCv('feliz'), 500, 0, 168, { w: 104, h: 115, feet: 0, lit: 0.25, nostretch: true });
+          R.flat(R.glowTex, 772, 0.8, 168, 46, 30, { color: [0.1, 0.05, 0.16], alpha: 0.5 });
+          R.sprite(teoCv(w === 2 ? 'selfie' : w === 1 ? 'altiva' : 'idle'), 772, 24 + Math.sin(t * 2.2) * 3, 168, { w: 62, h: 77, feet: 0, lit: 0.2, nostretch: true });
+        },
+        over: (c) => {
+          if (w === 0) { legendsSubtitle(c, t < 2.6 ? 'TEODORA: «No apta para cine. Su fiesta, no mi película.»' : 'El set se apaga. La fiesta sigue… como fiesta.', '#ffd7f0'); return; }
+          if (t < 4.5) legendsSubtitle(c, 'El set entero contiene la respiración…', '#fff');
+          else if (t < 6.5) legendsSubtitle(c, 'XIMENA: «¿Me hicieron una fiesta… en una película?»', '#ffd7f0');
+          else if (t < 8 && w === 1) legendsSubtitle(c, 'TEODORA: «Esa línea era MÍA en el guion. Pero bueno: protagonista invitada.»', '#ffd7f0');
+          else {
+            // créditos ridículos del guion, rodando sobre el set
+            const credits = [
+              '«1 MINUTO PARA LA FIESTA: LA PELÍCULA»',
+              'Ximena … como Ximena · PROTAGONISTA SORPRESA',
+              `${G.CHARS[this.who].name} … Dirección de fiesta`,
+              'El Alebrije … Director invitado',
+              'José … Villano invitado',
+              'Pollito … como Pollito',
+              w === 2 ? 'Teodora … Presentadora' : 'Teodora … Protagonista invitada',
+              'La casa … como el set',
+            ];
+            const shown = Math.min(credits.length, 1 + Math.floor((t - 8) / 0.62));
+            panel(c, 120, 44, 400, 20 + shown * 19, 'rgba(14,10,24,.88)');
+            G.text(c, 'CRÉDITOS', 320, 58, { size: 12, color: '#ffe96a', lw: 4 });
+            credits.slice(0, shown).forEach((ln, i) => G.text(c, ln, 320, 78 + i * 19, { size: 12.5, color: '#fff', lw: 4 }));
+            if (t > 12.6) { c.fillStyle = `rgba(255,255,255,${Math.max(0, 0.85 - (t - 12.6) * 2)})`; c.fillRect(0, 0, 640, 360); G.text(c, '¡SELFIE OFICIAL DEL ELENCO!', 320, 330, { size: 13, color: '#ffd7f0', lw: 6 }); }
+          }
+          if (t > 1) G.prompt(c, 'ESPACIO: saltar', 590, 344);
+        },
+      });
+    }
+  }
+  class LegendsEndingScene {
+    // Escena-orquesta (mismo patrón que SpaceEndingScene de J1407b):
+    // ES una escena que delega update/draw en la subescena actual y
+    // la va cambiando en los callbacks, sin tocar G.setScene.
+    // Compatible con el patrón de práctica: new LegendsEndingScene(who, done).
+    constructor(who, done) { if (typeof who === 'function') { done = who; who = null; } this.doneAll = done; this.who = who || (G.S && G.S.protagonist) || 'natalia'; this.results = {}; this.finished = false; this.cur = new LegendsRevealScene(() => this.toTrazo()); }
+    toTrazo() { this.cur = new TrazoDuel(this.who, (r) => { this.results.trazo = r; this.toSoga(); }); }
+    toSoga() { this.cur = new SogaDuel(this.who, (r) => { this.results.soga = r; this.toFinale(); }); }
+    toFinale() {
+      this.cur = new LegendsFinaleScene(this.results, this.who, (fin) => {
+        if (this.finished) return; this.finished = true;
+        if (this.doneAll) this.doneAll({ win: fin.movie ? (fin.full ? 'win' : 'tie') : 'lose', detail: fin.full ? '¡Final de película COMPLETO!' : fin.movie ? 'Final de película (Teodora, protagonista invitada)' : 'Sin película: Teodora ganó las dos pruebas', movie: fin.movie, full: fin.full, wins: fin.wins, trazo: this.results.trazo, soga: this.results.soga });
+      });
+    }
+    update(dt) { if (this.cur) this.cur.update(dt); }
+    draw(dt) { if (this.cur) this.cur.draw(dt); }
+  }
+
+  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, CactusRaceDuel, ImageDuel, BalloonDuel, buildDecoSet, CandleGame, PatronDuel, TrazoDuel, SogaDuel, LegendsEndingScene };
 })();
