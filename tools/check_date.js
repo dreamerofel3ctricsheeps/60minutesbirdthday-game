@@ -179,6 +179,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   key('ArrowLeft', false);
   check('Ximena se mueve con el input (← la desplaza)', xi.x < x0 - 20, `x ${x0} → ${xi.x}`);
 
+  console.log('\nE2) Caminata de Ximena: velocidad y animación (regresión del deslizamiento)');
+  // Tramo libre de la sala hacia la derecha (sin muebles): 1 s de
+  // input sostenido a dt fijo. Con el bug (HomeScene.update llamaba
+  // a follow() sin ruta y follow() le borraba vx/vy cada frame) el
+  // desplazamiento era ≈28 u y la fase step apenas avanzaba: la
+  // hoja definida SÍ tiene walk_right, pero nunca cicla → desliza.
+  xi.x = 400; xi.y = 255; xi.vx = xi.vy = 0; xi.step = 0; xi.dir = 'down';
+  const wx0 = xi.x;
+  const wlen = G.Sprites.animLen('ximena', 'walk_right');
+  const pp = (beat, n) => { if (n <= 1) return 0; const per = 2 * n - 2, k = ((beat % per) + per) % per; return k < n ? k : per - k; };
+  let lastIdx = -1, idxChanges = 0;
+  key('ArrowRight', true);
+  for (let i = 0; i < 20; i++) {
+    sc.update(0.05);
+    // mismo cálculo de frame que draw3d (world.js): beat = step/(π/2),
+    // ciclos de 3 frames en ping-pong
+    const cyc = Math.floor(xi.step / (Math.PI / 2));
+    const idx = wlen === 3 ? pp(cyc, 3) : ((cyc % wlen) + wlen) % wlen;
+    if (lastIdx >= 0 && idx !== lastIdx) idxChanges++;
+    lastIdx = idx;
+  }
+  key('ArrowRight', false);
+  const disp = xi.x - wx0, stepTot = xi.step, spdFin = xi.spd;
+  check('en 1 s a la derecha Ximena recorre > 120 u (con el bug eran ≈28 u)', disp > 120, `disp=${disp.toFixed(1)} u`);
+  check('la fase de zancada avanzó > 20 rad en 1 s (los frames ciclan)', stepTot > 20, `step=${stepTot.toFixed(1)} rad`);
+  check('el frame de caminata cambió ≥ 3 veces en 1 s', idxChanges >= 3, `cambios=${idxChanges}, walk_right de ${wlen} frames`);
+  check('al moverse a la derecha la animación es walk_right (dir=right, moving, la hoja tiene el ciclo)', xi.dir === 'right' && xi.moving === true && G.Sprites.hasAnim('ximena', 'walk_right'));
+  check('su velocidad efectiva es de caminata (< RUN_SPD 178, sin entrar en run_*)', spdFin > 120 && spdFin < 178, `spd=${spdFin.toFixed(1)} u/s`);
+  xi.vx = xi.vy = 0;
+
   console.log('\nF) Puerta, reloj de respaldo y llegada a la plaza');
   xi.x = 510; xi.y = 560; xi.vx = xi.vy = 0;
   sc.update(0.016);
