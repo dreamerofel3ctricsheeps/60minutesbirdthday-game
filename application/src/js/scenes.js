@@ -2898,14 +2898,21 @@
       this.cam = { x: 0, y: 10, z: 96, dist: 330, pitch: 0.3, fov: 42 };
       // Táctil (mismo patrón que el clic de La imagen distinta):
       // mitad izquierda/derecha de la pantalla = cambiar de carril.
-      this.tapDir = 0;
+      // El listener se guarda y se RETIRA en finish(): antes quedaba
+      // colgado en el canvas para siempre, uno más por cada carrera
+      // jugada (revisión 2026-11-21).
+      this.tapDir = 0; this.tapCv = null; this.tapH = null;
       try {
         const cv = document.querySelector('#cv');
-        if (cv && cv.addEventListener) cv.addEventListener('pointerdown', (e) => {
-          if (this.st !== 'play') return;
-          const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, width: 640 };
-          this.tapDir = ((e.clientX - r.left) / Math.max(1, r.width)) < 0.5 ? -1 : 1;
-        });
+        if (cv && cv.addEventListener) {
+          this.tapCv = cv;
+          this.tapH = (e) => {
+            if (this.st !== 'play') return;
+            const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, width: 640 };
+            this.tapDir = ((e.clientX - r.left) / Math.max(1, r.width)) < 0.5 ? -1 : 1;
+          };
+          cv.addEventListener('pointerdown', this.tapH);
+        }
       } catch (e) { /* sin canvas accesible: queda el teclado */ }
       this.begin();
     }
@@ -2947,6 +2954,8 @@
     }
     finish(w) {
       if (this.finished) return; this.finished = true;
+      if (this.tapCv && this.tapH && this.tapCv.removeEventListener) { try { this.tapCv.removeEventListener('pointerdown', this.tapH); } catch (e) { /* noop */ } }
+      this.tapH = null;
       this.endRound(w, w === 'p' ? '¡Cruzaste el aro de luz primero!' : w === 'b' ? 'José cruzó el aro de luz primero…' : '¡Llegaron al aro a la vez!');
     }
     extra() { return { spaceRace: 'anillos', crashesP: this.crashesP, crashesB: this.crashesB, copilot: this.copilotId }; }
@@ -3336,8 +3345,10 @@
       this.who = who; this.results = results || {}; this.done = done;
       this.t = 0; this.sent = false; this.phase = 'fiesta'; this.phT = 0; this.woke = false; this.flash = 0;
       const belt = this.results.belt || {};
-      // Pastel magullado si perdiste 1B o el cinturón te golpeó 3+ veces.
-      this.bruised = belt.win !== 'win' || (belt.hitsP || 0) >= 3;
+      // Pastel magullado si PERDISTE 1B o el cinturón te golpeó 3+
+      // veces. Un EMPATE no es perder: antes el empate también lo
+      // magullaba (revisión 2026-11-21).
+      this.bruised = belt.win === 'lose' || (belt.hitsP || 0) >= 3;
       this.crew = G.PLAYABLE.map((id, i) => { const a = new Actor(id, -252 + i * 62, 40); a.dir = 'down'; a.phase = i * 0.9; return a; }); // en este final SÍ están los 7
       this.jose = new Actor('jose', 268, 40); this.jose.dir = 'down'; this.jose.phase = 2.2;
       this.cat = new Actor('pollito', -282, 58); this.cat.dir = 'down'; this.cat.phase = 1.3;
@@ -3392,7 +3403,7 @@
             G.icon(c, 'trofeo', 320, 66, 44);
             G.text(c, 'FIESTA EN J1407B', 320, 112, { size: 30, color: '#ffd23f', lw: 8 });
             G.text(c, 'SPACE_RINGS_ENDING', 320, 136, { size: 10, color: '#b7a8e8' });
-            G.text(c, belt.win === 'win' ? 'Cruzaste el aro primero: la fiesta sobre el anillo es tuya.' : 'José cruzó el aro primero y juró que él "descubrió" el planeta…', 320, 168, { size: 11.5 });
+            G.text(c, belt.win === 'win' ? 'Cruzaste el aro primero: la fiesta sobre el anillo es tuya.' : belt.win === 'tie' ? 'Llegaron al aro a la vez: el planeta es compartido (José no está de acuerdo).' : 'José cruzó el aro primero y juró que él "descubrió" el planeta…', 320, 168, { size: 11.5 });
             G.text(c, belt.win === 'win' ? 'Ximena despertó flotando sobre un anillo, con los otros 36 detrás.' : 'Pero la fiesta igual se hizo, con los 7 roomies sobre el anillo.', 320, 190, { size: 11.5 });
             G.text(c, this.bruised ? 'El pastel llegó magullado de tanto choque en el cinturón.' : 'Y el pastel llegó flotando, intacto.', 320, 212, { size: 11.5, color: '#ffd9a0' });
             G.text(c, 'J1407b: el «Súper Saturno», a 434 años luz, con 37 anillos.', 320, 240, { size: 10, color: '#8f86b8' });
@@ -3417,7 +3428,7 @@
     finish() {
       if (this.finished) return; this.finished = true;
       const ring = this.results.ring || {}, belt = this.results.belt || {};
-      this.done({ win: belt.win || 'lose', spaceEnding: true, winRing: ring.win || null, winBelt: belt.win || null, cakeBruised: belt.win !== 'win' || (belt.hitsP || 0) >= 3 });
+      this.done({ win: belt.win || 'lose', spaceEnding: true, winRing: ring.win || null, winBelt: belt.win || null, cakeBruised: belt.win === 'lose' || (belt.hitsP || 0) >= 3 });
     }
     update(dt) { if (this.cur) this.cur.update(dt); }
     draw(dt) { if (this.cur) this.cur.draw(dt); }

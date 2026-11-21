@@ -1349,6 +1349,22 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('J1407b: G.startSpaceEnding está expuesta para enganchar la historia después', typeof G.startSpaceEnding === 'function');
     check('J1407b: el final está registrado en G.ENDINGS (FIESTA EN J1407B)', !!(G.ENDINGS.espacio && /J1407B/.test(G.ENDINGS.espacio.title)));
     check('J1407b: las entradas nuevas NO están en la historia (decisiones A–D pendientes)', !G.STORY.includes('anillos') && !G.STORY.includes('cinturon') && !G.STORY.includes('finalj1407b'));
+    // --- Revisión 2026-11-21: duda en el otro sentido, freno al chocar,
+    // listener táctil que se retira y la regla exacta del pastel ---
+    const dA4 = new Sc.RingRaceDuel('natalia', () => {});
+    dA4.sug = { lane: 2, t: 2, mProg: 99999 }; dA4.lane = 1;
+    dA4.press(-1); // contra la sugerencia (pedía la derecha): duda también en este sentido
+    check('J1407b revisión: la DUDA también se activa yendo contra la sugerencia hacia el otro lado', dA4.doubtT > 0, 'doubtT=' + dA4.doubtT);
+    const dA5 = new Sc.RingRaceDuel('natalia', () => {});
+    dA5.v = 100; dA5.crashP();
+    check('J1407b revisión: chocar en 1A FRENA el cohete (sin eliminar)', dA5.v < 100 && dA5.crashesP === 1 && dA5.crashT > 0, 'v=' + dA5.v);
+    const dA6 = new Sc.RingRaceDuel('natalia', () => {});
+    const tapAntes = typeof dA6.tapH === 'function';
+    dA6.finish('p');
+    check('J1407b revisión: el listener táctil de 1A se retira al terminar la carrera', tapAntes && dA6.tapH === null, 'tapH=' + dA6.tapH);
+    const bruised = (belt) => new Sc.SpacePartyScene('natalia', { belt }, () => {}).bruised;
+    check('J1407b revisión: pastel magullado SOLO si pierdes 1B o chocas 3+ veces (el empate no magulla)',
+      bruised({ win: 'lose', hitsP: 0 }) === true && bruised({ win: 'win', hitsP: 3 }) === true && bruised({ win: 'win', hitsP: 2 }) === false && bruised({ win: 'tie', hitsP: 0 }) === false && bruised({ win: 'tie', hitsP: 3 }) === true);
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
