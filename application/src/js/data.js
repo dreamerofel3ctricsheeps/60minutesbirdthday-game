@@ -77,6 +77,21 @@
     premios:      { name: 'Atún de Pollito', cat: 'util', slots: 1, q: 0, hint: 'Soborno felino.' },
     regalo:       { name: 'Regalo', cat: 'regalo', slots: 1, q: 12, hint: 'El regalo de Ximena.' },
     parlante:     { name: 'Parlante', cat: 'util', slots: 2, q: 6, hint: 'Música… o ruido blanco.' },
+    // ----- Siembra del final de Leyendas (pedido de Jose, 2026-11-21):
+    // la claqueta y la cámara antigua entran a la recolección como
+    // ítems normales (los 12 spawns del mundo alcanzan justo: 10 + 2).
+    claqueta:     { name: 'Claqueta de cine', cat: 'util', slots: 1, q: 2, hint: '¿Una claqueta en una fiesta? Qué raro.' },
+    camara:       { name: 'Cámara antigua', cat: 'util', slots: 1, q: 3, hint: 'Una cámara de cine viejísima. Todavía funciona.' },
+  };
+
+  // ---------- Personajes especiales (NO son G.CHARS) ----------
+  // Alebrije y Teodora no tienen hoja definida: viven en un registro
+  // aparte para que check_defined no les exija sprites, y se dibujan
+  // POR CÓDIGO en scenes.js (sección 15). Cuando se produzcan sus
+  // hojas definidas, este registro se reemplaza por G.CHARS.
+  G.SPECIALS = {
+    alebrije: { name: 'El Alebrije', color: '#b48cf0', role: 'Guía caótico · director invitado' },
+    teodora: { name: 'Teodora', color: '#f08cc0', role: 'Boss final · protagonista invitada' },
   };
 
   G.SLEEP = ['Dormida profundamente', 'Dormida', 'Sueño ligero', 'Inquieta', 'Casi despierta', '¡DESPIERTA!'];
@@ -451,6 +466,63 @@
         { who: 'ximena', text: 'ajá.', mood: 'suspicious', direct: true },
       ] },
     },
+
+    // ----- Final alternativo LEYENDAS (LEYENDAS_MOVIE_ENDING) -----
+    // Entradas de PRÁCTICA y de la cadena del clímax. En la historia el
+    // casting NO es un evento de G.STORY: lo dispara el beat de las
+    // ~18:00 de game.js (aparición del Alebrije en la sala), y el
+    // clímax lo evalúa G.legendsReady antes del final estándar.
+    patron: {
+      title: 'El patrón del Alebrije', kind: 'Duelo', type: 'minigame', game: 'patron', boss: 'alebrije', bossLabel: 'El Alebrije · casting', view: 'todo',
+      chat: [
+        { who: 'sistema', text: 'Algo se movió entre la decoración de la sala. Algo con antenas.' },
+        { who: 'alebrije', text: '¡Shhh! Estaba escondido entre los globos. Si quieren salir en la película, primero: mi casting.', direct: true },
+      ],
+      intro: 'El Alebrije es el director invitado de la nueva película de Las Leyendas, y su casting es un juego de memoria: las partes de su cuerpo se encienden en una secuencia (cabeza, crines, antenas, aleta, panza y cola) que crece de 3 a 7 pasos en 5 rondas. Mírala bien y repítela con ← → para elegir la zona y ESPACIO para marcarla, o tocando la zona. Su cuerpo nunca cambia de color: el resplandor es solo la luz del set. Un solo error y la ronda se pierde.',
+      goal: 'Completa al menos 4 de las 5 secuencias para que el Alebrije te acepte en la película (dos rondas falladas y el casting se acaba).',
+      results: {
+        win: { effects: { quality: 4 }, reply: () => [{ who: 'alebrije', text: '¡ACEPTADO! Tienes memoria de protagonista. Nos vemos en el estreno… digo, en la fiesta.', direct: true }] },
+        lose: { effects: { quality: -2 }, reply: () => [{ who: 'alebrije', text: 'Mmm, no. Sin memoria no hay película. ¡Siguiente!', direct: true }] },
+      },
+    },
+    trazo: {
+      title: 'El set se hunde / Traza la leyenda', kind: 'Duelo', type: 'minigame', game: 'trazo', boss: 'teodora', bossLabel: 'Teodora · BOSS', view: 'todo',
+      chat: [
+        { who: 'teodora', text: 'A ver, a ver… ¿esta es la sorpresa? Yo he visto mejores. Primera prueba: tracen mi leyenda SIN salirse.', direct: true },
+      ],
+      intro: 'Prueba de boss de Teodora en el patio de la casona: ella dibuja una línea luminosa con forma de leyenda (alebrije, calavera o luna) y tú la recorres con tu roomie para puntuar PRECISIÓN. Después anuncia un color con el flash de su celular: solo los hexágonos de ese color que la línea cruzó quedan firmes, y todos corren a uno seguro antes de que el resto del set se hunda. Teodora flota (llega con 1 s de gracia), pero a veces se detiene a tomarse una selfie. Caer 2 veces te deja fuera de la escena.',
+      goal: 'Supera la precisión de Teodora en 3 rondas sin quedar eliminado.',
+      results: {
+        win: { effects: { quality: 5 }, reply: () => [{ who: 'teodora', text: '¿Cómo que trazaste MEJOR que yo? …Graba eso. Digo, bórralo.', direct: true }] },
+        lose: { effects: { quality: -3 }, reply: () => [{ who: 'teodora', text: 'Mi set, mis reglas. Y mi trazo sigue siendo el mejor.', direct: true }] },
+      },
+    },
+    soga: {
+      title: 'La soga de fuego', kind: 'Duelo', type: 'minigame', game: 'soga', boss: 'teodora', bossLabel: 'Teodora · BOSS', view: 'todo',
+      chat: [
+        { who: 'teodora', text: 'Última prueba. La soga. Y no, no voy a saltar "suavecito" por ustedes.', direct: true },
+      ],
+      intro: 'Dos utileros calaverita giran una soga de fuego espectral en el patio. Saltan tú, tus partners y Teodora. Mantén ESPACIO (o el toque) para cargar el salto y suelta para saltar: corto y rápido, o alto y lento. La soga acelera por tramos y a veces amaga; la llama lo anuncia: azul = lento, naranja = rápido. Tocar la llama es quemado cómico y eliminación. Teodora flota: aguanta más en el aire… pero cada ~10 vueltas se toma una selfie y salta tarde.',
+      goal: 'Sé el último en pie, o sigue saltando cuando Teodora se queme.',
+      results: {
+        win: { effects: { quality: 5 }, reply: () => [{ who: 'teodora', text: '¡¿Me ganó en MI soga?! …Bueno. Igual sí lloré tantito.', direct: true }] },
+        lose: { effects: { quality: -3 }, reply: () => [{ who: 'teodora', text: 'Se quemó. Como la mitad de mis ex directores.', direct: true }] },
+      },
+    },
+    finalleyendas: {
+      title: 'Final Leyendas', kind: 'Final', type: 'minigame', game: 'finalleyendas', boss: 'teodora', bossLabel: 'Teodora · BOSS FINAL', view: 'todo',
+      chat: [
+        { who: 'sistema', text: 'La sala era un set. Siempre fue un set.' },
+        { who: 'teodora', text: '¿Quieren su final de película? Superen mis dos pruebas.', direct: true },
+      ],
+      intro: 'El clímax COMPLETO del final de Las Leyendas: la sala se revela como set de cine, Teodora aparece flotando y lanza sus dos pruebas de boss en orden: «El set se hunde / Traza la leyenda» y «La soga de fuego». Ganarle al menos UNA alcanza para el final de película; ganarle las DOS da la versión plena, con Teodora presentando a Ximena en los créditos. Perder las dos deja la fiesta "no apta para cine" y se cae al final normal.',
+      goal: 'Supera al menos una prueba de Teodora y filma el final: LEYENDAS_MOVIE_ENDING.',
+      results: {
+        win: { effects: { quality: 8 }, reply: (who) => [{ who, text: 'Hicimos la fiesta… y quedó filmada. Ximena es la protagonista y ni lo sabía.', mood: 'happy' }] },
+        tie: { effects: { quality: 4 }, reply: () => [{ who: 'teodora', text: 'Una de dos. Aceptable. Me quedo con el crédito de protagonista invitada.', direct: true }] },
+        lose: { effects: { quality: -2 }, reply: () => [{ who: 'teodora', text: 'No apta para cine. Su fiesta, no mi película.', direct: true }] },
+      },
+    },
   };
 
   // Orden de la historia; los eventos reactivos se intercalan cuando se cumplen sus condiciones.
@@ -492,6 +564,11 @@
     caos: {
       title: 'EL CAOS PERFECTO', tone: 'mixed',
       text: 'Nada salió como estaba planeado. Falta decoración, falta comida y media sala parece la escena de un crimen. Pero cuando Ximena aparece, el "¡SORPRESA!" sale tan desafinado que se dobla de la risa. Años después, todos van a jurar que fue el mejor cumpleaños de la casa.',
+    },
+    // ----- Final alternativo LEYENDAS (LEYENDAS_MOVIE_ENDING) -----
+    leyendas: {
+      title: 'ESTRELLA DE CINE', tone: 'good',
+      text: 'La sorpresa era tan buena que la filmaron. La sala era un set de pueblo colonial, el Alebrije dirigía desde la decoración y Teodora —boss final, protagonista invitada, dueña de la selfie oficial— terminó presentando a la verdadera estrella: Ximena, que despertó en medio de su escena y leyó su única línea perfecta: "¿Me hicieron una fiesta… en una película?". Toma buena. Créditos.',
     },
   };
 })();
