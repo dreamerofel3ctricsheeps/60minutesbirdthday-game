@@ -1275,6 +1275,98 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('práctica sin sorteo: cactusVariant solo se invoca desde la historia (guardado por G.practiceMode en runMinigame)', typeof G.cactusVariant === 'function');
   }
 
+  // ================= M) Final LEYENDAS (LEYENDAS_MOVIE_ENDING) =============
+  console.log('\nM) Final Leyendas — ítems, habilitación, duelos de boss y cadena');
+  {
+    // Ítems de la siembra: existen, tienen slot/peso y spawnean en la recolección
+    check('ítems de Leyendas existen (claqueta y cámara antigua)', !!G.ITEMS.claqueta && !!G.ITEMS.camara && G.ITEMS.claqueta.slots === 1 && G.ITEMS.camara.slots === 1);
+    check('los 12 spawns del mundo alcanzan para los 12 ítems', W.SPAWNS.length >= Object.keys(G.ITEMS).length, `spawns=${W.SPAWNS.length} ítems=${Object.keys(G.ITEMS).length}`);
+    const col = new Sc.CollectScene('natalia', () => {});
+    const spawned = col.items.map((i) => i.id);
+    check('la recolección spawnea claqueta y cámara como cualquier ítem', spawned.includes('claqueta') && spawned.includes('camara') && new Set(spawned).size === Object.keys(G.ITEMS).length, spawned.join(','));
+    // Registro de especiales y pantallas
+    check('G.SPECIALS registra a Alebrije y Teodora (fuera de G.CHARS)', !!G.SPECIALS.alebrije && !!G.SPECIALS.teodora && !G.CHARS.alebrije && !G.CHARS.teodora);
+    check('retratos por código de los especiales (specialURL)', G.specialURL('alebrije').startsWith('data:image') && G.specialURL('teodora').startsWith('data:image'));
+    check('ENDINGS.leyendas = «ESTRELLA DE CINE»', !!G.ENDINGS.leyendas && G.ENDINGS.leyendas.title === 'ESTRELLA DE CINE');
+    check('las entradas de Leyendas NO están en la historia (G.STORY)', !G.STORY.includes('patron') && !G.STORY.includes('trazo') && !G.STORY.includes('soga') && !G.STORY.includes('finalleyendas'));
+    check('MG registra los 3 minijuegos y la cadena de Leyendas', !!(MG.patron && MG.trazo && MG.soga && MG.finalleyendas));
+    // Habilitación: función pura con las 3 condiciones del guion
+    const decoReal = (nReal, nImprov) => [...Array.from({ length: nReal }, () => ({ placed: true, improv: false })), ...Array.from({ length: nImprov }, () => ({ placed: true, improv: true }))];
+    const base = { flags: { casting: true }, deco: decoReal(4, 2), quality: 70 };
+    check('habilitación: casting + 4 zonas reales + calidad 70 → LISTO', G.legendsReady(base) === true);
+    check('habilitación: sin casting → no', G.legendsReady({ ...base, flags: {} }) === false);
+    check('habilitación: solo 3 zonas reales → no', G.legendsReady({ ...base, deco: decoReal(3, 3) }) === false);
+    check('habilitación: zonas improvisadas NO cuentan como reales', G.legendsDecoCount({ deco: decoReal(2, 4) }) === 2 && G.legendsReady({ ...base, deco: decoReal(2, 4) }) === false);
+    check('habilitación: calidad 69 → no; 70 → sí', G.legendsReady({ ...base, quality: 69 }) === false && G.legendsReady({ ...base, quality: 70 }) === true);
+
+    S.party = ['natalia']; S.flags = {};
+    const driveDuel = (duel, driver, maxTicks) => { let res = null; duel._testDone = (r) => { res = r; }; const origDone = duel.done; duel.done = (r) => { res = r; }; for (let i = 0; i < (maxTicks || 6000) && !res; i++) { driver(duel, i); duel.update(0.05); } return res; };
+
+    // Casting: completable (5 rondas de 3→7 pasos) y perdible (2 fallos)
+    {
+      const lens = [];
+      const d = new Sc.PatronDuel('natalia', () => {});
+      d.tOn = 0.01; d.tOff = 0.01;
+      const res = driveDuel(d, (dd) => { if (dd.phase === 'show') lens[dd.r] = dd.seq.length; if (dd.phase === 'input') { let guard = 0; while (dd.phase === 'input' && guard++ < 12) dd.pickZone(dd.seq[dd.prog]); } });
+      check('casting completable: 5 rondas ganadas → win', !!res && res.win === 'win', JSON.stringify(res));
+      check('casting: las secuencias crecen 3→7 pasos', lens.join(',') === '3,4,5,6,7', lens.join(','));
+      const d2 = new Sc.PatronDuel('natalia', () => {});
+      d2.tOn = 0.01; d2.tOff = 0.01;
+      const res2 = driveDuel(d2, (dd) => { if (dd.phase === 'input') dd.pickZone((dd.seq[dd.prog] + 1) % 6); });
+      check('casting perdible: dos rondas falladas → lose', !!res2 && res2.win === 'lose', JSON.stringify(res2));
+    }
+    // 2A Trazo: siguiendo la línea y corriendo al seguro se gana; quieto en una esquina se pierde
+    const driveTrazo = (win) => {
+      const d = new Sc.TrazoDuel('natalia', () => {});
+      d.tTrazo = 1.2; d.tAviso = 0.1; d.tCorre = 0.6; d.tCae = 0.2;
+      return driveDuel(d, (dd) => {
+        if (!win) { dd.p.x = 268; dd.p.y = 222; return; }
+        if (dd.phase === 'trazo') { const idx = Math.min(dd.pts.length - 1, 2 * Math.round((dd.pt / dd.tTrazo) * (dd.pts.length - 1) / 2)); dd.p.x = dd.pts[idx].x; dd.p.y = dd.pts[idx].y; }
+        else if (dd.phase === 'corre' || dd.phase === 'cae') { const h = dd.hexes.find((hh) => hh.safe); if (h) { dd.p.x = h.x; dd.p.y = h.y; } }
+      }, 5000);
+    };
+    {
+      const res = driveTrazo(true);
+      check('2A trazo: precisión alta y sin caídas → win contra Teodora', !!res && res.win === 'win', JSON.stringify(res));
+      const res2 = driveTrazo(false);
+      check('2A trazo: sin trazar y cayendo dos veces → lose', !!res2 && res2.win === 'lose', JSON.stringify(res2));
+    }
+    // 2B Soga: sin saltar te quemas; saltando a tiempo, Teodora cae en su selfie (~vuelta 10)
+    {
+      const d = new Sc.SogaDuel('natalia', () => {});
+      const res = driveDuel(d, () => {}, 900);
+      check('2B soga: jugador inmóvil → se quema (lose)', !!res && res.win === 'lose', JSON.stringify(res));
+      const d2 = new Sc.SogaDuel('natalia', () => {});
+      const res2 = driveDuel(d2, (dd) => { if (dd.J.p.h <= 0 && dd.timeToBottom() < 0.34) dd.jumpP(0.3); }, 4000);
+      check('2B soga: saltando a tiempo, Teodora se quema en su selfie → win', !!res2 && res2.win === 'win' && res2.passes >= 9, JSON.stringify(res2));
+    }
+    // Cadena completa y regla de boss: 2/2 = plena, 1/2 = película, 0/2 = sin película
+    const driveChain = (trazoWin, sogaWin) => {
+      let out = null;
+      const chain = new Sc.LegendsEndingScene('natalia', (o) => { out = o; });
+      for (let i = 0; i < 9000 && !out; i++) {
+        const cur = chain.cur;
+        if (cur instanceof Sc.TrazoDuel) {
+          cur.tTrazo = 1.2; cur.tAviso = 0.1; cur.tCorre = 0.6; cur.tCae = 0.2;
+          if (!trazoWin) { cur.p.x = 268; cur.p.y = 222; }
+          else if (cur.phase === 'trazo') { const idx = Math.min(cur.pts.length - 1, 2 * Math.round((cur.pt / cur.tTrazo) * (cur.pts.length - 1) / 2)); cur.p.x = cur.pts[idx].x; cur.p.y = cur.pts[idx].y; }
+          else if (cur.phase === 'corre' || cur.phase === 'cae') { const h = cur.hexes.find((hh) => hh.safe); if (h) { cur.p.x = h.x; cur.p.y = h.y; } }
+        } else if (cur instanceof Sc.SogaDuel && sogaWin) { if (cur.J.p.h <= 0 && cur.timeToBottom() < 0.34) cur.jumpP(0.3); }
+        chain.update(0.05);
+      }
+      return out;
+    };
+    {
+      const full = driveChain(true, true);
+      check('cadena Leyendas 2/2: llega a LEYENDAS_MOVIE_ENDING en versión plena', !!full && full.movie === true && full.full === true && full.win === 'win', JSON.stringify(full && { movie: full.movie, full: full.full, wins: full.wins }));
+      const one = driveChain(true, false);
+      check('regla de boss: ganar solo 1 de 2 → película con Teodora invitada (tie)', !!one && one.movie === true && one.full === false && one.win === 'tie', JSON.stringify(one && { movie: one.movie, full: one.full, wins: one.wins }));
+      const none = driveChain(false, false);
+      check('regla de boss: perder los 2 → NO hay final de película', !!none && none.movie === false && none.win === 'lose', JSON.stringify(none && { movie: none.movie, wins: none.wins }));
+      check('G.startLegendsEnding existe (equivalente a startSpaceEnding)', typeof G.startLegendsEnding === 'function');
+    }
+  }
+
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR FATAL en la prueba:', e); process.exit(2); });
