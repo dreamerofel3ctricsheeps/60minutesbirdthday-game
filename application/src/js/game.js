@@ -911,10 +911,13 @@
   // habilitan AMBOS finales alternativos (este y Leyendas), ELIGE EL
   // JUGADOR cuál jugar — sin prioridad fija ni azar (ver el clímax
   // de main() y G.altFinalsRoute).
-  // Siguen pendientes de Jose, SOLO como notas de guion SIN efecto
-  // en el código por ahora: (B) si J1407b es viaje real o sueño, y
-  // (D) si los finales alternativos se juegan desde la primera
-  // partida o solo en NG+. (La (C), desbloqueos a práctica/galería,
+  // DECISIÓN D RESUELTA por Jose (2026-11-21): los finales
+  // alternativos pueden habilitarse DESDE CUALQUIER MOMENTO — desde
+  // la primera partida, sin NG+ ni desbloqueo previo; por eso ni
+  // G.spaceReady ni G.legendsReady miran historial de partidas.
+  // Sigue pendiente de Jose, SOLO como nota de guion SIN efecto en
+  // el código por ahora: (B) si J1407b es viaje real o sueño. (La
+  // (C), desbloqueos a práctica/galería,
   // ya está cubierta de hecho: ambos finales viven en el menú de
   // práctica desde sus ramas.)
   // El final también se juega desde el menú de práctica («Final
