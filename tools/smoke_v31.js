@@ -1468,6 +1468,94 @@ const tick = () => new Promise((r) => setImmediate(r));
     }
   }
 
+  // ================= N) Integración de finales =====================
+  console.log('\nN) Integración — J1407b en la historia y elección del jugador');
+  {
+    // --- G.spaceReady: las 3 condiciones del guion con stats reales ---
+    const okSt = { flags: { escaladaEspacio: true }, quality: 80, sus: 49 };
+    check('spaceReady: Escalada espacial ganada + Preparación 80 + Sospecha 49 → LISTO', G.spaceReady(okSt) === true);
+    check('spaceReady: sin la marca de la Escalada espacial → no', G.spaceReady({ ...okSt, flags: {} }) === false);
+    check('spaceReady: Preparación 79 → no (el corte es 80)', G.spaceReady({ ...okSt, quality: 79 }) === false);
+    check('spaceReady: Sospecha («Despertar» real = S.sus) 50 → no; 49 → sí', G.spaceReady({ ...okSt, sus: 50 }) === false && G.spaceReady({ ...okSt, sus: 49 }) === true);
+    check('spaceReady: objeto vacío → no, sin explotar', G.spaceReady({}) === false);
+
+    // --- Enrutado del clímax: G.altFinalsRoute ---
+    const decoReal = (n) => Array.from({ length: n }, () => ({ placed: true, improv: false }));
+    const stSpace = { flags: { escaladaEspacio: true }, quality: 90, sus: 10, deco: decoReal(0) };
+    const stLeg = { flags: { casting: true }, quality: 75, sus: 10, deco: decoReal(4) };
+    const stBoth = { flags: { escaladaEspacio: true, casting: true }, quality: 90, sus: 10, deco: decoReal(4) };
+    const stNone = { flags: {}, quality: 10, sus: 90, deco: decoReal(0) };
+    check('clímax: solo espacio listo → ruta «espacio»', G.altFinalsRoute(stSpace) === 'espacio');
+    check('clímax: solo Leyendas listo → ruta «leyendas»', G.altFinalsRoute(stLeg) === 'leyendas');
+    check('clímax: AMBOS listos → ruta «ambos» (elige el jugador, sin prioridad fija)', G.altFinalsRoute(stBoth) === 'ambos');
+    check('clímax: ninguno listo → ruta null (final normal intacto)', G.altFinalsRoute(stNone) === null);
+    check('ENDINGS.espacio = «FIESTA EN J1407B» (el cierre del clímax espacial)', !!G.ENDINGS.espacio && G.ENDINGS.espacio.title === 'FIESTA EN J1407B');
+    {
+      // El cableado real en game.js: la elección se ofrece con
+      // ui.choose y las etiquetas de Jose, SIN temporizador (sin
+      // presión ni default por timeout).
+      const gameTxt = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+      const i = gameTxt.indexOf('Viaje a J1407b — la fiesta sobre los anillos');
+      const call = i >= 0 ? gameTxt.slice(Math.max(0, i - 60), i + 340) : '';
+      check('clímax: main() ofrece la elección con ui.choose y las dos opciones (J1407b / Leyendas)',
+        call.includes('ui.choose([') && call.includes('La película de Las Leyendas — la casa era un set'), call.slice(0, 120));
+      check('clímax: la elección NO lleva temporizador ni opción de timeout', /\]\);/.test(call) && !/timeout/.test(call), call.slice(-80));
+    }
+
+    // --- La marca de la Escalada: extra().space + resolve en historia ---
+    {
+      const d = new Sc.ClimbDuel('natalia', () => {});
+      d.pMax = Math.ceil(5000 / Sc.ClimbDuel.SHELF_H); // altura máxima ≥ ESPACIO_E (5000 u)
+      const exSpace = d.extra();
+      d.pMax = 10;
+      const exLow = d.extra();
+      check('Escalada: extra().space = true solo si la altura máxima alcanzó la zona ESPACIO', exSpace.space === true && exLow.space === false, `alto=${exSpace.space} bajo=${exLow.space}`);
+      S.flags = {}; G.practiceMode = false;
+      MG.repisas.resolve({ win: 'win', space: true });
+      const marcada = S.flags.escaladaEspacio === true;
+      S.flags = {};
+      MG.repisas.resolve({ win: 'win', space: false });
+      MG.repisas.resolve({ win: 'lose', space: true });
+      check('Escalada en historia: ganar llegando al espacio pone S.flags.escaladaEspacio; sin espacio o perdiendo, no', marcada && S.flags.escaladaEspacio !== true);
+    }
+
+    // --- Telescopio: prop por código en la Escalada, solo en el espacio ---
+    check('telescopio: su elevación está DENTRO de la zona espacio (≥ 5000 u)', Sc.ClimbDuel.TELESCOPE_E >= 5000, 'TELESCOPE_E=' + Sc.ClimbDuel.TELESCOPE_E);
+    check('telescopio: no entra en banda a ras de suelo y sí con la cámara a su altura', Sc.ClimbDuel.telescopeAt(0) === false && Sc.ClimbDuel.telescopeAt(Sc.ClimbDuel.TELESCOPE_E) === true);
+    {
+      // conteo exacto por color: el tubo del telescopio es de latón
+      // (#c9a44a), color que solo usa ese prop en drawWorld
+      const countBrass = (cy) => {
+        const d = new Sc.ClimbDuel('natalia', () => {});
+        const mb = new G.R.MB(); let n = 0;
+        const orig = mb.box.bind(mb);
+        mb.box = (...a) => { if (a[6] === '#c9a44a') n++; return orig(...a); };
+        d.cam.y = cy; d.drawWorld(mb);
+        return n;
+      };
+      let brassHigh = -1, brassLow = -1, drawErr = '';
+      try { brassHigh = countBrass(Sc.ClimbDuel.TELESCOPE_E); brassLow = countBrass(0); } catch (e) { drawErr = e.message; }
+      check('telescopio: a su altura drawWorld dibuja sus 3 piezas de latón; abajo, ninguna', brassHigh === 3 && brassLow === 0, `alto=${brassHigh} bajo=${brassLow} ${drawErr}`);
+    }
+
+    // --- Siembra WhatsApp ~13:00: la foto del cohete tras el apagón ---
+    {
+      S.party = ['natalia', 'majo', 'alan']; S.player = 'natalia'; S.flags = {};
+      const msgsEl = documentFake.querySelector('#msgs');
+      const dump = () => { let s = ''; (function walk(e) { s += e._html || ''; (e.children || []).forEach(walk); })(msgsEl); return s; };
+      const before = dump();
+      await G.spaceBeats('imagen'); // otro evento: no siembra
+      const noPost = S.flags.espacioFoto !== true && dump() === before;
+      await G.spaceBeats('apagon');
+      const after = dump();
+      check('siembra espacial: tras el apagón (~13:00) se postea la foto del cohete («no se fueron, están ORBITANDO»)',
+        noPost && S.flags.espacioFoto === true && after.includes('ORBITANDO') && after.includes('telescopio'));
+      const once = dump();
+      await G.spaceBeats('apagon');
+      check('siembra espacial: se postea una sola vez en la noche', dump() === once);
+    }
+  }
+
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR FATAL en la prueba:', e); process.exit(2); });
