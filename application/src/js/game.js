@@ -231,7 +231,7 @@
   // partida, la partida se ABANDONA (enterPractice descarta los
   // temporizadores de la historia): al terminar se va a la lista o al
   // título, nunca de vuelta a la run.
-  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'apagon', 'pizza', 'sonambula', 'memoria', 'imagen', 'cactus', 'cactus2', 'repisas', 'pisoton', 'globos', 'azotea', 'patron', 'trazo', 'soga', 'finalleyendas'];
+  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'apagon', 'pizza', 'sonambula', 'memoria', 'imagen', 'cactus', 'cactus2', 'repisas', 'pisoton', 'globos', 'azotea', 'anillos', 'cinturon', 'finalj1407b', 'patron', 'trazo', 'soga', 'finalleyendas'];
   const DUEL_DESC = {
     decoracion: 'Cuelga la decoración en su zona antes de que Pollito la tire.',
     pollito: 'Persigue al gato por la sala y recupera lo que robó.',
@@ -247,6 +247,9 @@
     pisoton: 'Cambia de cojín y esquiva los pisotones de Pollito.',
     globos: 'Pollito dirige con banderas (¡y hace fintas!): espera el ¡YA! y levanta el globo indicado. Quien elige mal, sale volando.',
     azotea: 'Esquiva las pasadas del dron sobre la azotea.',
+    anillos: 'Carrera 2 vs 2 en cohete sobre un anillo de J1407b: 3 carriles, meteoritos que ocupan 1 o 2, y un copiloto que sugiere carriles (si vas al contrario, el cohete duda).',
+    cinturon: 'Duelo 1 vs 1 flotando con inercia entre asteroides contra José: chocar aturde 1,5 s. Pollito flota libre empujando rocas.',
+    finalj1407b: 'El final alternativo COMPLETO: despegue de la azotea, carrera de anillos, cinturón de asteroides y fiesta en gravedad baja sobre J1407b.',
     patron: 'Final Leyendas · casting: repite el patrón de resplandores del Alebrije (memoria, 5 rondas).',
     trazo: 'Final Leyendas · boss 2A: traza la leyenda con precisión y corre a los hexágonos seguros contra Teodora.',
     soga: 'Final Leyendas · boss 2B: salta la soga de fuego sin quemarte; Teodora flota, pero se distrae con selfies.',
@@ -530,6 +533,10 @@
     pizza: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.PizzaRace, note: () => 'Sigilo = mejor equilibrio', setup() {} },
     sonambula: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.SleepwalkDuel, note: () => 'Sigilo = más margen al frenar', setup() {} },
     globos: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.BalloonDuel, note: () => 'Pollito dirige: no caigas en sus fintas', setup() {} },
+    // ----- Final J1407b (práctica y cadena del clímax) -----
+    anillos: { stats: ['velocidad'], Scene: () => Sc.RingRaceDuel, note: () => 'Tu copiloto es tu primer partner: hazle caso al cambiar de carril', setup() {} },
+    cinturon: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.AsteroidBeltDuel, note: () => 'Inercia pura: impulsa en contra para frenar', setup() {} },
+    finalj1407b: { stats: ['velocidad'], Scene: () => Sc.SpaceEndingScene, note: () => 'La cadena completa del final alternativo J1407b', setup() {} },
     // ----- Final LEYENDAS (práctica y cadena del clímax) -----
     patron: { stats: ['logica', 'carisma'], Scene: () => Sc.PatronDuel, note: () => 'Casting del Alebrije: memoria de secuencias', setup() {} },
     trazo: { stats: ['velocidad', 'logica'], Scene: () => Sc.TrazoDuel, note: () => 'Boss Teodora: precisión de trazo y hexágonos seguros', setup() {} },
@@ -833,6 +840,31 @@
       <div class="stats"><div><b>${'★'.repeat(lvl)}${'☆'.repeat(4 - lvl)}</b><span>Calidad de la fiesta (${S.quality})</span></div><div><b>${S.sus}%</b><span>Sospecha</span></div><div><b>${Object.keys(S.inv).length}/${Object.keys(G.ITEMS).length}</b><span>Objetos</span></div><div><b>${S.duels.filter((d) => d.win === 'win').length}/${S.duels.length}</b><span>Duelos ganados</span></div></div></div>`, 'JUGAR OTRA VEZ');
     location.reload();
   }
+
+  // ---------- Final alternativo J1407b (SPACE_RINGS_ENDING) ----------
+  // HOOK DE HISTORIA — decisiones de guion A–D PENDIENTES de Jose, NO
+  // inventar aquí: (A) prioridad si se cumplen 2 finales a la vez,
+  // (B) si J1407b es viaje real o sueño, (C) desbloqueos a
+  // práctica/galería, (D) accesible desde la primera partida o solo
+  // NG+. La condición propuesta en el guion (ganar el duelo de la zona
+  // ESPACIO en Repisas + Preparación ≥ 80 y Despertar < 50 a las
+  // 23:00, con la siembra del telescopio en la repisa y la foto del
+  // cohete en el WhatsApp ~13:00) se enganchará en este punto cuando
+  // Jose la cierre: la noche llamaría a G.startSpaceEnding() en vez
+  // de (o antes de) actReveal/showEnding, y el resultado cerraría con
+  // showEnding('espacio') — el final ya está registrado en G.ENDINGS.
+  // Mientras tanto, el final se juega desde el menú de práctica
+  // («Final J1407b», «Anillos de J1407b», «Cinturón de asteroides») o
+  // a mano con esta función.
+  G.startSpaceEnding = function (done) {
+    const who = S.player || 'natalia';
+    G.captureKeys = true; $('#phone').classList.add('dim');
+    new Promise((r) => G.setScene(new Sc.SpaceEndingScene(who, r))).then((res) => {
+      G.captureKeys = false; $('#phone').classList.remove('dim');
+      if (G.home) G.setScene(G.home);
+      if (done) done(res);
+    });
+  };
 
   async function main() {
     await Sp.ready;

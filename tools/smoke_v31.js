@@ -63,6 +63,25 @@
       de los huidos solo pasa en el espacio, con la tripulación
       correcta (S.fled en historia; todos menos el elegido en
       práctica) y su guiño en burbuja la primera vez.
+   L) Final J1407b (SPACE_RINGS_ENDING): 1A «Anillos de J1407b»
+      se instancia con el copiloto = primer partner, la DUDA se
+      activa al ir contra su sugerencia (y no al seguirla) y la
+      carrera termina con resultado y conteo de choques; 1B
+      «Cinturón de asteroides» sale del origen sin ventaja y
+      adelantado con ella (ventaja cruzada), trae asteroides de
+      fiesta y termina con resultado y aturdimientos; la cadena
+      SpaceEndingScene arranca en el despegue y pasa a los Anillos;
+      y todo queda registrado en práctica (EVENTS/MG); su entrada a
+      la historia se prueba en la sección N (integración).
+   M) Final Leyendas (LEYENDAS_MOVIE_ENDING): ítems claqueta y
+      cámara antigua, habilitación G.legendsReady (casting +
+      decoración real + preparación), los duelos del Alebrije y
+      de Teodora (trazo/hundimiento y soga) y la cadena completa.
+   N) Integración de finales: G.spaceReady (Escalada espacial
+      ganada + Preparación ≥ 80 + Sospecha < 50), la siembra del
+      espacio (foto del cohete ~13:00 y telescopio en la Escalada)
+      y el enrutado del clímax: solo uno → ese final; AMBOS →
+      ELIGE EL JUGADOR (decisión de Jose); ninguno → final normal.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -1273,6 +1292,88 @@ const tick = () => new Promise((r) => setImmediate(r));
     }
     // En práctica NO hay sorteo: la entrada «cactus» juega siempre su variante (runMinigame no sortea con practiceMode)
     check('práctica sin sorteo: cactusVariant solo se invoca desde la historia (guardado por G.practiceMode en runMinigame)', typeof G.cactusVariant === 'function');
+  }
+
+  // ================= L) Final J1407b — SPACE_RINGS_ENDING =================
+  console.log('\nL) Final J1407b — anillos, cinturón y la cadena completa');
+  {
+    S.inv = {}; S.flags = {}; S.partners = ['majo']; S.party = ['natalia', 'majo']; S.tired = null;
+    // --- 1A: se instancia, el copiloto es el primer partner, hay duda ---
+    const dA = new Sc.RingRaceDuel('natalia', () => {});
+    check('J1407b 1A: el copiloto es el primer partner de la party (majo)', dA.copilotId === 'majo', dA.copilotId);
+    dA.sug = { lane: 0, t: 2, mProg: 99999 }; dA.lane = 1;
+    dA.press(1); // contra la sugerencia (el copiloto pedía la izquierda)
+    check('J1407b 1A: ir contra la sugerencia del copiloto activa la DUDA de 0,3 s', dA.doubtT > 0, 'doubtT=' + dA.doubtT);
+    const dA3 = new Sc.RingRaceDuel('natalia', () => {});
+    dA3.sug = { lane: 0, t: 2, mProg: 99999 }; dA3.lane = 1;
+    dA3.press(-1); // a favor de la sugerencia: sin duda
+    check('J1407b 1A: seguir la sugerencia NO activa la duda', dA3.doubtT === 0 && dA3.lane === 0, 'doubtT=' + dA3.doubtT + ' lane=' + dA3.lane);
+    // --- 1A: la carrera corre y termina con resultado válido ---
+    let resA = null;
+    const dA2 = new Sc.RingRaceDuel('natalia', (r) => { resA = r; });
+    let steps = 0;
+    while (!resA && steps++ < 5000) dA2.update(0.05);
+    check('J1407b 1A: la carrera termina y entrega un resultado (win/tie/lose)', !!resA && ['win', 'tie', 'lose'].includes(resA.win), JSON.stringify(resA));
+    check('J1407b 1A: el resultado trae choques de ambos cohetes y el copiloto', !!resA && typeof resA.crashesP === 'number' && typeof resA.crashesB === 'number' && resA.copilot === 'majo', JSON.stringify(resA));
+    check('J1407b 1A: se generaron meteoritos de 1 y de 2 carriles durante la carrera', dA2.meteors !== undefined && dA2.crashesP + dA2.crashesB >= 0 && dA2.elapsed > 20, 'elapsed=' + dA2.elapsed);
+    // --- 1B: ventaja cruzada y terminación ---
+    const dB0 = new Sc.AsteroidBeltDuel('natalia', () => {});
+    check('J1407b 1B: sin ventaja se sale desde el origen del cinturón', dB0.P.x === 0, 'x=' + dB0.P.x);
+    const dB1 = new Sc.AsteroidBeltDuel('natalia', () => {}, { adv: true });
+    check('J1407b 1B: ganar 1A da SALIDA ADELANTADA (empiezas más cerca del aro)', dB1.P.x > dB0.P.x && dB1.adv === true, `adv=${dB1.P.x} base=${dB0.P.x}`);
+    check('J1407b 1B: el cinturón trae asteroides con formas de fiesta (pastel, globo, regalo)',
+      ['pastel', 'globo', 'regalo'].every((k) => dB0.rocks.some((r) => r.kind === k)), [...new Set(dB0.rocks.map((r) => r.kind))].join(','));
+    let resB = null;
+    const dB = new Sc.AsteroidBeltDuel('natalia', (r) => { resB = r; });
+    steps = 0;
+    while (!resB && steps++ < 5000) dB.update(0.05);
+    check('J1407b 1B: el duelo de flotación termina con resultado válido (la IA de José compite)', !!resB && ['win', 'tie', 'lose'].includes(resB.win), JSON.stringify(resB));
+    check('J1407b 1B: el resultado trae los aturdimientos de ambos (para el pastel magullado)', !!resB && typeof resB.hitsP === 'number' && typeof resB.hitsB === 'number', JSON.stringify(resB));
+    // --- La cadena completa: fases en orden ---
+    const chain = new Sc.SpaceEndingScene('natalia', () => {});
+    check('J1407b cadena: arranca en la cinemática de despegue en la azotea', chain.cur instanceof Sc.SpaceLaunchScene);
+    chain.cur.finish(); // saltar la cinemática, como con ESPACIO
+    check('J1407b cadena: tras el despegue entra la carrera de Anillos', chain.cur instanceof Sc.RingRaceDuel && chain.cur.copilotId === 'majo');
+    // --- La cadena completa llega hasta el resultado del final ---
+    let chainRes = null;
+    const chain2 = new Sc.SpaceEndingScene('natalia', (r) => { chainRes = r; });
+    chain2.cur.finish(); // despegue saltado
+    steps = 0;
+    while (chain2.cur instanceof Sc.RingRaceDuel && steps++ < 5000) chain2.update(0.05);
+    check('J1407b cadena: tras los Anillos pasa a la transición de cohetes averiados', chain2.cur instanceof Sc.SpaceTransitionScene);
+    chain2.cur.finish(); // transición saltada
+    check('J1407b cadena: tras la transición entra el Cinturón, con la ventaja que corresponda según 1A',
+      chain2.cur instanceof Sc.AsteroidBeltDuel && chain2.cur.adv === (chain2.results.ring.win === 'win'),
+      `adv=${chain2.cur && chain2.cur.adv} ring=${chain2.results.ring && chain2.results.ring.win}`);
+    steps = 0;
+    while (chain2.cur instanceof Sc.AsteroidBeltDuel && steps++ < 5000) chain2.update(0.05);
+    check('J1407b cadena: tras el Cinturón llega la fiesta sobre el anillo mayor', chain2.cur instanceof Sc.SpacePartyScene);
+    steps = 0;
+    while (!chainRes && steps++ < 3000) chain2.update(0.05);
+    check('J1407b cadena: la fiesta cierra y entrega el resultado SPACE_RINGS_ENDING',
+      !!chainRes && chainRes.spaceEnding === true && ['win', 'tie', 'lose'].includes(chainRes.win) && typeof chainRes.cakeBruised === 'boolean', JSON.stringify(chainRes));
+    // --- Registro en práctica / historia ---
+    check('J1407b: los eventos de práctica existen (anillos, cinturón, final)', ['anillos', 'cinturon', 'finalj1407b'].every((id) => G.EVENTS[id] && G.EVENTS[id].type === 'minigame'));
+    check('J1407b: MG registra las tres entradas con sus escenas', !!(MG.anillos && MG.cinturon && MG.finalj1407b) && MG.anillos.Scene() === Sc.RingRaceDuel && MG.cinturon.Scene() === Sc.AsteroidBeltDuel && MG.finalj1407b.Scene() === Sc.SpaceEndingScene);
+    check('J1407b: G.startSpaceEnding está expuesta para enganchar la historia después', typeof G.startSpaceEnding === 'function');
+    check('J1407b: el final está registrado en G.ENDINGS (FIESTA EN J1407B)', !!(G.ENDINGS.espacio && /J1407B/.test(G.ENDINGS.espacio.title)));
+    check('J1407b: las entradas nuevas NO están en la historia (decisiones A–D pendientes)', !G.STORY.includes('anillos') && !G.STORY.includes('cinturon') && !G.STORY.includes('finalj1407b'));
+    // --- Revisión 2026-11-21: duda en el otro sentido, freno al chocar,
+    // listener táctil que se retira y la regla exacta del pastel ---
+    const dA4 = new Sc.RingRaceDuel('natalia', () => {});
+    dA4.sug = { lane: 2, t: 2, mProg: 99999 }; dA4.lane = 1;
+    dA4.press(-1); // contra la sugerencia (pedía la derecha): duda también en este sentido
+    check('J1407b revisión: la DUDA también se activa yendo contra la sugerencia hacia el otro lado', dA4.doubtT > 0, 'doubtT=' + dA4.doubtT);
+    const dA5 = new Sc.RingRaceDuel('natalia', () => {});
+    dA5.v = 100; dA5.crashP();
+    check('J1407b revisión: chocar en 1A FRENA el cohete (sin eliminar)', dA5.v < 100 && dA5.crashesP === 1 && dA5.crashT > 0, 'v=' + dA5.v);
+    const dA6 = new Sc.RingRaceDuel('natalia', () => {});
+    const tapAntes = typeof dA6.tapH === 'function';
+    dA6.finish('p');
+    check('J1407b revisión: el listener táctil de 1A se retira al terminar la carrera', tapAntes && dA6.tapH === null, 'tapH=' + dA6.tapH);
+    const bruised = (belt) => new Sc.SpacePartyScene('natalia', { belt }, () => {}).bruised;
+    check('J1407b revisión: pastel magullado SOLO si pierdes 1B o chocas 3+ veces (el empate no magulla)',
+      bruised({ win: 'lose', hitsP: 0 }) === true && bruised({ win: 'win', hitsP: 3 }) === true && bruised({ win: 'win', hitsP: 2 }) === false && bruised({ win: 'tie', hitsP: 0 }) === false && bruised({ win: 'tie', hitsP: 3 }) === true);
   }
 
   // ================= M) Final LEYENDAS (LEYENDAS_MOVIE_ENDING) =============

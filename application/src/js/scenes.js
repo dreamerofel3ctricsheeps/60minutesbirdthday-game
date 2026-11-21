@@ -2659,6 +2659,783 @@
   }
 
   // =========================================================
+  // 14. FINAL J1407b — SPACE_RINGS_ENDING (pedido de Jose, 2026-11-21)
+  // Cadena de escenas del final alternativo: cinemática de despegue
+  // en la azotea → 1A «Anillos de J1407b» (carrera 2 vs 2 en cohete
+  // sobre un anillo, inspirada en Cosmic Coaster) → transición con
+  // los cohetes averiados → 1B «Cinturón de asteroides» (duelo 1 vs 1
+  // flotando con inercia, inspirado en Mass Meteor) → fiesta en
+  // gravedad baja sobre el anillo mayor y foto de grupo.
+  // REGLA DE JOSE: las ESCENAS se programan en 3D con el motor WebGL
+  // (geometría, materiales por código, luces y cámara) — NO se usa
+  // ninguna imagen de fondo. La pista ES la geometría del anillo, el
+  // cinturón son rocas en el espacio 3D y la plataforma una losa sobre
+  // el anillo. Personajes, cohetes, ítems y obstáculos van como
+  // billboards o lienzos DIBUJADOS POR CÓDIGO (abajo), igual que las
+  // galaxias de la Escalada: ningún archivo de imagen nuevo.
+  // VENTAJA CRUZADA (aprobada para esta implementación): ganar 1A da
+  // SALIDA ADELANTADA en 1B = empiezas BELT_ADV unidades más cerca
+  // del aro (ver AsteroidBeltDuel). Perder 1B NO es derrota de
+  // partida: el final se alcanza igual; cambia el cierre (José
+  // "descubrió" el planeta y el pastel sale magullado si perdiste 1B
+  // o chocaste 3+ veces en el cinturón).
+  // ACCESO: práctica (entradas propias «anillos», «cinturon» y la
+  // cadena «finalj1407b») y G.startSpaceEnding() en game.js. La
+  // condición de desbloqueo en la HISTORIA queda pendiente de las
+  // decisiones de guion A–D de Jose: NO se inventa aquí (ver el HOOK
+  // en game.js junto a G.startSpaceEnding).
+  // IDENTIDAD: Pollito es el gato blanco atigrado de su hoja definida
+  // (Actor normal: frontal sin espejo, escala de su bundle); en 1A va
+  // de copiloto del rival y en 1B flota libre como caos. José conserva
+  // sus lentes: el aturdido se marca con giro + estrellitas FUERA del
+  // casco, nunca repintando ojos sobre sus lentes. El casco burbuja es
+  // un overlay dibujado por código sobre cualquier sprite (drawHelmet).
+  // =========================================================
+  const spaceHash = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+  // Copiloto de 1A: el partner de mayor afinidad; sin sistema de
+  // afinidad en la v3.1, es el PRIMER partner de la party (en
+  // práctica, el primer roomie distinto del protagonista).
+  function spaceCopilotOf(who) {
+    const ps = (G.S && G.S.partners) || [];
+    return ps.find((id) => id !== who) || G.PLAYABLE.find((id) => id !== who) || 'majo';
+  }
+  // Cielo profundo por código: estrellas (brillos planos lejanos) y
+  // las galaxias de la Escalada, recolocadas por tramos según cx.
+  function drawSpaceSky(t, cx) {
+    const seg = Math.floor(cx / 700), anchor = seg * 700;
+    for (let i = 0; i < 60; i++) {
+      const x = anchor - 620 + spaceHash(i * 3.13 + seg * 57.7) * 1240;
+      const y = 26 + spaceHash(i * 7.31 + seg * 91.3) * 400;
+      R.flat(R.glowTex, x, y, -860, 1.6 + spaceHash(i * 5.7) * 2.6, { tint: [0.85, 0.9, 1], alpha: 0.35 + 0.3 * (0.5 + 0.5 * Math.sin(t * 1.7 + i * 1.3)) });
+    }
+    for (let j = 0; j < 2; j++) {
+      const gx = anchor - 420 + spaceHash(seg * 41.7 + j * 173.3) * 900, gy = 120 + spaceHash(seg * 29.9 + j * 61.1) * 260;
+      R.sprite(galaxyCv(((seg + j) % 3 + 3) % 3), gx, gy - 70, -880, { w: 140, h: 140, roll: spaceHash(j * 7 + seg) * 1.2 - 0.6, alpha: 0.75, lit: 0, nostretch: true });
+    }
+  }
+  // J1407b por código: esfera con bandas en la paleta de la ficha y
+  // sus anillos concéntricos (arcos traseros y delanteros). Es un
+  // lienzo generado, no un archivo: va de billboard gigante al fondo.
+  let planetCvCache = null;
+  function planetCv() {
+    if (planetCvCache) return planetCvCache;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 360;
+    const x = cv.getContext('2d'), C = 180;
+    x.save(); x.translate(C, C); x.scale(1, 0.3);
+    for (let i = 0; i < 9; i++) { x.beginPath(); x.arc(0, 0, 128 + i * 9, 0, 6.3); x.lineWidth = i % 2 ? 3 : 5; x.strokeStyle = `rgba(217,164,91,${0.2 + (i % 3) * 0.09})`; x.stroke(); }
+    x.restore();
+    const bands = ['#c68f4e', '#e3b77e', '#b97f3e', '#eecfa0', '#c68f4e', '#d9a45b', '#b97f3e', '#e3b77e'];
+    x.save(); x.beginPath(); x.arc(C, C, 118, 0, 6.3); x.clip();
+    bands.forEach((col, i) => { x.fillStyle = col; x.fillRect(C - 118, C - 118 + i * 30, 236, 30); });
+    const g = x.createRadialGradient(C - 40, C - 46, 30, C, C, 150);
+    g.addColorStop(0, 'rgba(255,246,220,.38)'); g.addColorStop(0.55, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(10,8,30,.5)');
+    x.fillStyle = g; x.fillRect(C - 118, C - 118, 236, 236);
+    x.restore();
+    x.beginPath(); x.arc(C, C, 118, 0, 6.3); x.lineWidth = 2; x.strokeStyle = 'rgba(255,240,210,.5)'; x.stroke();
+    x.save(); x.translate(C, C); x.scale(1, 0.3);
+    for (let i = 0; i < 9; i++) { x.beginPath(); x.arc(0, 0, 128 + i * 9, Math.PI * 0.12, Math.PI * 0.88); x.lineWidth = i % 2 ? 3 : 5; x.strokeStyle = `rgba(227,183,126,${0.35 + (i % 3) * 0.1})`; x.stroke(); }
+    x.restore();
+    planetCvCache = cv; return cv;
+  }
+  const ROCKET_PAL = {
+    party: { body: '#f5e6c8', body2: '#e8d3a8', acc: '#e4573d', fin: '#2fa8a0', win: '#274b5c' },
+    rival: { body: '#4a3566', body2: '#5d4780', acc: '#58c46a', fin: '#3f9e58', win: '#241a38' },
+  };
+  // Cohete en vista TRASERA (para 1A): en la ventanilla se ven las
+  // NUCAS con casco de piloto y copiloto, nunca las caras (defecto de
+  // la hoja de concepto corregido aquí, como marca la ficha).
+  const rocketBackCache = {};
+  function rocketBackCv(livery) {
+    if (rocketBackCache[livery]) return rocketBackCache[livery];
+    const P = ROCKET_PAL[livery];
+    const cv = document.createElement('canvas'); cv.width = 170; cv.height = 150;
+    const x = cv.getContext('2d');
+    x.fillStyle = P.fin;
+    x.beginPath(); x.moveTo(28, 62); x.lineTo(6, 128); x.lineTo(40, 128); x.lineTo(52, 84); x.closePath(); x.fill();
+    x.beginPath(); x.moveTo(142, 62); x.lineTo(164, 128); x.lineTo(130, 128); x.lineTo(118, 84); x.closePath(); x.fill();
+    x.fillStyle = P.body; x.beginPath(); x.ellipse(85, 76, 56, 62, 0, 0, 6.3); x.fill();
+    x.fillStyle = P.body2; x.beginPath(); x.ellipse(85, 76, 56, 62, 0, 0, Math.PI); x.fill();
+    x.fillStyle = P.acc; x.fillRect(31, 94, 108, 10);
+    x.fillStyle = P.win; x.beginPath(); x.arc(85, 56, 30, 0, 6.3); x.fill();
+    x.lineWidth = 4; x.strokeStyle = '#c8ccd8'; x.stroke();
+    for (const hx of [70, 100]) { // dos cascos vistos desde atrás
+      x.fillStyle = 'rgba(190,220,255,.92)'; x.beginPath(); x.arc(hx, 58, 12.5, 0, 6.3); x.fill();
+      x.fillStyle = '#5a4030'; x.beginPath(); x.ellipse(hx, 63, 11, 7, 0, 0, Math.PI); x.fill();
+      x.fillStyle = 'rgba(255,255,255,.85)'; x.beginPath(); x.arc(hx - 4, 52, 3.4, 0, 6.3); x.fill();
+    }
+    x.fillStyle = '#3a3348'; x.beginPath(); x.moveTo(70, 130); x.lineTo(100, 130); x.lineTo(94, 146); x.lineTo(76, 146); x.closePath(); x.fill();
+    rocketBackCache[livery] = cv; return cv;
+  }
+  // Cohete vertical de perfil (despegue, transición y plataforma).
+  const rocketSideCache = {};
+  function rocketSideCv(livery, damaged) {
+    const key = livery + (damaged ? 'd' : '');
+    if (rocketSideCache[key]) return rocketSideCache[key];
+    const P = ROCKET_PAL[livery];
+    const cv = document.createElement('canvas'); cv.width = 170; cv.height = 200;
+    const x = cv.getContext('2d');
+    x.fillStyle = P.fin;
+    x.beginPath(); x.moveTo(58, 128); x.lineTo(26, 182); x.lineTo(58, 182); x.closePath(); x.fill();
+    x.beginPath(); x.moveTo(112, 128); x.lineTo(144, 182); x.lineTo(112, 182); x.closePath(); x.fill();
+    x.fillStyle = P.body; x.beginPath(); x.roundRect(55, 26, 60, 138, 29); x.fill();
+    x.fillStyle = P.acc; x.beginPath(); x.roundRect(55, 26, 60, 34, 16); x.fill();
+    x.fillStyle = P.body2; x.fillRect(55, 118, 60, 9);
+    x.fillStyle = P.win; x.beginPath(); x.arc(85, 80, 17, 0, 6.3); x.fill();
+    x.lineWidth = 3.4; x.strokeStyle = '#c8ccd8'; x.stroke();
+    x.fillStyle = 'rgba(190,220,255,.92)'; x.beginPath(); x.arc(85, 82, 10.5, 0, 6.3); x.fill();
+    x.fillStyle = '#5a4030'; x.beginPath(); x.ellipse(85, 86, 9.5, 6, 0, 0, Math.PI); x.fill();
+    x.strokeStyle = 'rgba(40,32,54,.55)'; x.lineWidth = 2; x.beginPath(); x.roundRect(67, 106, 36, 42, 8); x.stroke();
+    x.fillStyle = '#3a3348'; x.beginPath(); x.moveTo(72, 164); x.lineTo(98, 164); x.lineTo(93, 178); x.lineTo(77, 178); x.closePath(); x.fill();
+    if (damaged) { // averiado: manchas de hollín, abolladuras y una grieta
+      x.fillStyle = 'rgba(70,66,80,.5)';
+      x.beginPath(); x.ellipse(70, 120, 13, 9, 0.4, 0, 6.3); x.fill();
+      x.beginPath(); x.ellipse(98, 52, 10, 7, -0.3, 0, 6.3); x.fill();
+      x.strokeStyle = 'rgba(30,26,40,.7)'; x.lineWidth = 1.8;
+      x.beginPath(); x.moveTo(88, 96); x.lineTo(94, 110); x.lineTo(89, 122); x.stroke();
+    }
+    rocketSideCache[key] = cv; return cv;
+  }
+  // Llama de motor por código (punta hacia abajo).
+  let flameCvCache = null;
+  function flameCv() {
+    if (flameCvCache) return flameCvCache;
+    const cv = document.createElement('canvas'); cv.width = 60; cv.height = 84;
+    const x = cv.getContext('2d');
+    const drop = (w, h, col) => { x.fillStyle = col; x.beginPath(); x.moveTo(30 - w, 4); x.quadraticCurveTo(30 - w * 0.7, h * 0.55, 30, h); x.quadraticCurveTo(30 + w * 0.7, h * 0.55, 30 + w, 4); x.quadraticCurveTo(30, h * 0.22, 30 - w, 4); x.fill(); };
+    drop(19, 80, '#e4573d'); drop(13, 62, '#ff9a2e'); drop(7, 40, '#2fa8a0');
+    flameCvCache = cv; return cv;
+  }
+  // Rocas por código: asteroide con cráteres y las 3 formas de fiesta
+  // (pastel, globo, regalo) en roca gris, como guiño de Mass Meteor.
+  const rockCache = {};
+  function rockCv(kind, seed) {
+    const key = kind + ':' + seed;
+    if (rockCache[key]) return rockCache[key];
+    const cv = document.createElement('canvas'); cv.width = cv.height = 96;
+    const x = cv.getContext('2d');
+    const R1 = (n) => spaceHash(seed * 31.7 + n * 7.3);
+    const craters = (cx, cy, r, n) => { x.fillStyle = 'rgba(40,38,52,.35)'; for (let i = 0; i < (n || 4); i++) { x.beginPath(); x.arc(cx + (R1(i + 9) - 0.5) * r, cy + (R1(i + 13) - 0.5) * r, 3 + R1(i + 5) * 5, 0, 6.3); x.fill(); } };
+    if (kind === 'pastel') {
+      x.fillStyle = '#7d7a88';
+      x.beginPath(); x.roundRect(18, 58, 60, 20, 6); x.fill();
+      x.beginPath(); x.roundRect(26, 40, 44, 20, 6); x.fill();
+      x.beginPath(); x.roundRect(34, 24, 28, 18, 6); x.fill();
+      craters(48, 52, 40, 5);
+      x.fillStyle = '#d8d3e0'; x.fillRect(46, 10, 4, 13);
+      x.fillStyle = '#ff9a2e'; x.beginPath(); x.ellipse(48, 7, 3, 4.6, 0, 0, 6.3); x.fill();
+    } else if (kind === 'globo') {
+      x.strokeStyle = '#8a8a99'; x.lineWidth = 1.6; x.beginPath(); x.moveTo(48, 72); x.quadraticCurveTo(52, 80, 48, 90); x.stroke();
+      x.fillStyle = '#7d7a88'; x.beginPath(); x.ellipse(48, 40, 26, 31, 0, 0, 6.3); x.fill();
+      craters(48, 40, 36, 4);
+      x.fillStyle = '#7d7a88'; x.beginPath(); x.moveTo(44, 70); x.lineTo(52, 70); x.lineTo(48, 76); x.closePath(); x.fill();
+    } else if (kind === 'regalo') {
+      x.fillStyle = '#7d7a88'; x.beginPath(); x.roundRect(22, 32, 52, 44, 5); x.fill();
+      x.fillStyle = 'rgba(40,38,52,.4)'; x.fillRect(44, 32, 8, 44); x.fillRect(22, 48, 52, 7);
+      x.fillStyle = '#8f8b9a';
+      x.beginPath(); x.ellipse(39, 26, 9, 5.4, -0.6, 0, 6.3); x.fill();
+      x.beginPath(); x.ellipse(57, 26, 9, 5.4, 0.6, 0, 6.3); x.fill();
+      craters(48, 56, 34, 3);
+    } else {
+      x.fillStyle = '#7d7a88'; x.beginPath();
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * 6.283, rr = 34 * (0.82 + R1(i) * 0.3), px = 48 + Math.cos(a) * rr, py = 48 + Math.sin(a) * rr; if (i === 0) x.moveTo(px, py); else x.quadraticCurveTo(48 + Math.cos(a - 0.39) * 35, 48 + Math.sin(a - 0.39) * 35, px, py); }
+      x.closePath(); x.fill();
+      x.fillStyle = 'rgba(255,255,255,.13)'; x.beginPath(); x.ellipse(36, 34, 13, 9, -0.6, 0, 6.3); x.fill();
+      craters(48, 48, 44, 5);
+    }
+    rockCache[key] = cv; return cv;
+  }
+  // Aros de meta por código: aro de luz (fin de 1A) y aro a cuadros (1B).
+  const ringGoalCache = {};
+  function ringGoalCv(kind) {
+    if (ringGoalCache[kind]) return ringGoalCache[kind];
+    const cv = document.createElement('canvas'); cv.width = cv.height = 180;
+    const x = cv.getContext('2d');
+    if (kind === 'luz') {
+      const g = x.createRadialGradient(90, 90, 30, 90, 90, 88);
+      g.addColorStop(0, 'rgba(255,210,63,0)'); g.addColorStop(0.72, 'rgba(255,210,63,.14)'); g.addColorStop(0.85, 'rgba(255,210,63,.4)'); g.addColorStop(1, 'rgba(255,210,63,0)');
+      x.fillStyle = g; x.fillRect(0, 0, 180, 180);
+      x.beginPath(); x.arc(90, 90, 66, 0, 6.3); x.lineWidth = 13; x.strokeStyle = '#ffd23f'; x.stroke();
+      x.beginPath(); x.arc(90, 90, 66, 0, 6.3); x.lineWidth = 4; x.strokeStyle = '#fff3c4'; x.stroke();
+      x.fillStyle = '#fff3c4';
+      [[90, 12], [168, 90], [90, 168], [12, 90]].forEach(([px, py]) => { x.fillRect(px - 1.5, py - 6, 3, 12); x.fillRect(px - 6, py - 1.5, 12, 3); });
+    } else {
+      for (let i = 0; i < 16; i++) { x.beginPath(); x.arc(90, 90, 68, (i / 16) * 6.283, ((i + 1) / 16) * 6.283); x.lineWidth = 17; x.strokeStyle = i % 2 ? '#e8e2f2' : '#2b2540'; x.stroke(); }
+      x.beginPath(); x.arc(90, 90, 59, 0, 6.3); x.lineWidth = 1.6; x.strokeStyle = '#ffd23f'; x.stroke();
+    }
+    ringGoalCache[kind] = cv; return cv;
+  }
+  // CASCO BURBUJA: overlay transparente dibujado por código sobre
+  // cualquier actor (burbuja con brillo + anillo de cuello), sin tapar
+  // la cara. Con thrust, la mochila de atrás echa su llamita. Las
+  // estrellitas del aturdido van FUERA del casco (stunStars).
+  function drawHelmet(c, a, thrust) {
+    const top = (a.id === 'pollito' ? 34 : Sp.charTop(a.id) + 3) * R.stretch * a.scale;
+    const pc = R.project(a.x, a.elev + top * 0.7, a.y);
+    if (!pc.ok) return;
+    const r = Math.max(9, top * 0.36);
+    c.save();
+    c.fillStyle = '#5a5470'; c.beginPath(); c.roundRect(pc.x - r - 13, pc.y - r * 0.2, 11, r * 1.15, 3); c.fill();
+    c.fillStyle = '#8f8aa8'; c.beginPath(); c.roundRect(pc.x - r - 13, pc.y - r * 0.2, 11, 5, 3); c.fill();
+    if (thrust) { c.fillStyle = '#ff9a2e'; c.beginPath(); c.moveTo(pc.x - r - 11, pc.y + r * 0.95); c.lineTo(pc.x - r - 4, pc.y + r * 0.95); c.lineTo(pc.x - r - 7.5, pc.y + r * 1.5); c.closePath(); c.fill(); }
+    c.beginPath(); c.arc(pc.x, pc.y, r, 0, 6.3);
+    c.fillStyle = 'rgba(165,205,255,.13)'; c.fill();
+    c.lineWidth = 1.8; c.strokeStyle = 'rgba(215,238,255,.95)'; c.stroke();
+    c.beginPath(); c.arc(pc.x, pc.y, r, Math.PI * 1.12, Math.PI * 1.52); c.lineWidth = 2.6; c.strokeStyle = 'rgba(255,255,255,.85)'; c.stroke();
+    c.beginPath(); c.ellipse(pc.x, pc.y + r * 0.92, r * 0.55, r * 0.16, 0, 0, 6.3);
+    c.fillStyle = '#c8ccd8'; c.fill(); c.lineWidth = 1; c.strokeStyle = '#7a7f92'; c.stroke();
+    c.restore();
+  }
+
+  // ---------- 1A. ANILLOS DE J1407B (Cosmic Coaster) ----------
+  const RING_LEN = 6200, RING_LANES = [-52, 0, 52];
+  class RingRaceDuel extends Duel {
+    constructor(who, done, o) {
+      super(who, 'jose', done, { rounds: 1, need: 1, label: 'CARRERA', title: 'ANILLOS DE J1407B', hint: '← → para cambiar de carril · Si tu copiloto sugiere otro carril y vas al contrario, el cohete duda', rendT: 1.6 });
+      this.isRingRace = true; this.quietRend = true;
+      this.copilotId = (o && o.copilot) || spaceCopilotOf(who);
+      this.cat = new Actor('pollito', RING_LANES[2] + 17, -40);
+      this.cat.dir = 'down'; this.cat.elev = 30;
+      this.cam = { x: 0, y: 10, z: 96, dist: 330, pitch: 0.3, fov: 42 };
+      // Táctil (mismo patrón que el clic de La imagen distinta):
+      // mitad izquierda/derecha de la pantalla = cambiar de carril.
+      // El listener se guarda y se RETIRA en finish(): antes quedaba
+      // colgado en el canvas para siempre, uno más por cada carrera
+      // jugada (revisión 2026-11-21).
+      this.tapDir = 0; this.tapCv = null; this.tapH = null;
+      try {
+        const cv = document.querySelector('#cv');
+        if (cv && cv.addEventListener) {
+          this.tapCv = cv;
+          this.tapH = (e) => {
+            if (this.st !== 'play') return;
+            const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, width: 640 };
+            this.tapDir = ((e.clientX - r.left) / Math.max(1, r.width)) < 0.5 ? -1 : 1;
+          };
+          cv.addEventListener('pointerdown', this.tapH);
+        }
+      } catch (e) { /* sin canvas accesible: queda el teclado */ }
+      this.begin();
+    }
+    setup() {
+      this.prog = 0; this.rprog = 0; this.elapsed = 0;
+      this.v = 30; this.rv = 30;
+      this.cruise = 97 + stat(this.who, 'velocidad') * 2.4; this.rcruise = 112;
+      this.lane = 1; this.laneX = RING_LANES[1]; this.rlane = 2; this.rlaneX = RING_LANES[2];
+      this.crashT = 0; this.rcrashT = 0; this.crashesP = 0; this.crashesB = 0;
+      this.doubtT = 0; this.sug = null; this.sugCd = 2.5;
+      this.meteors = []; this.nextMet = 520; this.finished = false;
+      this.cat.x = RING_LANES[2] + 17; this.cat.y = -40; this.cat.elev = 30;
+    }
+    press(dir) {
+      const nl = Math.max(0, Math.min(2, this.lane + dir));
+      if (nl === this.lane) return;
+      if (this.sug && this.sug.t > 0) { // desacuerdo con el copiloto: DUDA de 0,3 s
+        const sugDir = Math.sign(this.sug.lane - this.lane);
+        if (sugDir !== 0 && dir !== sugDir) { this.doubtT = 0.3; this.say('¡No coincidimos! El cohete duda…', '#ffd23f', 0.9); }
+      }
+      this.lane = nl; G.sfx('pick');
+    }
+    spawnMeteor(at) {
+      const dbl = Math.random() < 0.45;
+      const lanes = dbl ? (Math.random() < 0.5 ? [0, 1] : [1, 2]) : [(Math.random() * 3) | 0];
+      this.meteors.push({ prog: at, lanes, hitP: false, hitB: false, rDodge: false, rot: rnd(0, 6.3), seed: (Math.random() * 3) | 0 });
+    }
+    crashP() {
+      this.crashT = 2.3; this.crashesP++; this.v *= 0.45;
+      W.puff(this.laneX, -4, 7, true); G.sfx('bad');
+      this.say('¡Choque! El cohete se frena…', '#ff6b7a', 1.1);
+      this.cat.hop(170); // Pollito se ríe del choque ajeno (salta en su ventanilla)
+    }
+    crashB() {
+      this.rcrashT = 2.3; this.crashesB++; this.rv *= 0.45;
+      W.puff(this.rlaneX, Math.max(-330, -(this.rprog - this.prog)), 7, true); G.sfx('meow');
+      this.cat.emo('!!', 0.9); // Pollito se asusta si chocan ellos
+      if (this.crashesB === 1) this.say('¡El rival chocó! Pollito se asustó', '#7dff8a', 1.1);
+    }
+    finish(w) {
+      if (this.finished) return; this.finished = true;
+      if (this.tapCv && this.tapH && this.tapCv.removeEventListener) { try { this.tapCv.removeEventListener('pointerdown', this.tapH); } catch (e) { /* noop */ } }
+      this.tapH = null;
+      this.endRound(w, w === 'p' ? '¡Cruzaste el aro de luz primero!' : w === 'b' ? 'José cruzó el aro de luz primero…' : '¡Llegaron al aro a la vez!');
+    }
+    extra() { return { spaceRace: 'anillos', crashesP: this.crashesP, crashesB: this.crashesB, copilot: this.copilotId }; }
+    update(dt) {
+      const cat = this.cat; cat.update(dt);
+      if (!this.tick(dt)) return;
+      this.elapsed += dt;
+      if (this.tapDir) { this.press(this.tapDir); this.tapDir = 0; }
+      if (G.input.hit('left')) this.press(-1); else if (G.input.hit('right')) this.press(1);
+      if (this.doubtT > 0) this.doubtT -= dt;
+      // El cohete acelera solo; chocar FRENA unos segundos, no elimina.
+      const cT = this.crashT > 0 ? this.cruise * 0.34 : this.cruise;
+      this.v += (cT - this.v) * Math.min(1, dt * (this.crashT > 0 ? 3.2 : 0.55));
+      if (this.crashT > 0) this.crashT -= dt;
+      const rcT = this.rcrashT > 0 ? this.rcruise * 0.34 : this.rcruise;
+      this.rv += (rcT - this.rv) * Math.min(1, dt * (this.rcrashT > 0 ? 3.2 : 0.55));
+      if (this.rcrashT > 0) this.rcrashT -= dt;
+      const prevP = this.prog, prevB = this.rprog;
+      this.prog += this.v * dt; this.rprog += this.rv * dt;
+      // Carril real del jugador: con la duda puesta, el cambio tarda más.
+      const tx = RING_LANES[this.lane], stL = (this.doubtT > 0 ? 120 : 300) * dt;
+      this.laneX += Math.max(-stL, Math.min(stL, tx - this.laneX));
+      // IA del rival: esquiva el meteorito que tenga delante (84%).
+      const nm = this.meteors.find((mm) => mm.prog > this.rprog + 30 && mm.prog < this.rprog + 320 && mm.lanes.includes(this.rlane));
+      if (nm && !nm.rDodge) {
+        nm.rDodge = true;
+        if (Math.random() < 0.84) { const safe = [0, 1, 2].filter((l) => !nm.lanes.includes(l)); this.rlane = safe.sort((a, b) => Math.abs(a - this.rlane) - Math.abs(b - this.rlane))[0]; }
+      }
+      const rtx = RING_LANES[this.rlane], rst = 240 * dt;
+      this.rlaneX += Math.max(-rst, Math.min(rst, rtx - this.rlaneX));
+      // Meteoritos por delante del que vaya primero.
+      const lead = Math.max(this.prog, this.rprog);
+      while (this.nextMet < lead + 1500) { this.spawnMeteor(this.nextMet); this.nextMet += rnd(330, 500) * Math.max(0.72, 1 - this.elapsed / 300); }
+      // El copiloto sugiere el carril seguro del próximo meteorito.
+      if (this.sugCd > 0) this.sugCd -= dt;
+      if (this.sug) { this.sug.t -= dt; if (this.sug.t <= 0 || this.sug.mProg < this.prog - 40) this.sug = null; }
+      if (!this.sug && this.sugCd <= 0) {
+        const m = this.meteors.find((mm) => mm.prog > this.prog + 120 && mm.prog < this.prog + 1000);
+        if (m) { const safe = [0, 1, 2].filter((l) => !m.lanes.includes(l)); const sl = safe.includes(this.lane) ? this.lane : safe[(Math.random() * safe.length) | 0]; this.sug = { lane: sl, t: 2.4, mProg: m.prog }; this.sugCd = 5.5; }
+      }
+      // Choques al cruzar la línea de cada meteorito.
+      for (const m of this.meteors) {
+        if (!m.hitP && prevP < m.prog && this.prog >= m.prog) { m.hitP = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.laneX) < 34)) this.crashP(); }
+        if (!m.hitB && prevB < m.prog && this.rprog >= m.prog) { m.hitB = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.rlaneX) < 34)) this.crashB(); }
+        m.rot += dt * 0.7;
+      }
+      this.meteors = this.meteors.filter((m) => m.prog > Math.min(this.prog, this.rprog) - 260);
+      // Pollito acompaña al cohete rival, asomado en su ventanilla.
+      const rz = Math.max(-330, Math.min(150, -(this.rprog - this.prog)));
+      cat.x = this.rlaneX + 17; cat.y = rz - 3; cat.elev = 30 + Math.sin(this.T * 2.2) * 1.6;
+      if (this.prog >= RING_LEN) return this.finish('p');
+      if (this.rprog >= RING_LEN) return this.finish('b');
+      if (this.elapsed > 115) return this.finish(this.prog > this.rprog + 30 ? 'p' : this.rprog > this.prog + 30 ? 'b' : 'tie');
+    }
+    endOverlay(c) {
+      const w = this.result.win;
+      c.fillStyle = 'rgba(16,12,26,.85)'; c.fillRect(0, 0, 640, 360);
+      G.icon(c, w === 'win' ? 'trofeo' : w === 'tie' ? 'empate' : 'derrota', 320, 84, 48);
+      G.text(c, w === 'win' ? '¡GANASTE!' : w === 'tie' ? 'EMPATE' : 'GANÓ JOSÉ', 320, 138, { size: 40, color: w === 'win' ? '#7dff8a' : w === 'tie' ? '#ffd23f' : '#ff6b7a', lw: 9 });
+      G.text(c, `Choques — Tú: ${this.crashesP} · José y Pollito: ${this.crashesB}`, 320, 182, { size: 17, lw: 6 });
+      G.text(c, w === 'win' ? 'Ventaja: en el Cinturón de asteroides sales más cerca del aro' : 'La revancha es flotando: el Cinturón de asteroides decide', 320, 208, { size: 11, color: '#b7a8e8' });
+    }
+    draw(dt) {
+      const rz = Math.max(-330, Math.min(150, -(this.rprog - this.prog)));
+      W.render({
+        cam: this.cam, dt, mesh: null, actors: [this.cat], noApartment: true,
+        light: { amb: [0.42, 0.44, 0.62], sun: [0.3, 0.3, 0.42], sky: '#0a1030', points: [{ x: 0, y: 120, z: -300, r: 700, c: [0.3, 0.3, 0.25] }] },
+        boxes: (mb) => { // LA PISTA ES EL ANILLO: cinta 3D que avanza, con 3 carriles y divisorias teal emisivas
+          const SEG = 90, off = this.prog % SEG, base = Math.floor(this.prog / SEG);
+          for (let i = 0; i < 15; i++) {
+            const zTop = 60 - i * SEG + off, sp = (base + i) * SEG, band = Math.floor(sp / 1500) % 3;
+            mb.flat(-108, zTop - SEG, 216, SEG + 2, 0, ['#b97f3e', '#d9a45b', '#a8743a'][band]);
+            mb.flat(-28, zTop - SEG, 4, SEG + 2, 0.5, '#2fa8a0', true);
+            mb.flat(24, zTop - SEG, 4, SEG + 2, 0.5, '#2fa8a0', true);
+            mb.flat(-112, zTop - SEG, 4, SEG + 2, 0.5, '#e4573d', true);
+            mb.flat(108, zTop - SEG, 4, SEG + 2, 0.5, '#e4573d', true);
+          }
+        },
+        sprites: (t) => {
+          drawSpaceSky(t, 0);
+          R.sprite(planetCv(), 190, -170, -1350, { w: 780, h: 780, nostretch: true, lit: 0 });
+          for (const m of this.meteors) {
+            const mz = -(m.prog - this.prog);
+            if (mz < -1250 || mz > 90) continue;
+            for (const l of m.lanes) {
+              const mx = RING_LANES[l];
+              if (mz > -430) R.flat(R.glowTex, mx, 0.9, mz, 30, { tint: [1, 0.35, 0.25], alpha: 0.35 + Math.sin(t * 10) * 0.15 }); // sombra de aviso en el carril
+              R.sprite(rockCv('rock', m.seed), mx, 16, mz, { w: 74, h: 74, roll: m.rot, lit: 0.5 });
+            }
+          }
+          const gz = -(RING_LEN - this.prog);
+          if (gz > -1100) R.sprite(ringGoalCv('luz'), 0, 6, gz, { w: 240, h: 240, nostretch: true, lit: 0 });
+          const rbob = Math.sin(t * 2.2) * 2;
+          R.sprite(rocketBackCv('rival'), this.rlaneX, 10 + rbob, rz, { w: 132, h: 116, roll: Math.max(-0.3, Math.min(0.3, (RING_LANES[this.rlane] - this.rlaneX) * 0.004)), lit: 0.7 });
+          const tilt = Math.max(-0.34, Math.min(0.34, (RING_LANES[this.lane] - this.laneX) * 0.005)) + (this.doubtT > 0 ? Math.sin(t * 42) * 0.07 : 0);
+          const bob = Math.sin(t * 2.6) * 2 + (this.crashT > 0 ? Math.sin(t * 30) * 2 : 0);
+          R.sprite(rocketBackCv('party'), this.laneX, 12 + bob, -6, { w: 148, h: 130, roll: tilt, lit: 0.75 });
+          const fl = 0.75 + Math.sin(t * 31) * 0.18 + this.v / Math.max(40, this.cruise) * 0.35, fh = 52 * fl;
+          R.sprite(flameCv(), this.laneX, 14 - fh, -6, { w: 34, h: fh, nostretch: true, lit: 0 });
+          R.sprite(flameCv(), this.rlaneX, 12 - fh * 0.85, rz, { w: 30, h: fh * 0.85, nostretch: true, lit: 0 });
+        },
+        over: (c, t) => {
+          if (this.st === 'over') { this.endOverlay(c); return; }
+          const pp = Math.min(100, Math.floor((this.prog / RING_LEN) * 100)), rp = Math.min(100, Math.floor((this.rprog / RING_LEN) * 100));
+          this.hud(c, t, `META ${pp}%`, `META ${rp}%`);
+          c.fillStyle = 'rgba(28,24,38,.8)'; c.beginPath(); c.roundRect(190, 56, 260, 10, 5); c.fill();
+          c.fillStyle = '#2fa8a0'; c.beginPath(); c.roundRect(192, 58, 256 * Math.min(1, this.prog / RING_LEN), 6, 3); c.fill();
+          c.fillStyle = '#b48cf0'; c.beginPath(); c.arc(192 + 256 * Math.min(1, this.rprog / RING_LEN), 61, 4.5, 0, 6.3); c.fill();
+          c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(192 + 256 * Math.min(1, this.prog / RING_LEN), 61, 4.5, 0, 6.3); c.fill();
+          if (this.st === 'play' && this.sug && this.sug.t > 0) {
+            const pr = R.project(this.laneX, 118, -6);
+            if (pr.ok) { if (this.sug.lane === this.lane) G.text(c, `${G.CHARS[this.copilotId].name}: ¡ese carril!`, pr.x, pr.y, { size: 10, color: '#7dff8a' }); else G.prompt(c, this.sug.lane < this.lane ? '←' : '→', pr.x + (this.sug.lane < this.lane ? -34 : 34), pr.y); }
+          }
+          if (this.st === 'play' && this.doubtT > 0) G.text(c, '¡EL COHETE DUDA!', 320, 300, { size: 13, color: '#ffd23f', lw: 5 });
+        },
+      });
+    }
+  }
+
+  // ---------- 1B. CINTURÓN DE ASTEROIDES (Mass Meteor) ----------
+  // VENTAJA CRUZADA: BELT_ADV = cuánto más cerca del aro empiezas si
+  // ganaste 1A (salida adelantada, la forma simple elegida).
+  const BELT_GOAL = 2500, BELT_ADV = 150, BELT_H = 196;
+  class AsteroidBeltDuel extends Duel {
+    constructor(who, done, o) {
+      super(who, 'jose', done, { rounds: 1, need: 1, label: 'CARRERA', title: 'CINTURÓN DE ASTEROIDES', hint: 'Flechas o WASD: impulso de mochila · Chocar aturde 1,5 s · Cruza primero el aro a cuadros', rendT: 1.6 });
+      this.isBelt = true; this.quietRend = true;
+      this.adv = !!(o && o.adv);
+      this.p = new Actor(who, 0, 0); this.jose = new Actor('jose', 0, 0); this.cat = new Actor('pollito', 0, 6);
+      this.p.dir = 'right'; this.jose.dir = 'right'; this.cat.dir = 'down';
+      this.cam = { x: 40, y: 66, z: 0, dist: 400, pitch: 0.3, fov: 42 };
+      this.begin();
+    }
+    setup() {
+      this.elapsed = 0; this.finished = false;
+      this.P = { x: this.adv ? BELT_ADV : 0, y: 92, vx: 0, vy: 0, stun: 0, hits: 0, thrust: false };
+      this.B = { x: 0, y: 128, vx: 0, vy: 0, stun: 0, hits: 0, thrust: false };
+      this.C = { x: 260, y: 100 }; this.catCd = 0;
+      this.rocks = [];
+      const kinds = ['rock', 'rock', 'pastel', 'rock', 'globo', 'rock', 'regalo'];
+      let x = 240, i = 0;
+      while (x < BELT_GOAL - 140) { this.rocks.push({ x, y: rnd(18, BELT_H - 18), r: [15, 21, 28][i % 3], vx: 0, vy: 0, rot: rnd(0, 6.3), vr: rnd(-0.5, 0.5), kind: kinds[i % kinds.length], seed: i % 3, cdP: 0, cdB: 0 }); x += rnd(130, 215); i++; }
+      this.syncActors();
+    }
+    syncActors() {
+      const P = this.P, B = this.B, p = this.p, j = this.jose, cat = this.cat;
+      p.x = P.x; p.elev = P.y; p.vx = P.vx; p.vy = P.vy; p.moving = Math.hypot(P.vx, P.vy) > 24; p.spin = P.stun > 0 ? P.stun : 0; p.dir = P.vx < -18 ? 'left' : 'right';
+      j.x = B.x; j.elev = B.y; j.vx = B.vx; j.vy = B.vy; j.moving = Math.hypot(B.vx, B.vy) > 24; j.spin = B.stun > 0 ? B.stun : 0; j.dir = B.vx < -18 ? 'left' : 'right';
+      cat.x = this.C.x; cat.elev = this.C.y;
+    }
+    collide(d, a, cdKey) {
+      if (d.stun > 0) return;
+      for (const r of this.rocks) {
+        if (r[cdKey] > 0) continue;
+        const dx = d.x - r.x, dy = d.y - r.y, rr = r.r + 15;
+        if (dx * dx + dy * dy < rr * rr) {
+          r[cdKey] = 1.2; d.stun = 1.5; d.hits++;
+          const L = Math.max(12, Math.hypot(dx, dy)), ux = dx / L, uy = dy / L;
+          d.vx = ux * 150; d.vy = uy * 150; r.vx = -ux * 55; r.vy = -uy * 55; // el choque APARTA el asteroide
+          a.emo('!!', 0.9); a.flash = 0.6; W.puff(d.x, 0, 5, true); G.sfx('bad');
+          if (a === this.p) this.say('¡Aturdido!', '#ff6b7a', 0.9);
+          break;
+        }
+      }
+    }
+    finish(w) {
+      if (this.finished) return; this.finished = true;
+      this.endRound(w, w === 'p' ? '¡Cruzaste el aro a cuadros primero!' : w === 'b' ? 'José cruzó el aro primero y reclama el planeta…' : '¡Llegaron al aro a la vez!');
+    }
+    extra() { return { spaceRace: 'cinturon', hitsP: this.P.hits, hitsB: this.B.hits, adv: this.adv }; }
+    update(dt) {
+      const p = this.p, j = this.jose, cat = this.cat;
+      p.update(dt); j.update(dt); cat.update(dt);
+      if (!this.tick(dt)) { this.syncActors(); return; }
+      this.elapsed += dt;
+      const P = this.P, B = this.B;
+      // Jugador: impulso de mochila con INERCIA (arrastre leve = freno suave).
+      const ax = (G.input.held('right') ? 1 : 0) - (G.input.held('left') ? 1 : 0);
+      const ay = (G.input.held('up') ? 1 : 0) - (G.input.held('down') ? 1 : 0);
+      P.thrust = !!(ax || ay) && P.stun <= 0;
+      if (P.stun > 0) P.stun -= dt; else { P.vx += ax * 165 * dt; P.vy += ay * 165 * dt; }
+      // IA de José: empuje hacia el aro, esquivando lo que tenga delante.
+      B.thrust = B.stun <= 0;
+      if (B.stun > 0) B.stun -= dt;
+      else {
+        let ty = 104 + Math.sin(this.elapsed * 0.6) * 34;
+        const danger = this.rocks.filter((r) => r.x > B.x && r.x < B.x + 190 && Math.abs(r.y - B.y) < r.r + 26).sort((a, b) => a.x - b.x)[0];
+        if (danger) ty = danger.y + (B.y <= danger.y ? -1 : 1) * (danger.r + 44);
+        B.vx += Math.max(-150 * dt, Math.min(150 * dt, (126 - B.vx) * dt * 3));
+        const wantVy = Math.max(-92, Math.min(92, (ty - B.y) * 1.7));
+        B.vy += Math.max(-175 * dt, Math.min(175 * dt, (wantVy - B.vy) * dt * 3.4));
+      }
+      for (const d of [P, B]) {
+        const drag = Math.exp(-0.22 * dt);
+        d.vx *= drag; d.vy *= drag;
+        const sp = Math.hypot(d.vx, d.vy), MAX = 235;
+        if (sp > MAX) { d.vx *= MAX / sp; d.vy *= MAX / sp; }
+        d.x += d.vx * dt; d.y += d.vy * dt;
+        if (d.x < -30) { d.x = -30; d.vx = Math.abs(d.vx) * 0.4; }
+        if (d.y < 6) { d.y = 6; d.vy = Math.abs(d.vy) * 0.45; }
+        if (d.y > BELT_H) { d.y = BELT_H; d.vy = -Math.abs(d.vy) * 0.45; }
+      }
+      // Pollito flota libre: caos que a veces empuja un asteroide.
+      this.C.x += 46 * dt; this.C.y = 102 + Math.sin(this.elapsed * 0.8) * 52;
+      if (this.C.x > Math.max(P.x, B.x) + 320) this.C.x = Math.min(P.x, B.x) - 160;
+      if ((this.catCd -= dt) <= 0) {
+        const r = this.rocks.find((rk) => Math.hypot(rk.x - this.C.x, rk.y - this.C.y) < rk.r + 26);
+        if (r) { r.vx += rnd(30, 70) * (Math.random() < 0.5 ? -1 : 1); r.vy += rnd(-40, 40); this.catCd = 2.5; cat.hop(150); }
+      }
+      for (const r of this.rocks) {
+        r.x += r.vx * dt; r.y += r.vy * dt;
+        r.vx *= Math.exp(-0.8 * dt); r.vy *= Math.exp(-0.8 * dt);
+        r.rot += r.vr * dt;
+        if (r.cdP > 0) r.cdP -= dt; if (r.cdB > 0) r.cdB -= dt;
+        if (r.y < r.r * 0.5) { r.y = r.r * 0.5; r.vy = Math.abs(r.vy); }
+        if (r.y > BELT_H + 20) { r.y = BELT_H + 20; r.vy = -Math.abs(r.vy); }
+      }
+      this.collide(P, this.p, 'cdP');
+      this.collide(B, this.jose, 'cdB');
+      this.syncActors();
+      this.cam.x += ((P.x + 70) - this.cam.x) * Math.min(1, dt * 3.2);
+      if (P.x >= BELT_GOAL) return this.finish('p');
+      if (B.x >= BELT_GOAL) return this.finish('b');
+      if (this.elapsed > 110) return this.finish(P.x > B.x + 25 ? 'p' : B.x > P.x + 25 ? 'b' : 'tie');
+    }
+    stunStars(c, a) { const h = a.head(10); for (let i = 0; i < 3; i++) { const ang = this.T * 5 + i * 2.1; imgStar(c, h.x + Math.cos(ang) * 17, h.y - 8 + Math.sin(ang) * 5, 5, '#ffe58a'); } }
+    endOverlay(c) {
+      const w = this.result.win;
+      c.fillStyle = 'rgba(16,12,26,.85)'; c.fillRect(0, 0, 640, 360);
+      G.icon(c, w === 'win' ? 'trofeo' : w === 'tie' ? 'empate' : 'derrota', 320, 84, 48);
+      G.text(c, w === 'win' ? '¡GANASTE!' : w === 'tie' ? 'EMPATE' : 'GANÓ JOSÉ', 320, 138, { size: 40, color: w === 'win' ? '#7dff8a' : w === 'tie' ? '#ffd23f' : '#ff6b7a', lw: 9 });
+      G.text(c, `Aturdimientos — Tú: ${this.P.hits} · José: ${this.B.hits}`, 320, 182, { size: 17, lw: 6 });
+      G.text(c, w === 'win' ? 'El aro es tuyo: la fiesta sobre el anillo te espera' : 'José llegó primero… pero la fiesta igual se hace en el anillo', 320, 208, { size: 11, color: '#b7a8e8' });
+    }
+    draw(dt) {
+      const P = this.P, B = this.B;
+      W.render({
+        cam: this.cam, dt, mesh: null, actors: [this.p, this.cat, this.jose], noApartment: true,
+        light: { amb: [0.42, 0.44, 0.62], sun: [0.3, 0.3, 0.42], sky: '#081026', points: [{ x: this.cam.x, y: 130, z: -200, r: 800, c: [0.3, 0.3, 0.25] }] },
+        boxes: (mb) => { // la superficie del anillo mayor, muy por debajo del cinturón
+          const x0 = Math.floor((this.cam.x - 800) / 200) * 200;
+          for (let i = 0; i < 9; i++) mb.flat(x0 + i * 200, -300, 202, 600, -46, i % 2 ? '#8a5f2e' : '#96682f');
+          mb.flat(this.cam.x - 800, -302, 1600, 5, -44, '#2fa8a0', true);
+        },
+        sprites: (t) => {
+          drawSpaceSky(t, this.cam.x);
+          R.sprite(planetCv(), this.cam.x + 460, -120, -1250, { w: 700, h: 700, nostretch: true, lit: 0 });
+          for (const r of this.rocks) { if (Math.abs(r.x - this.cam.x) > 620) continue; R.sprite(rockCv(r.kind, r.seed), r.x, r.y - r.r * 1.05, 0, { w: r.r * 2.15, h: r.r * 2.15, roll: r.rot, lit: 0.55 }); }
+          R.sprite(ringGoalCv('cuadros'), BELT_GOAL + 26, 22, 0, { w: 190, h: 190, nostretch: true, lit: 0 });
+          R.flat(R.glowTex, BELT_GOAL + 26, 104, -6, 105, { tint: [1, 0.95, 0.6], alpha: 0.16 + Math.sin(t * 3) * 0.05 });
+        },
+        over: (c, t) => {
+          if (this.st === 'over') { this.endOverlay(c); return; }
+          const pp = Math.max(0, Math.min(100, Math.floor((P.x / BELT_GOAL) * 100))), bp = Math.max(0, Math.min(100, Math.floor((B.x / BELT_GOAL) * 100)));
+          this.hud(c, t, `ARO ${pp}%`, `ARO ${bp}%`);
+          c.fillStyle = 'rgba(28,24,38,.8)'; c.beginPath(); c.roundRect(190, 56, 260, 10, 5); c.fill();
+          c.fillStyle = '#2fa8a0'; c.beginPath(); c.roundRect(192, 58, 256 * Math.min(1, Math.max(0, P.x) / BELT_GOAL), 6, 3); c.fill();
+          c.fillStyle = '#ff6b7a'; c.beginPath(); c.arc(192 + 256 * Math.min(1, Math.max(0, B.x) / BELT_GOAL), 61, 4.5, 0, 6.3); c.fill();
+          c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(192 + 256 * Math.min(1, Math.max(0, P.x) / BELT_GOAL), 61, 4.5, 0, 6.3); c.fill();
+          drawHelmet(c, this.p, P.thrust); drawHelmet(c, this.jose, B.thrust); drawHelmet(c, this.cat, false);
+          if (P.stun > 0) this.stunStars(c, this.p);
+          if (B.stun > 0) this.stunStars(c, this.jose);
+          if (this.st === 'play' && this.adv && this.elapsed < 4.5) G.text(c, 'Ventaja de los Anillos: sales más cerca del aro', 320, 322, { size: 10, color: '#7dff8a' });
+        },
+      });
+    }
+  }
+
+  // ---------- Cinemática de despegue (azotea 3D, skippable) ----------
+  class SpaceLaunchScene {
+    constructor(who, done) {
+      this.who = who; this.done = done; this.t = 0; this.sent = false;
+      this.p = new Actor(who, -210, 14); this.p.dir = 'right'; this.p.carryWalk = true;
+      this.xi = new Actor('ximena', -204, 15); this.xi.carriedPose = true; this.xi.dir = 'right'; this.xi.expr = 'sleep';
+      this.cat = new Actor('pollito', 176, 6); this.cat.dir = 'down';
+      this.cam = { x: 0, y: 0, z: 0, dist: 430, pitch: 0.42, fov: 38 };
+      this.phase = 'walk'; this.phT = 0; this.rkY = 0; this.rkV = 0;
+    }
+    finish() { if (!this.sent) { this.sent = true; this.done(); } }
+    update(dt) {
+      this.t += dt;
+      const p = this.p, xi = this.xi, cat = this.cat;
+      if (this.phase === 'walk') {
+        p.vx = 74; p.moving = true;
+        p.x += 74 * dt;
+        xi.x = p.x + 4; xi.y = p.y + 1; xi.elev = p.carrySupportY(); xi.dir = p.dir;
+        if (p.x >= 16) { this.phase = 'board'; this.phT = 0; G.sfx('door'); }
+      } else if (this.phase === 'board') { // Ximena entra dormida; Pollito se cuela de polizón
+        p.vx = 0; p.moving = false; this.phT += dt;
+        if (cat.x > 62) cat.x = Math.max(62, cat.x - 120 * dt); // Pollito se acerca a la puerta del cohete
+        if (this.phT > 0.5) xi.hidden = true;
+        if (this.phT > 0.8) cat.hidden = true;
+        if (this.phT > 1.1) { p.hidden = true; this.phase = 'ignite'; this.phT = 0; G.sfx('ok'); }
+      } else if (this.phase === 'ignite') {
+        this.phT += dt;
+        if (Math.random() < 0.35) W.puff(110 + rnd(-8, 8), -34, 1);
+        if (this.phT > 1.3) { this.phase = 'lift'; G.sfx('party'); }
+      } else if (this.phase === 'lift') {
+        this.rkV += 260 * dt; this.rkY += this.rkV * dt;
+        if (Math.random() < 0.6) W.puff(110 + rnd(-14, 14), -34, 2);
+        if (this.rkY > 330) this.finish();
+      }
+      p.update(dt); xi.update(dt); cat.update(dt); W.updateFx(dt);
+      if (this.t > 0.5 && G.input.hit('action')) return this.finish();
+      if (this.t > 14) this.finish();
+    }
+    draw(dt) {
+      if (!balloonMesh && R.gl) balloonMesh = buildBalloonArena(); // la azotea que ya existe (la del duelo de globos)
+      const shake = this.phase === 'ignite' ? Math.sin(this.t * 46) * 1.6 : 0;
+      W.render({
+        cam: this.cam, dt, mesh: balloonMesh, actors: [this.p, this.xi, this.cat], noApartment: true,
+        light: { amb: [0.5, 0.48, 0.62], sun: [0.3, 0.3, 0.38], sky: '#0d0b1e', points: [{ x: 0, y: 80, z: -20, r: 380, c: [0.35, 0.3, 0.2] }] },
+        sprites: (t) => {
+          for (let i = 0; i < 46; i++) { const x = -560 + spaceHash(i * 3.1) * 1120, y = 120 + spaceHash(i * 7.7) * 300; R.flat(R.glowTex, x, y, -420, 2 + spaceHash(i) * 3, { tint: [0.9, 0.93, 1], alpha: 0.5 + 0.4 * Math.sin(t * 2 + i) }); }
+          R.flat(R.glowTex, -330, 330, -430, 42, { tint: [0.92, 0.96, 1], alpha: 0.9 }); // la luna
+          const fl = this.phase === 'lift' ? 1.15 + Math.sin(t * 29) * 0.2 : this.phase === 'ignite' ? 0.45 + Math.sin(t * 29) * 0.15 + this.phT * 0.3 : 0;
+          if (fl > 0) R.sprite(flameCv(), 110 + shake, this.rkY - 62 * fl + 14, -34, { w: 40, h: 62 * fl, nostretch: true, lit: 0 });
+          R.sprite(rocketSideCv('party', false), 110 + shake, this.rkY, -34, { w: 150, h: 190, lit: 0.7 });
+        },
+        over: (c, t) => {
+          if (!this.xi.hidden) { // el antifaz de Ximena dormida, sobre su pose cargada
+            const hp = R.project(this.xi.x - 4, this.xi.elev + 27, this.xi.y);
+            if (hp.ok) { c.save(); c.translate(hp.x, hp.y); c.fillStyle = '#2b2540'; c.beginPath(); c.roundRect(-17, -5, 34, 10, 5); c.fill(); c.fillStyle = '#463c66'; c.fillRect(14, -1.5, 9, 3); c.restore(); }
+          }
+          G.text(c, 'LA AZOTEA — 00:00', 320, 24, { size: 11, color: '#b7a8e8' });
+          if (this.phase === 'walk') G.text(c, 'Cargando a Ximena dormida hasta el cohete…', 320, 330, { size: 11 });
+          if (this.phase === 'lift') G.text(c, '¡DESPEGUE!', 320, 60 + Math.sin(t * 6) * 2, { size: 20, color: '#ffd23f', lw: 6 });
+          G.text(c, 'ESPACIO para saltar', 320, 348, { size: 8, color: '#8f86b8', stroke: false });
+        },
+      });
+    }
+  }
+
+  // ---------- Transición: cohetes averiados, todos salen flotando ----------
+  class SpaceTransitionScene {
+    constructor(who, done) {
+      this.who = who; this.done = done; this.t = 0; this.sent = false; this.said = false;
+      this.p = new Actor(who, -60, 0); this.p.dir = 'right';
+      this.jose = new Actor('jose', 60, -10); this.jose.dir = 'left';
+      this.cat = new Actor('pollito', 0, 8); this.cat.dir = 'down';
+      this.cam = { x: 0, y: 60, z: 0, dist: 430, pitch: 0.3, fov: 40 };
+    }
+    finish() { if (!this.sent) { this.sent = true; this.done(); } }
+    update(dt) {
+      this.t += dt;
+      for (const a of [this.p, this.jose, this.cat]) a.update(dt);
+      W.updateFx(dt);
+      this.p.elev = 96 + Math.sin(this.t * 1.3) * 7; this.p.x = -60 - this.t * 6;
+      this.jose.elev = 108 + Math.sin(this.t * 1.1 + 2) * 7; this.jose.x = 60 + this.t * 6;
+      this.cat.elev = 70 + Math.sin(this.t * 1.7 + 1) * 9; this.cat.x = Math.sin(this.t * 0.9) * 14;
+      if (Math.random() < 0.12) W.puff(-170, -60, 1);
+      if (Math.random() < 0.12) W.puff(175, -60, 1);
+      if (!this.said && this.t > 0.8) { this.said = true; this.jose.say('¡Mi cohete! ¡Y el tuyo también!', 2.6); }
+      if (this.t > 0.5 && G.input.hit('action')) return this.finish();
+      if (this.t > 5.2) this.finish();
+    }
+    draw(dt) {
+      W.render({
+        cam: this.cam, dt, mesh: null, actors: [this.p, this.cat, this.jose], noApartment: true,
+        light: { amb: [0.42, 0.44, 0.62], sun: [0.3, 0.3, 0.42], sky: '#081026', points: [{ x: 0, y: 130, z: -200, r: 800, c: [0.3, 0.3, 0.25] }] },
+        sprites: (t) => {
+          drawSpaceSky(t, 0);
+          R.sprite(rocketSideCv('party', true), -175, 56 + Math.sin(t * 0.9) * 5, -70, { w: 130, h: 165, roll: 0.5, lit: 0.6 });
+          R.sprite(rocketSideCv('rival', true), 180, 80 + Math.sin(t * 0.8 + 1) * 5, -70, { w: 130, h: 165, roll: -0.42, lit: 0.6 });
+        },
+        over: (c, t) => {
+          drawHelmet(c, this.p, false); drawHelmet(c, this.jose, false); drawHelmet(c, this.cat, false);
+          G.text(c, 'Los dos cohetes quedaron averiados… el último tramo se hace flotando', 320, 330, { size: 11 });
+          G.text(c, 'ESPACIO para saltar', 320, 348, { size: 8, color: '#8f86b8', stroke: false });
+        },
+      });
+    }
+  }
+
+  // ---------- Cierre: fiesta en gravedad baja + foto (misma escena 3D) ----------
+  let spacePartyMesh = null;
+  function buildSpacePartyMesh() {
+    const m = new R.MB();
+    m.flat(-760, -340, 1520, 680, -16, '#a8743a'); // superficie del anillo mayor
+    m.box(-300, -14, -60, 600, 14, 240, '#8a5a34', { top: '#b98a55' }); // la losa-plataforma (su techo es y=0)
+    m.box(-120, 0, -30, 110, 26, 60, '#6b4a2f', { top: '#e8e2f2' }); // mesa de la fiesta
+    for (let i = 0; i < 6; i++) { const x = -280 + i * 108; m.box(x, 0, -64, 6, 66, 6, '#5a3f28'); if (i < 5) m.wallQuad(x + 8, 50, -63, 92, 13, ['#e23b4e', '#ffd23f', '#3fa0f0', '#58c46a', '#f08cc0'][i % 5]); } // guirnalda entre postes
+    return m.upload();
+  }
+  class SpacePartyScene {
+    constructor(who, results, done) {
+      this.who = who; this.results = results || {}; this.done = done;
+      this.t = 0; this.sent = false; this.phase = 'fiesta'; this.phT = 0; this.woke = false; this.flash = 0;
+      const belt = this.results.belt || {};
+      // Pastel magullado si PERDISTE 1B o el cinturón te golpeó 3+
+      // veces. Un EMPATE no es perder: antes el empate también lo
+      // magullaba (revisión 2026-11-21).
+      this.bruised = belt.win === 'lose' || (belt.hitsP || 0) >= 3;
+      this.crew = G.PLAYABLE.map((id, i) => { const a = new Actor(id, -252 + i * 62, 40); a.dir = 'down'; a.phase = i * 0.9; return a; }); // en este final SÍ están los 7
+      this.jose = new Actor('jose', 268, 40); this.jose.dir = 'down'; this.jose.phase = 2.2;
+      this.cat = new Actor('pollito', -282, 58); this.cat.dir = 'down'; this.cat.phase = 1.3;
+      this.xi = new Actor('ximena', 30, 66); this.xi.dir = 'down'; this.xi.expr = 'sleep'; this.xi.phase = 4;
+      this.all = [...this.crew, this.jose, this.cat];
+      this.cam = { x: 0, y: 26, z: 30, dist: 560, pitch: 0.42, fov: 40 };
+    }
+    finish() { if (!this.sent) { this.sent = true; this.done(); } }
+    update(dt) {
+      this.t += dt; this.phT += dt;
+      for (const a of [...this.all, this.xi]) a.update(dt);
+      W.updateFx(dt);
+      if (this.phase === 'fiesta') {
+        for (const a of this.all) a.elev = Math.abs(Math.sin(this.t * 1.15 + a.phase)) * 24; // rebote lento de gravedad baja
+        this.xi.elev = Math.abs(Math.sin(this.t * 1.15 + this.xi.phase)) * 18;
+        if (!this.woke && this.t > 2.6) { this.woke = true; this.xi.expr = 'surprised'; this.xi.say('¿Esto… sigue siendo mi casa?', 3.4); G.sfx('ok'); }
+        if (this.woke && this.t > 5.4) this.xi.expr = 'happy';
+        if ((this.t > 6 && G.input.hit('action')) || this.t > 11) {
+          // LA FOTO: la misma escena 3D con cámara de grupo (no una imagen)
+          this.phase = 'foto'; this.phT = 0; this.flash = 1; G.sfx('party');
+          this.all.forEach((a, i) => { a.x = -252 + i * 56; a.y = 46; a.elev = 0; a.dir = 'down'; a.expr = 'happy'; });
+          this.xi.x = 0; this.xi.y = 78; this.xi.elev = 0; this.xi.expr = 'happy';
+        }
+      } else if (this.phase === 'foto') {
+        if (this.flash > 0) this.flash -= dt * 1.4;
+        if ((this.phT > 1.2 && G.input.hit('action')) || this.phT > 4.5) { this.phase = 'panel'; this.phT = 0; }
+      } else if (this.phase === 'panel') {
+        if ((this.phT > 1 && G.input.hit('action')) || this.phT > 7) this.finish();
+      }
+    }
+    draw(dt) {
+      if (!spacePartyMesh && R.gl) spacePartyMesh = buildSpacePartyMesh();
+      const fiesta = this.phase === 'fiesta';
+      const cakeY = fiesta ? 34 + Math.sin(this.t * 1.15) * 9 : 40, cakeX = fiesta ? -65 : 0, cakeZ = fiesta ? 0 : 44;
+      W.render({
+        cam: this.cam, dt, mesh: spacePartyMesh, actors: [...this.all, this.xi], noApartment: true,
+        light: { amb: [0.46, 0.46, 0.64], sun: [0.32, 0.3, 0.4], sky: '#0a1030', points: [{ x: 0, y: 120, z: -200, r: 800, c: [0.35, 0.3, 0.2] }] },
+        sprites: (t) => {
+          drawSpaceSky(t, 0);
+          R.sprite(planetCv(), 60, -150, -950, { w: 700, h: 700, nostretch: true, lit: 0 });
+          // el pastel flotante (magullado si el cinturón salió mal)
+          R.sprite(Sp.item('pastel'), cakeX, cakeY, cakeZ, { feet: 4, sx: 1.5, sy: this.bruised ? 0.95 : 1.5, roll: this.bruised ? 0.24 : Math.sin(t * 1.3) * 0.05, lit: 0.7 });
+          R.flat(R.glowTex, cakeX, cakeY + 16, cakeZ, 20, { tint: [1, 0.9, 0.5], alpha: 0.25 + Math.sin(t * 4) * 0.08 });
+        },
+        over: (c, t) => {
+          for (const a of [...this.all, this.xi]) drawHelmet(c, a, false);
+          if (this.flash > 0) { c.fillStyle = `rgba(255,255,255,${Math.max(0, this.flash) * 0.85})`; c.fillRect(0, 0, 640, 360); }
+          if (this.phase === 'foto') G.text(c, '¡FOTO DE GRUPO SOBRE EL ANILLO!', 320, 322, { size: 13, color: '#ffd23f', lw: 5 });
+          if (this.phase === 'panel') {
+            const belt = this.results.belt || {};
+            c.fillStyle = 'rgba(16,12,26,.88)'; c.fillRect(0, 0, 640, 360);
+            G.icon(c, 'trofeo', 320, 66, 44);
+            G.text(c, 'FIESTA EN J1407B', 320, 112, { size: 30, color: '#ffd23f', lw: 8 });
+            G.text(c, 'SPACE_RINGS_ENDING', 320, 136, { size: 10, color: '#b7a8e8' });
+            G.text(c, belt.win === 'win' ? 'Cruzaste el aro primero: la fiesta sobre el anillo es tuya.' : belt.win === 'tie' ? 'Llegaron al aro a la vez: el planeta es compartido (José no está de acuerdo).' : 'José cruzó el aro primero y juró que él "descubrió" el planeta…', 320, 168, { size: 11.5 });
+            G.text(c, belt.win === 'win' ? 'Ximena despertó flotando sobre un anillo, con los otros 36 detrás.' : 'Pero la fiesta igual se hizo, con los 7 roomies sobre el anillo.', 320, 190, { size: 11.5 });
+            G.text(c, this.bruised ? 'El pastel llegó magullado de tanto choque en el cinturón.' : 'Y el pastel llegó flotando, intacto.', 320, 212, { size: 11.5, color: '#ffd9a0' });
+            G.text(c, 'J1407b: el «Súper Saturno», a 434 años luz, con 37 anillos.', 320, 240, { size: 10, color: '#8f86b8' });
+            G.text(c, 'ESPACIO para terminar', 320, 330, { size: 9, color: '#8f86b8', stroke: false });
+          }
+        },
+      });
+    }
+  }
+
+  // ---------- La cadena completa del final ----------
+  class SpaceEndingScene {
+    constructor(who, done) {
+      this.who = who; this.done = done; this.finished = false; this.results = {};
+      this.cur = new SpaceLaunchScene(who, () => this.startRace());
+    }
+    startRace() { this.cur = new RingRaceDuel(this.who, (r) => { this.results.ring = r; this.cur = new SpaceTransitionScene(this.who, () => this.startBelt()); }, { copilot: spaceCopilotOf(this.who) }); }
+    startBelt() {
+      const adv = !!(this.results.ring && this.results.ring.win === 'win'); // ventaja cruzada 1A → 1B
+      this.cur = new AsteroidBeltDuel(this.who, (r) => { this.results.belt = r; this.cur = new SpacePartyScene(this.who, this.results, () => this.finish()); }, { adv });
+    }
+    finish() {
+      if (this.finished) return; this.finished = true;
+      const ring = this.results.ring || {}, belt = this.results.belt || {};
+      this.done({ win: belt.win || 'lose', spaceEnding: true, winRing: ring.win || null, winBelt: belt.win || null, cakeBruised: belt.win === 'lose' || (belt.hitsP || 0) >= 3 });
+    }
+    update(dt) { if (this.cur) this.cur.update(dt); }
+    draw(dt) { if (this.cur) this.cur.draw(dt); }
+  }
+
+
+  // =========================================================
   // 15. FINAL LEYENDAS — «La nueva película de Las Leyendas»
   // (LEYENDAS_MOVIE_ENDING · pedido de Jose, 2026-11-21)
   // =========================================================
@@ -3289,5 +4066,5 @@
     draw(dt) { if (this.cur) this.cur.draw(dt); }
   }
 
-  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, CactusRaceDuel, ImageDuel, BalloonDuel, buildDecoSet, CandleGame, PatronDuel, TrazoDuel, SogaDuel, LegendsEndingScene };
+  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, CactusRaceDuel, ImageDuel, BalloonDuel, RingRaceDuel, AsteroidBeltDuel, SpaceLaunchScene, SpaceTransitionScene, SpacePartyScene, SpaceEndingScene, buildDecoSet, CandleGame, PatronDuel, TrazoDuel, SogaDuel, LegendsEndingScene };
 })();
