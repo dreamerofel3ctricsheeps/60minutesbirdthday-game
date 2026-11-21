@@ -1135,6 +1135,14 @@
   // espacio (200 m) — cruza ya en la estratósfera alta. La zona
   // espacio (galaxias, ingravidez, clave de luz) NO se mueve.
   const ROCKET_E = 145 * U_PER_M;
+  // TELESCOPIO de la siembra del final J1407b (diseño aprobado por
+  // Jose): prop decorativo DIBUJADO POR CÓDIGO sobre una plataforma
+  // alta de la Escalada — NO es ítem de recolección (los 12 spawns del
+  // mundo ya están completos con los ítems de Leyendas). Vive DENTRO
+  // de la zona espacio, un poco sobre su umbral: solo se ve si la
+  // escalada llega de verdad al espacio.
+  const TELESCOPE_E = ESPACIO_E + 120;
+  const telescopeAt = (cy) => TELESCOPE_E > cy - 270 && TELESCOPE_E < cy + 290; // misma banda que drawWorld (lo/hi)
   // Lado CRUDO de la repisa k-ésima (k = saltos dados): hash
   // determinista del índice, O(1) y sin memoria para cualquier k. El
   // lado JUGABLE lo deriva ClimbDuel.sideOf con una regla
@@ -1399,7 +1407,10 @@
       return G.PLAYABLE.filter((id) => id !== this.who && !party.includes(id));
     }
     meters(i) { return Math.round((i * SH) / U_PER_M); }
-    extra() { return { pMeters: this.meters(this.pMax), cMeters: this.meters(this.cMax), zone: CLIMB_ZONES[climbZone(this.pMax * SH)].name }; }
+    // space: la altura máxima del JUGADOR alcanzó la zona ESPACIO en
+    // esta Escalada (lo usa la historia: ver MG.repisas.resolve y
+    // G.spaceReady en game.js — condición 1 del final J1407b).
+    extra() { return { pMeters: this.meters(this.pMax), cMeters: this.meters(this.cMax), zone: CLIMB_ZONES[climbZone(this.pMax * SH)].name, space: this.pMax * SH >= ESPACIO_E }; }
     zoneBanner(z) {
       // cada hito lleva su ÍCONO PROPIO del juego (nada de emoticones)
       const B = [null,
@@ -1551,6 +1562,19 @@
         mb.box(dir > 0 ? tx - 4 - fl * 0.55 : tx + 4 + fl * 0.45, ry - 2, -178, fl * 0.55, 4, 5, '#ff7847', { emit: true });
         for (let i = 0; i < n; i++) { const wx = rk.x + (i - (n - 1) / 2) * 30; mb.box(wx - 10, ry - 10, -168, 20, 20, 3, '#9fd8ff', { emit: true }); } // aros de ventanilla
       }
+      // TELESCOPIO (siembra de J1407b): plataforma con telescopio de
+      // latón a la derecha de las columnas; solo entra en escena en la
+      // zona espacio (su elevación supera el umbral ESPACIO_E). Es un
+      // prop dibujado por código, sin imágenes ni ítem asociado.
+      if (TELESCOPE_E > lo && TELESCOPE_E < hi) {
+        const tx = 214, tz = -30, te = TELESCOPE_E;
+        mb.box(tx, te - 34, tz, 7, 60, 7, '#4a3a28'); // poste de la plataforma
+        mb.box(tx, te - 5, tz, 84, 5, 36, '#5a4632'); // tablón
+        mb.box(tx, te - 8, tz, 88, 2, 40, '#3c2d1e'); // borde del tablón
+        mb.cyl(tx, te, tz, 5, 12, '#8a7a5c'); // montura
+        for (let k = 0; k < 4; k++) mb.box(tx - 8 - k * 8, te + 12 + k * 5, tz, 13, 8, 8, k === 3 ? '#7a5c22' : '#c9a44a'); // tubo inclinado
+        mb.box(tx + 4, te + 6, tz, 6, 6, 6, '#5c4a26'); // ocular
+      }
       // escombros del momento del techo, cayendo
       this.debris.forEach((d) => mb.box(d.x, d.y, d.z, d.s, d.s * 0.7, d.s, '#7a6752'));
       // columnas: rieles por tramos + repisas de la ventana visible
@@ -1654,6 +1678,8 @@
   ClimbDuel.SHELF_H = SH; // expuesto para la prueba de humo (los lados se piden a una instancia: sideOf)
   ClimbDuel.ROCKET_E = ROCKET_E; // ídem: el umbral propio del cohete (145 m en unidades)
   ClimbDuel.galaxiesAt = climbGalaxies; // ídem: el campo de galaxias visible a una altura de cámara
+  ClimbDuel.TELESCOPE_E = TELESCOPE_E; // ídem: elevación del telescopio (siembra de J1407b)
+  ClimbDuel.telescopeAt = telescopeAt; // ídem: ¿el telescopio entra en la banda de cámara cy?
 
   // =========================================================
   // 11. APAGÓN: VELAS CONTRA JOSÉ — adaptación de Lit Potato /
@@ -2680,10 +2706,12 @@
   // "descubrió" el planeta y el pastel sale magullado si perdiste 1B
   // o chocaste 3+ veces en el cinturón).
   // ACCESO: práctica (entradas propias «anillos», «cinturon» y la
-  // cadena «finalj1407b») y G.startSpaceEnding() en game.js. La
-  // condición de desbloqueo en la HISTORIA queda pendiente de las
-  // decisiones de guion A–D de Jose: NO se inventa aquí (ver el HOOK
-  // en game.js junto a G.startSpaceEnding).
+  // cadena «finalj1407b»), G.startSpaceEnding() en game.js y la
+  // HISTORIA: el clímax de main() corre la cadena si G.spaceReady
+  // se cumple (Escalada espacial ganada + Preparación ≥ 80 +
+  // Sospecha < 50), con la siembra del telescopio en la Escalada y
+  // la foto del cohete ~13:00. Si Leyendas también se habilita,
+  // ELIGE EL JUGADOR (decisión de Jose, 2026-11-21).
   // IDENTIDAD: Pollito es el gato blanco atigrado de su hoja definida
   // (Actor normal: frontal sin espejo, escala de su bundle); en 1A va
   // de copiloto del rival y en 1B flota libre como caos. José conserva

@@ -507,7 +507,16 @@
     imagen: { stats: ['logica', 'velocidad'], Scene: () => Sc.ImageDuel, note: () => 'Más lógica = José tarda más en verla', setup() {} },
     cactus: { stats: ['velocidad'], Scene: () => Sc.SpikeDuel, note: () => 'Velocidad para esquivar', setup() {} },
     cactus2: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.CactusRaceDuel, note: () => 'Mismo carril que Pollito: salta con ESPACIO o ↑', setup() {} },
-    repisas: { stats: ['velocidad'], Scene: () => Sc.ClimbDuel, note: () => 'La altura máxima manda: ← y →', setup() {} },
+    repisas: { stats: ['velocidad'], Scene: () => Sc.ClimbDuel, note: () => 'La altura máxima manda: ← y →', setup() {},
+      resolve(res) {
+        // FINAL J1407b, condición (1): llegar a la zona ESPACIO y GANAR
+        // la Escalada EN LA HISTORIA deja la marca que G.spaceReady
+        // evalúa a las 23:00. ClimbDuel.extra() reporta `space` (la
+        // altura máxima del jugador alcanzó ESPACIO_E). En práctica el
+        // resolve ni se invoca (practiceDuel no lo llama); el guard
+        // cubre el bucle de depuración ?duelo=.
+        if (!G.practiceMode && res.win === 'win' && res.space) S.flags.escaladaEspacio = true;
+      } },
     pisoton: { stats: ['velocidad'], Scene: () => Sc.StompDuel, note: () => 'Velocidad para cambiar de cojín', setup() {} },
     azotea: { stats: ['velocidad'], Scene: () => Sc.DroneDuel, note: () => 'Velocidad lateral', setup() {} },
     apagon: {
@@ -745,13 +754,40 @@
   // Si se cumplen las 3, corre la cadena del set (revelación →
   // pruebas de Teodora → resolución por regla de boss: ganar ≥1 =
   // final de película; 0/2 = se cae al final normal sin derrota).
-  // PRIORIDAD: Leyendas se evalúa ANTES que el final estándar. La
-  // prioridad ENTRE finales alternativos (J1407b vs Leyendas, si
-  // algún día se cumplen ambos a la vez) queda PENDIENTE de Jose;
-  // hoy J1407b ni siquiera está enganchado a la historia.
+  // PRIORIDAD: los finales alternativos se evalúan ANTES que el
+  // final estándar. Entre ellos NO hay prioridad fija: si J1407b y
+  // Leyendas se habilitan en la misma partida, ELIGE EL JUGADOR
+  // (decisión de Jose, 2026-11-21 — ver altFinalsRoute y el clímax
+  // de main()).
   function legendsDecoCount(st) { return (st.deco || []).filter((d) => d.placed && !d.improv).length; }
   function legendsReady(st) { return !!(st.flags && st.flags.casting) && legendsDecoCount(st) >= 4 && st.quality >= 70; }
   G.legendsDecoCount = legendsDecoCount; G.legendsReady = legendsReady; // expuestas para la prueba de humo
+
+  // ---------- Habilitación del final J1407b (guion §1) ----------
+  // Condiciones del guion con los stats REALES de la partida:
+  //  1. Haber llegado a la zona ESPACIO y haber GANADO la Escalada
+  //     (Repisas) en modo historia: marca S.flags.escaladaEspacio,
+  //     la pone el resolve de MG.repisas con el campo `space` que
+  //     ClimbDuel.extra() reporta. (No existía flag de historia para
+  //     esto: se creó ahí.)
+  //  2. Preparación ≥ 80 a las 23:00: el stat real es S.quality, el
+  //     mismo que usa legendsReady (Leyendas pide ≥ 70).
+  //  3. «Despertar» < 50 a las 23:00: en el código NO existe S.wake;
+  //     el medidor real de riesgo de despertar es la SOSPECHA
+  //     (S.sus, 0–100 %: a 100 Ximena despierta y hay ruina), así
+  //     que la condición se evalúa como S.sus < 50.
+  function spaceReady(st) {
+    return !!(st.flags && st.flags.escaladaEspacio) && st.quality >= 80 && st.sus < 50;
+  }
+  G.spaceReady = spaceReady; // expuesta para la prueba de humo
+  // Enrutado del clímax con AMBOS finales alternativos: 'ambos' |
+  // 'espacio' | 'leyendas' | null (ninguno → final normal, sin
+  // cambios). Función pura, expuesta para la prueba de humo.
+  function altFinalsRoute(st) {
+    const sp = spaceReady(st), lg = legendsReady(st);
+    return sp && lg ? 'ambos' : sp ? 'espacio' : lg ? 'leyendas' : null;
+  }
+  G.altFinalsRoute = altFinalsRoute;
   G.startLegendsEnding = (done) => { // equivalente a G.startSpaceEnding de J1407b: cadena sin exigir condiciones
     const sc = new Sc.LegendsEndingScene(S.protagonist || S.player || 'natalia', done);
     G.setScene(sc);
@@ -775,6 +811,26 @@
     }
   }
 
+  // ---------- Siembra del final J1407b (guion §1) ----------
+  // ~13:00 (tras el evento del APAGÓN, el de esa franja en G.STORY;
+  // mismo mecanismo que el rumor de Leyendas tras «imagen» ~15:00):
+  // llega al grupo la FOTO del cohete de los roomies NO reclutados,
+  // los que huyeron al llegar Ximena: «no se fueron, están
+  // orbitando». Es ambiente y pista del final espacial: no toca
+  // ningún stat. La otra mitad de la siembra es el TELESCOPIO,
+  // prop por código en la Escalada (ver ClimbDuel en scenes.js).
+  async function spaceBeats(id) {
+    if (id !== 'apagon' || S.flags.espacioFoto) return;
+    S.flags.espacioFoto = true;
+    await ui.postAll([
+      { who: 'sistema', text: '📸 Alan comparte una foto en el grupo: el cohete de juguete de los que se fueron… con la Tierra de fondo.' },
+      { who: 'alan', text: 'Me la mandaron los que «se fueron» a las 7. Miren el fondo. MIREN EL FONDO.' },
+      { who: 'majo', text: 'No se fueron. Están ORBITANDO. 🛰️' },
+      { who: 'sistema', text: 'Dicen que con un telescopio, desde bien alto, se les ve pasar. 🔭' },
+    ]);
+  }
+  G.spaceBeats = spaceBeats; // expuesta para la prueba de humo
+
   async function actNight() {
     ui.raw('<div class="group">🎂 OPERACIÓN: NO LA DESPIERTEN</div>');
     const n = Object.keys(S.inv).length;
@@ -785,6 +841,7 @@
       if (ev.when && !ev.when(S)) continue;
       await runEvent(id);
       await legendsBeats(id);
+      await spaceBeats(id);
       if (await tick()) return true;
       await G.wait(0.6);
     }
@@ -842,20 +899,27 @@
   }
 
   // ---------- Final alternativo J1407b (SPACE_RINGS_ENDING) ----------
-  // HOOK DE HISTORIA — decisiones de guion A–D PENDIENTES de Jose, NO
-  // inventar aquí: (A) prioridad si se cumplen 2 finales a la vez,
-  // (B) si J1407b es viaje real o sueño, (C) desbloqueos a
-  // práctica/galería, (D) accesible desde la primera partida o solo
-  // NG+. La condición propuesta en el guion (ganar el duelo de la zona
-  // ESPACIO en Repisas + Preparación ≥ 80 y Despertar < 50 a las
-  // 23:00, con la siembra del telescopio en la repisa y la foto del
-  // cohete en el WhatsApp ~13:00) se enganchará en este punto cuando
-  // Jose la cierre: la noche llamaría a G.startSpaceEnding() en vez
-  // de (o antes de) actReveal/showEnding, y el resultado cerraría con
-  // showEnding('espacio') — el final ya está registrado en G.ENDINGS.
-  // Mientras tanto, el final se juega desde el menú de práctica
-  // («Final J1407b», «Anillos de J1407b», «Cinturón de asteroides») o
-  // a mano con esta función.
+  // INTEGRADO A LA HISTORIA (rama feat/finales-integrados): la noche
+  // evalúa G.spaceReady en el clímax de main() — Escalada espacial
+  // ganada (S.flags.escaladaEspacio) + Preparación S.quality ≥ 80 +
+  // Sospecha S.sus < 50 a las 23:00 — con la siembra del telescopio
+  // en la Escalada (prop por código en ClimbDuel, scenes.js) y la
+  // foto del cohete en el WhatsApp ~13:00 (spaceBeats). Si se cumple,
+  // la cadena corre con esta misma función y cierra con
+  // showEnding('espacio') — el final está registrado en G.ENDINGS.
+  // DECISIÓN A RESUELTA por Jose (2026-11-21): si en una partida se
+  // habilitan AMBOS finales alternativos (este y Leyendas), ELIGE EL
+  // JUGADOR cuál jugar — sin prioridad fija ni azar (ver el clímax
+  // de main() y G.altFinalsRoute).
+  // Siguen pendientes de Jose, SOLO como notas de guion SIN efecto
+  // en el código por ahora: (B) si J1407b es viaje real o sueño, y
+  // (D) si los finales alternativos se juegan desde la primera
+  // partida o solo en NG+. (La (C), desbloqueos a práctica/galería,
+  // ya está cubierta de hecho: ambos finales viven en el menú de
+  // práctica desde sus ramas.)
+  // El final también se juega desde el menú de práctica («Final
+  // J1407b», «Anillos de J1407b», «Cinturón de asteroides») o a mano
+  // con esta función, que corre la cadena sin exigir condiciones.
   G.startSpaceEnding = function (done) {
     const who = S.player || 'natalia';
     G.captureKeys = true; $('#phone').classList.add('dim');
@@ -865,6 +929,33 @@
       if (done) done(res);
     });
   };
+
+  // ---------- Clímax: finales alternativos ----------
+  // Cadena de Leyendas (comportamiento histórico, sin cambios):
+  // devuelve true si hubo final de película; si Teodora gana las
+  // dos pruebas (movie=false), se cae al final normal.
+  async function runLegendsClimax() {
+    ui.header('Final', 'La casa era un set');
+    G.captureKeys = true;
+    const out = await new Promise((r) => G.startLegendsEnding(r));
+    G.captureKeys = false;
+    G.setScene(G.home);
+    if (out && out.movie) { await showEnding('leyendas'); return true; }
+    await ui.postAll([{ who: 'sistema', text: 'El set se desmonta en silencio. La fiesta sigue… como fiesta.' }]);
+    return false;
+  }
+  // Cadena de J1407b, espejo de la de Leyendas: G.startSpaceEnding
+  // pone y quita captureKeys/dim y restaura la escena al terminar.
+  // Perder el Cinturón NO cancela este final (solo magulla el
+  // pastel): una vez lanzada la cadena, siempre cierra con
+  // showEnding('espacio').
+  async function runSpaceClimax() {
+    ui.header('Final', 'El viaje a J1407b');
+    await new Promise((r) => G.startSpaceEnding(r));
+    G.setScene(G.home);
+    await showEnding('espacio');
+    return true;
+  }
 
   async function main() {
     await Sp.ready;
@@ -891,17 +982,28 @@
     S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
     await actArrival(res);
     const ruina = await actNight();
-    // CLÍMAX DE LEYENDAS: si se cumplen las 3 condiciones, la cadena
-    // del set reemplaza a la revelación estándar; si Teodora gana
-    // las dos pruebas (movie=false), se cae al final normal.
-    if (!ruina && legendsReady(S)) {
-      ui.header('Final', 'La casa era un set');
-      G.captureKeys = true;
-      const out = await new Promise((r) => G.startLegendsEnding(r));
-      G.captureKeys = false;
-      G.setScene(G.home);
-      if (out && out.movie) { await showEnding('leyendas'); return; }
-      await ui.postAll([{ who: 'sistema', text: 'El set se desmonta en silencio. La fiesta sigue… como fiesta.' }]);
+    // CLÍMAX DE FINALES ALTERNATIVOS: se evalúan AMBOS antes de la
+    // revelación estándar (G.altFinalsRoute). Solo uno listo → corre
+    // ese final. AMBOS listos → ELIGE EL JUGADOR (decisión de Jose,
+    // 2026-11-21): la elección se presenta en el chat con ui.choose
+    // SIN temporizador — no hay presión de tiempo ni default oculto;
+    // la partida espera el clic. Ninguno → final normal, intacto.
+    if (!ruina) {
+      const route = altFinalsRoute(S);
+      if (route === 'ambos') {
+        ui.header('Final', 'Dos finales posibles');
+        await ui.postAll([
+          { who: 'sistema', text: '✨ Esta noche se abrieron DOS caminos a la vez: el cohete de los huidos espera en el techo… y el equipo de la película, en la puerta.' },
+          { who: 'majo', text: 'No se puede estar en dos finales a la vez. Elijan UNO.' },
+        ]);
+        const pick = await ui.choose([
+          { label: 'Viaje a J1407b — la fiesta sobre los anillos' },
+          { label: 'La película de Las Leyendas — la casa era un set' },
+        ]);
+        if (pick === 0) { await runSpaceClimax(); return; }
+        if (await runLegendsClimax()) return;
+      } else if (route === 'espacio') { await runSpaceClimax(); return; }
+      else if (route === 'leyendas') { if (await runLegendsClimax()) return; }
     }
     const key = await actReveal(ruina);
     await showEnding(key);

@@ -431,10 +431,10 @@
     },
 
     // ----- Final alternativo J1407b (SPACE_RINGS_ENDING) -----
-    // Entradas de PRÁCTICA y de la cadena del final. La condición de
-    // desbloqueo en la historia sigue pendiente de las decisiones de
-    // guion A–D de Jose (ver el HOOK en game.js): estas entradas NO
-    // están en G.STORY y ningún evento las dispara todavía.
+    // Entradas de PRÁCTICA y de la cadena del final. En la HISTORIA
+    // el final se habilita con G.spaceReady (ver game.js) y lo
+    // dispara el clímax de main() — estas entradas NO están en
+    // G.STORY: no son eventos sueltos de la noche.
     anillos: {
       title: 'Anillos de J1407b', kind: 'Duelo', type: 'minigame', game: 'anillos', boss: 'jose', bossLabel: 'José · copiloto Pollito', view: 'todo',
       chat: [
