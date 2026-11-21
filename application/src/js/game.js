@@ -191,6 +191,10 @@
     if (v && !G.canPause()) return;
     G.paused = v;
     document.body.classList.toggle('paused', v);
+    // En el easter egg «La Cita» la pausa congela TAMBIÉN la canción:
+    // el reloj maestro es su currentTime (o el respaldo, que se
+    // congela igual), así que al reanudar todo se rederiva exacto.
+    if (S.phase === 'date' && G.DateMode) G.DateMode.setPaused(v);
     G.input.flush(); // que no quede una tecla/acción "cargada" al reanudar
     if (v) showPauseMenu(); else { pauseOv.classList.remove('show'); pauseOv.innerHTML = ''; }
   };
@@ -200,6 +204,7 @@
         <button class="big" id="presume"><span class="pic pic-play"></span>Seguir jugando</button>
         <button class="big alt" id="pmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos</button>
         <button class="big alt" id="pexit"><span class="pic pic-door"></span>Salir al título</button>
+        <button class="big alt" id="psecret">???</button>
       </div>
       <p class="dim">${G.practiceMode ? 'Estás en modo práctica: los duelos no afectan a ninguna partida.' : 'Ojo: lanzar un duelo de práctica abandona la partida actual, y salir al título también la pierde.'}</p></div>`;
     pauseOv.classList.add('show');
@@ -209,6 +214,10 @@
       pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
       await showMinigames('pause');
       if (G.paused) showPauseMenu(); // solo miró la lista y volvió: la pausa sigue puesta
+    };
+    $('#psecret').onclick = () => {
+      pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
+      showDateCode(() => { if (G.paused) showPauseMenu(); });
     };
   }
   pauseBtn.onclick = () => { if (G.paused) G.setPaused(false); else G.setPaused(true); };
@@ -246,6 +255,56 @@
   };
   function menuShow(html) { G.menuOpen = true; overlay.innerHTML = `<div class="modal wide">${html}</div>`; overlay.classList.add('show'); }
   function menuHide() { G.menuOpen = false; overlay.classList.remove('show'); overlay.innerHTML = ''; }
+
+  // ---------- Easter egg «La Cita»: la entrada «???» ----------
+  // Vive al final del título y del menú de pausa, sin descripción
+  // ni pista. El panel solo pide un código: si es incorrecto, se
+  // cierra EN SILENCIO (sin sfx de error, sin mensajes, sin
+  // contador de intentos) y se vuelve a la pantalla anterior,
+  // como si el «???» no hiciera nada. Si es correcto: fundido a
+  // negro de 0,6 s, se descartan los temporizadores de la
+  // historia (patrón del modo práctica) y arranca G.DateMode.
+  // La verificación vive en date.js y compara solo el hash.
+  function showDateCode(onCancel) {
+    menuShow(`<h2>???</h2>
+      <input id="datecode" class="codeinput" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="???">
+      <div class="pbtns"><button class="big" id="datego">Entrar</button><button class="big alt" id="dateback">Volver</button></div>`);
+    // el modal de menuShow es .wide con scroll: este panel es corto
+    // y la regla de UI de Jose es NADA de barras de scroll
+    const modal = overlay.querySelector('.modal'); if (modal) modal.classList.add('noscroll');
+    const input = $('#datecode');
+    const back = () => { menuHide(); if (onCancel) onCancel(); };
+    $('#dateback').onclick = back;
+    $('#datego').onclick = () => {
+      const inp = $('#datecode'); // se lee al hacer clic, no al abrir
+      const ok = G.DateMode && G.DateMode.verify(inp ? inp.value : '');
+      if (!ok) { back(); return; } // silencio total
+      startDate();
+    };
+    if (input) {
+      input.focus();
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#datego').click(); });
+    }
+  }
+  G.openDateCode = showDateCode; // lo ejercita el humo (tools/check_date.js)
+  function startDate() {
+    menuHide();
+    const f = $('#fade');
+    f.classList.remove('go'); f.style.transition = 'opacity .6s ease'; f.style.opacity = '1';
+    // El fundido va con setTimeout (reloj de pared) a propósito:
+    // puede invocarse desde la PAUSA, donde los temporizadores
+    // del juego están congelados y un G.wait nunca resolvería.
+    // Es solo cosmética de 0,6 s; ninguna lógica depende de él.
+    setTimeout(() => {
+      G.dropTimers(); // la historia no puede resucitar dentro del easter egg
+      G.paused = false; document.body.classList.remove('paused');
+      pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
+      S.phase = 'date';
+      G.DateMode.start(() => { location.href = location.pathname; }); // al terminar: título, limpio
+      f.style.opacity = '0';
+      setTimeout(() => { f.style.opacity = ''; f.style.transition = ''; }, 700);
+    }, 620);
+  }
   function enterPractice() {
     if (!G.practiceMode) { G.practiceMode = true; G.dropTimers(); actions.innerHTML = ''; }
     G.paused = false; document.body.classList.remove('paused');
@@ -377,7 +436,7 @@
         overlay.innerHTML = `<div class="modal"><div class="logo"><img class="logoico" src="assets/icons/pastel.png" alt=""><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
           <p>Siete roomies. Una fiesta sorpresa. Y Ximena, que vuelve de 36 horas de guardia, está por llegar.</p>
           <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa, vence en duelo a <b>Pollito</b> y a <b>José</b> y, sobre todo, <b>no la despiertes</b>.</p>
-          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button></div></div>`;
+          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button><button class="big alt" id="tsecret">???</button></div></div>`;
         overlay.classList.add('show');
         $('#tplay').onclick = () => {
           overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok');
@@ -387,6 +446,7 @@
           res();
         };
         $('#tmg').onclick = async () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('pick'); await showMinigames('title'); show(); };
+        $('#tsecret').onclick = () => { overlay.classList.remove('show'); overlay.innerHTML = ''; showDateCode(() => show()); };
       };
       show();
     });

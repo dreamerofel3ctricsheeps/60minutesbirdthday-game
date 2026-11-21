@@ -216,3 +216,9 @@ button.big::after { content: ''; position: absolute; top: 0; left: -60%; width: 
 .pcard { background: linear-gradient(180deg, #3a3156, #2c2542); box-shadow: 0 6px 0 #120f1b; }
 .pcard:hover { box-shadow: 0 10px 0 #120f1b, 0 0 24px rgba(255, 210, 63, .35); }
 .vs > span { animation: vs 0.9s ease-in-out infinite alternate; } @keyframes vs { to { transform: scale(1.18) rotate(-4deg); } }
+
+/* Easter egg «La Cita»: panel del código (entrada «???») y modo
+   sin HUD — durante la cita no existen medidores ni teléfono. */
+.codeinput { display: block; margin: 10px auto 4px; width: min(320px, 80%); background: #171226; color: #ffd23f; border: 3px solid #120f1b; border-radius: 10px; padding: 12px 10px; font: bold 22px var(--font); letter-spacing: 6px; text-align: center; text-transform: uppercase; outline: none; }
+.codeinput:focus { border-color: #ffd23f; }
+body.date-mode #hud, body.date-mode #phone, body.date-mode #inv { display: none; }

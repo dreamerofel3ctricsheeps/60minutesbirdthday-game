@@ -1,0 +1,15 @@
+LA CANCIÓN DEL EASTER EGG «LA CITA»
+====================================
+
+En esta carpeta va el archivo de la canción, con ESTE nombre exacto:
+
+    and-i-love-her.m4a      (formato M4A / AAC — el principal)
+    and-i-love-her.mp3      (opcional: respaldo, solo si no hay .m4a)
+
+El juego lo busca aquí al activarse el easter egg. Si el archivo no
+está, la secuencia corre igual, en silencio, con su reloj de respaldo.
+
+IMPORTANTE: el archivo NO se sube a git (el .gitignore del repo lo
+excluye a propósito). El repositorio es público y la canción tiene
+derechos: vive solo en la copia local y en el paquete que se le
+entregue a Ximena.

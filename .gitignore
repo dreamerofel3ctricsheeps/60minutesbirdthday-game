@@ -1,0 +1,5 @@
+# La canción del easter egg «La Cita» NUNCA se sube al repo (es
+# público y el tema tiene derechos): vive solo en la copia local.
+# El LEEME.txt de la carpeta SÍ se versiona (no casa con *.m4a/*.mp3).
+application/src/assets/audio/*.m4a
+application/src/assets/audio/*.mp3
