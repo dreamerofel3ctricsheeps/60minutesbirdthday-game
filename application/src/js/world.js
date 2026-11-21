@@ -21,6 +21,16 @@
   });
   window.addEventListener('keyup', (e) => { const k = MAP[e.code]; if (k) keys[k] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+  // ---------- Controles táctiles ----------
+  // Los botones en pantalla (ver game.js, #touchpad) llaman a touchDown/Up
+  // con las MISMAS 5 teclas lógicas que el teclado (up/down/left/right/
+  // action) y actualizan el mismo estado `keys`/`pressed`: todo el resto
+  // del juego (axis/held/hit, usados en TODOS los duelos y en world.js)
+  // no distingue si el origen fue teclado, mouse o un dedo en la pantalla.
+  // Cada botón táctil lleva su propio `pointerId` activo para soportar
+  // varios dedos a la vez (p. ej. diagonales con dos botones del D-pad)
+  // sin que un dedo "cancele" el botón que está tocando otro.
+  const touchActive = {}; // k -> Set<pointerId>
   G.input = {
     axis() {
       let x = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), y = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
@@ -30,6 +40,16 @@
     held: (k) => !!keys[k],
     hit(k) { const v = !!pressed[k]; pressed[k] = false; return v; },
     flush() { for (const k in pressed) pressed[k] = false; },
+    touchDown(k, pid) {
+      (touchActive[k] || (touchActive[k] = new Set())).add(pid);
+      if (!keys[k]) pressed[k] = true;
+      keys[k] = true;
+    },
+    touchUp(k, pid) {
+      const s = touchActive[k]; if (s) s.delete(pid);
+      if (!s || !s.size) keys[k] = false;
+    },
+    touchReset() { for (const k in touchActive) touchActive[k].clear(); for (const k in keys) keys[k] = false; },
   };
 
   // ---------- Geometría lógica (x, y≡z) ----------

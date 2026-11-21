@@ -203,6 +203,7 @@
       <div class="pbtns">
         <button class="big" id="presume"><span class="pic pic-play"></span>Seguir jugando</button>
         <button class="big alt" id="pmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos</button>
+        <button class="big alt" id="psettings"><span class="pic pic-gear"><i></i></span>Ajustes</button>
         <button class="big alt" id="pexit"><span class="pic pic-door"></span>Salir al título</button>
       </div>
       <p class="dim">${G.practiceMode ? 'Estás en modo práctica: los duelos no afectan a ninguna partida.' : 'Ojo: lanzar un duelo de práctica abandona la partida actual, y salir al título también la pierde.'}</p></div>`;
@@ -214,10 +215,71 @@
       await showMinigames('pause');
       if (G.paused) showPauseMenu(); // solo miró la lista y volvió: la pausa sigue puesta
     };
+    $('#psettings').onclick = async () => {
+      pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
+      await settingsScreen();
+      if (G.paused) showPauseMenu();
+    };
   }
   pauseBtn.onclick = () => { if (G.paused) G.setPaused(false); else G.setPaused(true); };
   let lastCan = null;
-  function updatePauseBtn() { const c = !!(G.canPause() || G.paused); if (c !== lastCan) { lastCan = c; pauseBtn.classList.toggle('off', !c); } }
+  function updatePauseBtn() { const c = !!(G.canPause() || G.paused); if (c !== lastCan) { lastCan = c; pauseBtn.classList.toggle('off', !c); settingsBtn.classList.toggle('off', !c); } }
+
+  // ---------- Ajustes (controles táctiles y otras preferencias) ----------
+  // Persistente en localStorage; el valor por defecto se adivina según si
+  // el dispositivo reporta puntero "coarse" (dedo) o soporta touch, para
+  // que en un celular/tablet los controles aparezcan solos la primera vez,
+  // y en escritorio queden apagados salvo que el jugador los active a mano.
+  const SETTINGS_KEY = '1mtp.settings';
+  function detectTouch() { return !!((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0); }
+  let savedSettings = {};
+  try { savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { savedSettings = {}; }
+  G.settings = Object.assign({ touch: detectTouch() }, savedSettings);
+  function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(G.settings)); } catch (e) { /* almacenamiento no disponible */ } }
+  function applySettings() { document.body.classList.toggle('touch-on', !!G.settings.touch); }
+  applySettings();
+  function settingsScreen() {
+    return new Promise((res) => {
+      menuShow(`<h2><span class="pic pic-gear"><i></i></span>Ajustes</h2>
+        <div class="optrow"><div><b>Controles táctiles</b><small>D-pad y botón de acción en pantalla, para jugar con el dedo en celular o tablet. El teclado sigue funcionando igual, estén activos o no.</small></div>
+          <label class="switch"><input type="checkbox" id="stouch" ${G.settings.touch ? 'checked' : ''}><span class="track"></span></label></div>
+        <button class="big alt" id="sback">← Volver</button>`);
+      $('#stouch').onchange = (e) => {
+        G.settings.touch = e.target.checked; saveSettings(); applySettings();
+        if (!G.settings.touch) G.input.touchReset(); // suelta cualquier botón táctil "pegado" al desactivar
+      };
+      $('#sback').onclick = () => { G.sfx('pick'); menuHide(); res(); };
+    });
+  }
+  const settingsBtn = $('#settingsbtn');
+  settingsBtn.onclick = async () => {
+    if (!G.canPause() && !G.paused) return; // mismo criterio que el botón de Pausa: sin partida activa no hace nada (el título tiene su propio botón de Ajustes)
+    const wasPaused = G.paused;
+    if (!wasPaused) G.setPaused(true);
+    pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
+    await settingsScreen();
+    if (G.paused) showPauseMenu();
+  };
+
+  // ---------- Wiring del D-pad y botón de acción táctiles ----------
+  // Pointer events (no touchstart/touchend): funcionan igual con un dedo,
+  // un mouse o un lápiz, y cada botón suelta su tecla lógica aunque el
+  // dedo se levante fuera del botón (pointercancel/pointerleave) para que
+  // nunca quede una dirección "trabada" si el dedo se resbala.
+  (function initTouchpad() {
+    const pad = $('#touchpad'); if (!pad) return;
+    pad.querySelectorAll('.tbtn').forEach((btn) => {
+      const k = btn.dataset.k;
+      const down = (e) => { e.preventDefault(); btn.classList.add('on'); G.input.touchDown(k, e.pointerId); };
+      const up = (e) => { e.preventDefault(); btn.classList.remove('on'); G.input.touchUp(k, e.pointerId); };
+      btn.addEventListener('pointerdown', down);
+      btn.addEventListener('pointerup', up);
+      btn.addEventListener('pointercancel', up);
+      btn.addEventListener('pointerleave', up);
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+    });
+  })();
+  window.addEventListener('blur', () => G.input.touchReset());
   window.addEventListener('keydown', (e) => {
     if (e.repeat || G.menuOpen) return;
     if (e.key === 'Escape' || ((e.key === 'p' || e.key === 'P') && !G.captureKeys)) G.setPaused(!G.paused);
@@ -393,7 +455,7 @@
         overlay.innerHTML = `<div class="modal"><div class="logo"><img class="logoico" src="assets/icons/pastel.png" alt=""><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
           <p>Siete roomies. Una fiesta sorpresa. Y Ximena, que vuelve de 36 horas de guardia, está por llegar.</p>
           <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa, vence en duelo a <b>Pollito</b> y a <b>José</b> y, sobre todo, <b>no la despiertes</b>.</p>
-          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button></div></div>`;
+          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button><button class="big alt" id="tsettings"><span class="pic pic-gear"><i></i></span>AJUSTES</button></div></div>`;
         overlay.classList.add('show');
         $('#tplay').onclick = () => {
           overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok');
@@ -403,6 +465,7 @@
           res();
         };
         $('#tmg').onclick = async () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('pick'); await showMinigames('title'); show(); };
+        $('#tsettings').onclick = async () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('pick'); await settingsScreen(); show(); };
       };
       show();
     });

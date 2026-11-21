@@ -61,7 +61,57 @@ button.big.alt { background: var(--panel2); color: var(--ink); }
 /* ---------- Pausa ---------- */
 #pausebtn { background: var(--panel2); color: var(--ink); border: 2px solid #120f1b; border-radius: 8px; padding: 5px 12px; font-weight: bold; font-size: 13px; }
 #pausebtn:hover { border-color: var(--yellow); }
+#settingsbtn { background: var(--panel2); color: var(--ink); border: 2px solid #120f1b; border-radius: 8px; padding: 5px 10px; font-weight: bold; font-size: 13px; }
+#settingsbtn:hover { border-color: var(--yellow); }
+
+/* ---------- Ajustes ---------- */
+.optrow { display: flex; align-items: center; justify-content: space-between; gap: 14px; background: var(--panel2); border: 2px solid #120f1b; border-radius: 10px; padding: 10px 14px; margin: 10px 0; text-align: left; }
+.optrow b { font-size: 14px; }
+.optrow small { display: block; color: var(--dim); font-size: 11px; margin-top: 2px; }
+.switch { position: relative; display: inline-block; width: 50px; height: 28px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track { position: absolute; inset: 0; background: #120f1b; border-radius: 999px; border: 2px solid #120f1b; transition: background .15s; cursor: pointer; }
+.switch .track::before { content: ''; position: absolute; left: 2px; top: 2px; width: 20px; height: 20px; background: var(--dim); border-radius: 50%; transition: transform .15s, background .15s; }
+.switch input:checked + .track { background: #3a5f3f; }
+.switch input:checked + .track::before { transform: translateX(22px); background: var(--green); }
+
+/* ---------- Controles táctiles ---------- */
+#touchpad { display: none; position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+body.touch-on #touchpad { display: block; }
+/* Mientras hay un modal sobre el escenario (título, ajustes, pausa, elegir
+   personaje, VS, resultado…) los botones táctiles se ocultan: evitan
+   tapar el modal y no hace falta moverse ni actuar mientras se decide. */
+#overlay.show ~ #touchpad, #pauseov.show ~ #touchpad { display: none !important; }
+.tpad-dpad { position: absolute; left: 4%; bottom: 6%; width: 148px; height: 148px; pointer-events: auto; }
+.taction { position: absolute; right: 6%; bottom: 10%; width: 78px; height: 78px; border-radius: 50%; pointer-events: auto; }
+.tbtn { background: rgba(38, 32, 54, .72); border: 3px solid rgba(255, 210, 63, .55); color: var(--ink); font-size: 18px; line-height: 1; touch-action: none; user-select: none; -webkit-user-select: none; }
+.tbtn:active, .tbtn.on { background: rgba(255, 210, 63, .35); border-color: var(--yellow); }
+.tbtn i { display: block; width: 0; height: 0; margin: auto; border: 9px solid transparent; }
+.tup { position: absolute; left: 50px; top: 0; width: 48px; height: 48px; border-radius: 10px; }
+.tup i { border-bottom-color: currentColor; margin-top: 4px; }
+.tleft { position: absolute; left: 0; top: 50px; width: 48px; height: 48px; border-radius: 10px; }
+.tleft i { border-right-color: currentColor; margin-left: 2px; }
+.tright { position: absolute; left: 100px; top: 50px; width: 48px; height: 48px; border-radius: 10px; }
+.tright i { border-left-color: currentColor; margin-left: 6px; }
+.tdown { position: absolute; left: 50px; top: 100px; width: 48px; height: 48px; border-radius: 10px; }
+.tdown i { border-top-color: currentColor; margin-top: 6px; }
+.taction { font-size: 28px; display: grid; place-items: center; }
+
+/* ---------- Responsive: pantallas angostas (móviles) ---------- */
+@media (max-width: 760px), (max-aspect-ratio: 4/5) {
+  main { flex-direction: column; padding: 8px; gap: 8px; }
+  #stagewrap { flex: 0 0 auto; width: 100%; }
+  #stage { max-width: 100%; width: 100%; }
+  #phone { width: 100%; max-height: 32vh; }
+  #hud { gap: 8px; padding: 6px 10px; }
+  #hud .meter { font-size: 10px; }
+  .tpad-dpad { width: 126px; height: 126px; }
+  .tup, .tleft, .tright, .tdown { width: 42px; height: 42px; }
+  .tleft { top: 42px; } .tright { left: 84px; top: 42px; } .tup { left: 42px; } .tdown { left: 42px; top: 84px; }
+  .taction { width: 66px; height: 66px; right: 4%; bottom: 8%; }
+}
 #pausebtn.off { opacity: .35; }
+#settingsbtn.off { opacity: .35; }
 /* ---------- Iconografía PROPIA del juego (regla de Jose, 2026-11-14) ----------
    En el entorno del juego no se usan emoticones: los indicadores son los
    íconos pixel de assets/icons/ y los pictogramas CSS de aquí abajo.
@@ -80,6 +130,11 @@ button.big.alt { background: var(--panel2); color: var(--ink); }
 .pic-play { display: inline-block; width: 0; height: 0; border-left: 11px solid currentColor; border-top: 7px solid transparent; border-bottom: 7px solid transparent; vertical-align: -1px; }
 .pic-door { display: inline-block; width: 11px; height: 15px; border: 2.5px solid currentColor; border-bottom: none; border-radius: 6px 6px 0 0; position: relative; vertical-align: -2px; }
 .pic-door::after { content: ''; position: absolute; right: 1.5px; top: 6px; width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
+.pic-gear { display: inline-block; width: 13px; height: 13px; border: 2.5px solid currentColor; border-radius: 50%; position: relative; vertical-align: -2px; box-sizing: content-box; }
+.pic-gear i, .pic-gear::before, .pic-gear::after { content: ''; position: absolute; background: currentColor; }
+.pic-gear::before { width: 2.5px; height: 6px; left: 50%; top: -5px; transform: translateX(-50%); }
+.pic-gear::after { width: 2.5px; height: 6px; left: 50%; bottom: -5px; transform: translateX(-50%); }
+.pic-gear i { width: 6px; height: 2.5px; top: 50%; left: -5px; transform: translateY(-50%); box-shadow: 11px 0 0 currentColor; }
 #pauseov { position: absolute; inset: 0; display: none; place-items: center; background: rgba(14, 11, 22, .62); backdrop-filter: blur(5px); padding: 3%; z-index: 6; }
 #pauseov.show { display: grid; }
 body.paused #phone, body.paused #inv { pointer-events: none; filter: saturate(.55); }
