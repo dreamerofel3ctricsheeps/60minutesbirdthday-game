@@ -174,6 +174,67 @@
     if (typeof Image !== 'undefined') { catedralImg = new Image(); catedralImg.src = 'assets/date/catedral.png'; }
   } catch (e) { catedralImg = null; }
 
+  // ---------- Complementos de la plaza (pedidos por Jose) ----------
+  // Más recortes de FOTO real con el mismo acabado que la Catedral
+  // (tools/mkcutout.py: fondo fuera, borde blanco horneado y sombra
+  // suave): un avión que cruza el cielo, un puesto de tacos de
+  // fondo, la Parroquia de la Purísima Concepción de Mineral del
+  // Chico como segundo hito y el vocho que maneja Pollito por la
+  // calle de primer plano. Fuentes y licencias: assets/date/FUENTES.md.
+  // La VISTA de San Ángel es la excepción: arte de la película El
+  // Libro de la Vida aportado por Jose, SOLO-LOCAL (en .gitignore,
+  // como la canción); si el archivo no está, no se dibuja y ya.
+  function loadDateImg(src) {
+    try { if (typeof Image !== 'undefined') { const i = new Image(); i.src = src; return i; } } catch (e) { /* sin imagen: el elemento no se dibuja */ }
+    return null;
+  }
+  const imgOk = (i) => !!(i && i.complete && i.naturalWidth);
+  const avionImg = loadDateImg('assets/date/avion.png');
+  const vochoImg = loadDateImg('assets/date/vocho.png');
+  const tacosImg = loadDateImg('assets/date/tacos.png');
+  const parroquiaImg = loadDateImg('assets/date/parroquia.png');
+  const vistaImg = loadDateImg('assets/date/sanangel-vista.png');
+
+  // Geometría y ciclos de los complementos. Las x de los elementos
+  // fijos viven en el espacio de SU capa (pantalla con pan=0, como
+  // la Catedral en 268): con la cámara al fondo de la franja
+  // (pan=510) la vista cae en pantalla ≈558, justo detrás de donde
+  // irá la Puerta de salida (mundo ≈1060, ver vistaWorldX).
+  const PLAZA_FX = {
+    avion: { w: 138, y: 54, ciclo: 28, cruce: 14, desfase: 7, par: 0.15 },
+    vocho: { w: 246, base: 351, ciclo: 32, cruce: 7, desfase: 11 },
+    tacosX: 755, tacosW: 128,             // L2 (parallax 0,5)
+    parroquiaX: 700, parroquiaW: 322,     // L1 (parallax 0,25)
+    vistaX: 660, vistaW: 352,             // capa lejana (parallax 0,2)
+    vistaWorldX: 1068,                    // su ancla en el mundo L4
+    vistaSquash: 0.86,                    // aplana un pelo la vista para que las torres quepan en la banda del cielo
+    // Ventanilla del conductor del vocho, en fracciones del
+    // recorte (medidas sobre vocho.png: la ventana lateral
+    // delantera ocupa x 0,30–0,49, y 0,24–0,44): ahí asoma
+    // Pollito. Su cabeza se recorta del frame idle definido
+    // (celda 158×150; la cabeza vive en x 44–114, y 59–111).
+    winCx: 0.395, winBase: 0.458, winHeadW: 0.16,
+    catSrc: { x: 0.278, y: 0.393, w: 0.443, h: 0.347 },
+  };
+  // Centro del avión (px de pantalla, SIN parallax) en el tiempo t:
+  // cruza de izquierda a derecha durante `cruce` s y el resto del
+  // ciclo espera fuera de escena (devuelve -9999). Monótona
+  // creciente dentro de la ventana de cruce.
+  function avionXAt(t) {
+    const f = PLAZA_FX.avion, ph = (t + f.desfase) % f.ciclo;
+    if (ph >= f.cruce) return -9999;
+    return -170 + (ph / f.cruce) * 980;
+  }
+  // Centro del vocho (px de pantalla) en el tiempo t: cruza de
+  // DERECHA a IZQUIERDA durante `cruce` s y tarda el resto del
+  // ciclo en volver (fuera de la ventana devuelve 9999).
+  // Monótona decreciente dentro de la ventana.
+  function vochoXAt(t) {
+    const f = PLAZA_FX.vocho, ph = (t + f.desfase) % f.ciclo;
+    if (ph >= f.cruce) return 9999;
+    return 790 - (ph / f.cruce) * 960;
+  }
+
   // ---------- TAB en el modo libre de la plaza ----------
   // G.input no mapea Tab (no es tecla del juego): el modo cita
   // escucha por su cuenta y solo actúa en la fase 'free'.
@@ -450,7 +511,11 @@
       }
       this.drawPlaza();
     }
-    // ---------- La plaza en 6 capas (canvas 2D, 640×360) ----------
+    // ---------- La plaza por capas (canvas 2D, 640×360) ----------
+    // Cielo, vista lejana de San Ángel, avión, Catedral, Parroquia
+    // de Mineral del Chico, bandera, edificios, puesto de tacos,
+    // piso, Puerta y personajes, poste de primer plano y el vocho
+    // de Pollito cruzando por delante.
     drawPlaza() {
       const c = G.ovCtx; if (!c) return;
       c.setTransform(2, 0, 0, 2, 0, 0);
@@ -461,9 +526,42 @@
       const sky = c.createLinearGradient(0, 0, 0, horizon);
       sky.addColorStop(0, '#7fb2d9'); sky.addColorStop(0.55, '#c9d9e8'); sky.addColorStop(0.82, '#f6cf8e'); sky.addColorStop(1, '#ffd9a0');
       c.fillStyle = sky; c.fillRect(0, 0, 640, horizon + 2);
+      // L0 lejos · SAN ÁNGEL a lo lejos (solo si el asset local
+      // cargó): el próximo destino asomando al final de la franja,
+      // DETRÁS de la zona donde irá la Puerta de salida. Sin borde
+      // blanco (es un paisaje, no un sticker) y con VELO DE
+      // DISTANCIA: tinte celeste encima y la base fundida en la
+      // luz del horizonte, para que se lea «muy lejos».
+      if (imgOk(vistaImg)) {
+        const f = PLAZA_FX, vw = f.vistaW;
+        const vh = vw * vistaImg.naturalHeight / vistaImg.naturalWidth * f.vistaSquash;
+        const vx = f.vistaX - pan * 0.2 - vw / 2, vy = horizon + 6 - vh;
+        c.drawImage(vistaImg, vx, vy, vw, vh);
+        const veil = c.createLinearGradient(0, vy, 0, horizon + 6);
+        veil.addColorStop(0, 'rgba(174,200,226,0.40)');
+        veil.addColorStop(0.7, 'rgba(190,208,228,0.32)');
+        veil.addColorStop(1, 'rgba(246,207,142,0.50)');
+        c.fillStyle = veil; c.fillRect(vx, vy, vw, vh);
+        const fade = c.createLinearGradient(0, horizon - 26, 0, horizon + 6);
+        fade.addColorStop(0, 'rgba(255,217,160,0)');
+        fade.addColorStop(1, 'rgba(255,217,160,0.85)');
+        c.fillStyle = fade; c.fillRect(vx, horizon - 26, vw, 32);
+      }
       c.fillStyle = 'rgba(255,252,244,0.85)';
       const cloud = (x, y, s) => { c.beginPath(); c.ellipse(x, y, 26 * s, 8 * s, 0, 0, 6.3); c.ellipse(x + 18 * s, y + 2 * s, 18 * s, 6 * s, 0, 0, 6.3); c.ellipse(x - 20 * s, y + 2 * s, 16 * s, 5.5 * s, 0, 0, 6.3); c.fill(); };
       cloud(120 - pan * 0.1 + Math.sin(t * 0.05) * 2, 46, 1.1); cloud(430 - pan * 0.1, 30, 0.8); cloud(560 - pan * 0.1, 74, 1.3); cloud(250 - pan * 0.1, 92, 0.6);
+      // L0 aire · un AVIÓN real cruza el cielo (recorte de foto,
+      // espejado para volar hacia la derecha): posición función
+      // del tiempo (avionXAt) con el parallax del cielo encima.
+      // Pequeño y lejano; sin sonido. Se ve en el revelado y en
+      // el modo libre.
+      if (imgOk(avionImg)) {
+        const ax = avionXAt(t);
+        if (ax > -9000) {
+          const f = PLAZA_FX.avion, aw = f.w, ah = aw * avionImg.naturalHeight / avionImg.naturalWidth;
+          c.drawImage(avionImg, ax - pan * f.par - aw / 2, f.y - ah / 2, aw, ah);
+        }
+      }
       // L1 · la Catedral (recorte de FOTO real) + asta con bandera dibujada
       const catW = 430, catX = 268 - pan * 0.25, catBase = horizon + 4;
       if (catedralImg && catedralImg.complete && catedralImg.naturalWidth) {
@@ -475,6 +573,16 @@
         c.fillRect(catX - 190, catBase - 170, 380, 170);
         c.fillRect(catX - 165, catBase - 225, 52, 225); c.fillRect(catX + 113, catBase - 225, 52, 225);
         c.beginPath(); c.arc(catX - 139, catBase - 225, 26, 3.14, 0); c.arc(catX + 139, catBase - 225, 26, 3.14, 0); c.fill();
+      }
+      // L1 · la Parroquia de la Purísima Concepción de MINERAL
+      // DEL CHICO (recorte de FOTO real), segundo hito: vive en el
+      // lado derecho de la franja y se descubre al explorarla en
+      // el modo libre; un poco más pequeña que la Catedral (es
+      // una parroquia de pueblo junto a la metropolitana).
+      if (imgOk(parroquiaImg)) {
+        const pw = PLAZA_FX.parroquiaW, px = PLAZA_FX.parroquiaX - pan * 0.25;
+        const ph2 = pw * parroquiaImg.naturalHeight / parroquiaImg.naturalWidth;
+        c.drawImage(parroquiaImg, px - pw / 2, catBase - ph2, pw, ph2);
       }
       // asta y bandera de México, DIBUJADA y ondeando por código
       const astaX = 96 - pan * 0.25, astaBase = horizon + 4;
@@ -510,6 +618,14 @@
         c.fillStyle = '#ffd9a0'; c.fillRect(sx + 6, horizon - 18, 8, 8); c.fillRect(sx + 20, horizon - 18, 8, 8); c.fillRect(sx + 34, horizon - 18, 8, 8);
       };
       stall(430 - pan * 0.5, '#b03a3a'); stall(30 - pan * 0.5, '#3a7d44');
+      // L2 · EL puesto de tacos (recorte de FOTO real): el puesto
+      // protagonista entre los dibujados, fijo en la franja con su
+      // base sobre la línea del horizonte, como los demás puestos.
+      if (imgOk(tacosImg)) {
+        const tw = PLAZA_FX.tacosW, tx = PLAZA_FX.tacosX - pan * 0.5;
+        const th = tw * tacosImg.naturalHeight / tacosImg.naturalWidth;
+        c.drawImage(tacosImg, tx - tw / 2, horizon + 6 - th, tw, th);
+      }
       // L3 · piso de baldosas de la plaza
       c.fillStyle = '#b8a88f'; c.fillRect(0, horizon, 640, 360 - horizon);
       c.fillStyle = '#a08b6d'; c.fillRect(0, horizon, 640, 3);
@@ -544,6 +660,29 @@
       c.beginPath(); c.arc(postX + 6.5, 26, 10, 0, 6.3); c.fill();
       c.restore();
       c.fillStyle = 'rgba(255,214,140,0.5)'; c.beginPath(); c.arc(postX + 6.5, 26, 5, 0, 6.3); c.fill();
+      // L6 · el VOCHO que maneja POLLITO (gag): cruza la calle de
+      // primer plano de DERECHA a IZQUIERDA por DELANTE de los
+      // personajes (posición función del tiempo, ver vochoXAt),
+      // con su leve bob de suspensión. Pollito NO se baja ni
+      // interactúa: solo pasa manejando, con su cabeza y hombros
+      // (recorte del frame idle definido) asomando por la
+      // ventanilla del conductor y su propio bob de manejo.
+      if (imgOk(vochoImg)) {
+        const vx = vochoXAt(t);
+        if (vx < 9000) {
+          const f = PLAZA_FX, cw = f.vocho.w, chh = cw * vochoImg.naturalHeight / vochoImg.naturalWidth;
+          const bob = Math.sin(t * 31) * 0.8;
+          const left = vx - cw / 2, top = f.vocho.base + bob - chh;
+          c.drawImage(vochoImg, left, top, cw, chh);
+          const cat = Sp.catAnim ? Sp.catAnim('idle', Math.floor(t * 1.4), false) : null;
+          if (cat && cat.width) {
+            const s = f.catSrc, hw = cw * f.winHeadW, hh = hw * (s.h / s.w);
+            const hx = left + cw * f.winCx - hw / 2;
+            const hy = top + chh * f.winBase - hh + Math.sin(t * 17) * 0.7;
+            c.drawImage(cat, s.x * cat.width, s.y * cat.height, s.w * cat.width, s.h * cat.height, hx, hy, hw, hh);
+          }
+        }
+      }
       // luz de llegada (se disipa al inicio del revelado)
       if (this.phase === 'plaza' && this.phaseT < 0.8) { c.fillStyle = `rgba(255,244,214,${(1 - this.phaseT / 0.8).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
     }
@@ -601,6 +740,6 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; } },
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt },
   };
 })();

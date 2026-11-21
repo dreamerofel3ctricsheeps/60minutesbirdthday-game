@@ -340,6 +340,66 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('y se queda en idle estable (0 transiciones en 1 s más)', J.animWalk === false && trans2 === 0, `transiciones=${trans2}`);
   sc.draw(0.016); // el modo libre se sigue dibujando sin explotar
 
+  console.log('\nI) Complementos de la plaza: avión, tacos, vocho de Pollito, Parroquia y vista de San Ángel');
+  // Recortes de foto nuevos (mismo acabado que la Catedral) y la
+  // vista lejana de San Ángel (asset SOLO-LOCAL: no se versiona).
+  const FX = DM.debug.PLAZA_FX, DATE_DIR = path.join(SRC, '..', 'assets', 'date');
+  check('PLAZA_FX reúne los 5 complementos (avión, vocho, tacos, parroquia, vista)',
+    !!FX && !!FX.avion && !!FX.vocho && FX.tacosX > 0 && FX.parroquiaX > 0 && FX.vistaX > 0);
+  const fuentes = fs.readFileSync(path.join(DATE_DIR, 'FUENTES.md'), 'utf8');
+  for (const file of ['avion.png', 'vocho.png', 'tacos.png', 'parroquia.png']) {
+    check(`el asset ${file} existe en assets/date y FUENTES.md lo registra`,
+      fs.existsSync(path.join(DATE_DIR, file)) && fuentes.includes(file));
+  }
+  check('date.js referencia los 5 assets (los 4 recortes + la vista)',
+    ['avion.png', 'vocho.png', 'tacos.png', 'parroquia.png', 'sanangel-vista.png'].every((f) => dateSrc.includes(f)));
+  // El avión: monótono creciente dentro de su ventana de cruce y
+  // fuera de escena (=-9999) el resto del ciclo (28 s: 14 cruzando).
+  const ax = DM.debug.avionXAt;
+  let monoA = true, prevA = null, dentroA = 0;
+  for (let t = 0; t <= 56; t += 0.25) {
+    const x = ax(t);
+    if (x > -9000) { dentroA++; if (prevA !== null && x < prevA - 1e-9) monoA = false; prevA = x; }
+    else prevA = null; // fuera de la ventana: el ciclo siguiente vuelve a empezar
+  }
+  check('avionXAt es monótona creciente dentro de la ventana de cruce', monoA && dentroA > 40, `muestras dentro=${dentroA}`);
+  check('el avión espera FUERA de escena fuera de su ventana (t=10 → fase 17 ≥ cruce 14)', ax(10) === -9999, 'ax(10)=' + ax(10));
+  check('el avión entra por la izquierda al inicio de su ventana (t=21,5 → fase 0,5)', ax(21.5) > -200 && ax(21.5) < -100, 'ax(21.5)=' + ax(21.5).toFixed(1));
+  // El vocho: monótono DECRECIENTE (derecha → izquierda) y fuera
+  // el resto del ciclo (32 s: 7 cruzando, 25 esperando).
+  const vx = DM.debug.vochoXAt;
+  let monoV = true, prevV = null, dentroV = 0;
+  for (let t = 0; t <= 64; t += 0.25) {
+    const x = vx(t);
+    if (x < 9000) { dentroV++; if (prevV !== null && x > prevV + 1e-9) monoV = false; prevV = x; }
+    else prevV = null; // fuera de la ventana: el ciclo siguiente vuelve a empezar
+  }
+  check('vochoXAt es monótona decreciente (derecha → izquierda) en su ventana', monoV && dentroV > 20, `muestras dentro=${dentroV}`);
+  check('el vocho espera FUERA de escena fuera de su ventana (t=20 → fase 31 ≥ cruce 7)', vx(20) === 9999, 'vx(20)=' + vx(20));
+  check('el vocho va por la calle de primer plano (base 348–354) con Pollito a la ventanilla del conductor',
+    FX.vocho.base >= 348 && FX.vocho.base <= 354 && FX.winCx > 0.3 && FX.winCx < 0.5);
+  // Fijos: dentro de la franja y descubribles al fondo (su centro
+  // cae en pantalla con la cámara en pan máximo).
+  check('tacos y parroquia tienen posición fija dentro de la franja (0..worldW)',
+    FX.tacosX > 0 && FX.tacosX < sc.worldW && FX.parroquiaX > 0 && FX.parroquiaX < sc.worldW,
+    `tacos=${FX.tacosX}, parroquia=${FX.parroquiaX}, worldW=${sc.worldW}`);
+  check('con la cámara al fondo, tacos y parroquia caen en pantalla (se descubren explorando)',
+    (FX.tacosX - 510 * 0.5) > 200 && (FX.tacosX - 510 * 0.5) < 640 && (FX.parroquiaX - 510 * 0.25) > 300 && (FX.parroquiaX - 510 * 0.25) < 640);
+  // La vista de San Ángel: ancla de mundo en el tramo final
+  // (1000–1120, donde irá la Puerta de salida) y, con la cámara
+  // al fondo, su centro cae tras esa zona (pantalla 380–620).
+  check('la vista de San Ángel ancla en el tramo final del mundo (1000–1120) y queda tras la futura Puerta de salida',
+    FX.vistaWorldX >= 1000 && FX.vistaWorldX <= 1120 && (FX.vistaX - 510 * 0.2) >= 380 && (FX.vistaX - 510 * 0.2) <= 620,
+    `worldX=${FX.vistaWorldX}, pantalla al fondo=${(FX.vistaX - 510 * 0.2).toFixed(0)}`);
+  check('el dibujo de la vista está condicionado a que la imagen cargó (si falta el asset local, no se dibuja ni se rompe)',
+    dateSrc.includes('imgOk(vistaImg)') && dateSrc.includes('sanangel-vista.png'));
+  check('FUENTES.md registra la vista como asset solo-local aportado por Jose',
+    fuentes.includes('sanangel-vista.png') && fuentes.includes('solo-local'));
+  const gitignore = fs.readFileSync(path.join(__dirname, '..', '.gitignore'), 'utf8');
+  check('sanangel-vista.png está en .gitignore (nunca se versiona, como la canción)',
+    gitignore.includes('application/src/assets/date/sanangel-vista.png'));
+  sc.draw(0.016); // con los complementos, el dibujo de la plaza no explota
+
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);
 

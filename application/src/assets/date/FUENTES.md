@@ -10,3 +10,67 @@
   sprites definidos del juego. Recorte aplicado: x 0–0,945 (fuera los
   edificios ajenos de la derecha); se conserva el Sagrario, que es parte
   del conjunto de la Catedral.
+
+## avion.png — Avión de pasajeros cruzando el cielo de la plaza
+- **Foto original:** «Alaska Airlines 737 MAX 9 (N913AK).jpg» (4788 × 3192)
+- **Autor:** Sam Almo-Milkin
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Alaska_Airlines_737_MAX_9_(N913AK).jpg
+- **Licencia:** CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+- **Descargada:** 2026-11-21 (versión de 1920 px)
+- **Procesado:** `tools/mkcutout.py` (rembg) con recorte y 0,22–0,72,
+  borde blanco horneado y sombra suave. **Espejado horizontal** para
+  que vuele hacia la derecha (en la foto el morro apunta a la
+  izquierda); el rótulo de la aerolínea queda espejado, irrelevante a
+  la escala lejana a la que se dibuja. Salida: 760 × 227.
+
+## vocho.png — El vocho que maneja Pollito
+- **Foto original:** «Blue Volkswagen Beetle side view.jpg» (2888 × 1392)
+- **Autor:** Renée Kools
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Blue_Volkswagen_Beetle_side_view.jpg
+- **Licencia:** CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+- **Descargada:** 2026-11-21 (versión de 1920 px)
+- **Procesado:** `tools/mkcutout.py` (rembg) con recorte y 0,03–0,97,
+  borde blanco horneado y sombra suave. El morro ya apuntaba a la
+  izquierda (su dirección de viaje en la escena): sin espejo.
+  Salida: 950 × 441. Pollito se dibuja por código sobre la
+  ventanilla del conductor (recorte de su frame idle definido).
+
+## tacos.png — Puesto de tacos de fondo
+- **Foto original:** «Vista de puesto de tacos - taqueria mexicana.jpg» (4128 × 3096)
+- **Autor:** Zijun93
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Vista_de_puesto_de_tacos_-_taqueria_mexicana.jpg
+- **Licencia:** CC0 (dominio público)
+- **Descargada:** 2026-11-21 (versión de 1920 px)
+- **Procesado:** ni rembg ni GrabCut segmentan el puesto entero
+  (u2net solo salienta el letrero y al taquero; el frente de acero
+  del carrito no es saliente para ninguno de los dos), así que la
+  máscara es la **silueta poligonal del puesto** trazada sobre la
+  foto (letrero + postes + carrito con su mesa lateral), con el
+  mismo acabado de `mkcutout.py`: erosión de 1 px, borde blanco
+  por dilatación y sombra suave. Salida: 900 × 660.
+
+## parroquia.png — Parroquia de la Purísima Concepción, Mineral del Chico (Hidalgo)
+- **Foto original:** «Iglesia de Mineral Del Chico.jpg» (1632 × 1224)
+- **Autor:** JafethJia
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Iglesia_de_Mineral_Del_Chico.jpg
+- **Licencia:** CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)
+- **Descargada:** 2026-11-21 (versión de 1200 px; el original es de 1632)
+- **Procesado:** `tools/mkcutout.py` (rembg) con recorte
+  x 0,17–0,89 / y 0,01–0,75, borde blanco horneado y sombra suave.
+  Borrado manual del triángulo del techo de la casa vecina que
+  invadía la silueta por la derecha (a la altura del óculo); se
+  conserva el kiosco de la plaza real frente a la iglesia.
+  Salida: 932 × 693.
+
+## sanangel-vista.png — Vista lejana de San Ángel (NO versionado)
+- Vista de San Ángel (El Libro de la Vida) — imagen aportada por
+  Jose, uso personal, **asset solo-local no incluido en el
+  repositorio** (está en `.gitignore`, como la canción del easter
+  egg: es arte de una película con derechos).
+- **Procesado local:** recorte del pueblo + la iglesia sobre la
+  colina (x 0,17–1,0 / y 0,04–0,605 del original de 1025 × 1280 →
+  851 × 723), fuera casi todo el lago y el primer plano de
+  cactus/agave. Sin borde blanco: en la escena se dibuja como
+  paisaje lejano, con velo de distancia aplicado por código.
+  Si el archivo no está en la copia local, el juego simplemente
+  no dibuja la vista.
