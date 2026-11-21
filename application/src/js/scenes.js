@@ -361,7 +361,17 @@
       });
       this.cat.update(dt); this.cat.follow(dt);
       if (this.wander && (this.catT -= dt) <= 0 && this.cat.arrived) { this.catT = 4 + Math.random() * 6; const pt = W.randomFreePoint(['sala', 'cocina', 'pasillo'][(Math.random() * 3) | 0]); this.cat.goTo(pt[0], pt[1], 85); }
-      this.xi.update(dt); this.xi.follow(dt); this.jose.update(dt); this.jose.follow(dt);
+      this.xi.update(dt); this.jose.update(dt);
+      // follow() SOLO con ruta activa. Sin ruta, follow() es el
+      // estado "arrived" y pone vx=vy=0 y moving=false. En el juego
+      // normal Ximena y Jose solo se mueven por rutas, así que el
+      // guard no cambia nada ahí; pero con control directo (el modo
+      // cita mueve a Ximena con walk(), sin rutas) ese borrado le
+      // anulaba la velocidad cada frame: caminaba a ≈28 u/s y la
+      // fase de zancada casi no avanzaba → se deslizaba sin
+      // animación de caminar (reporte de playtest, 2026-11-21).
+      if (this.xi.route && this.xi.route.length) this.xi.follow(dt);
+      if (this.jose.route && this.jose.route.length) this.jose.follow(dt);
       if (this.confetti) this.confetti.forEach((p) => { p.vy += 60 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += dt * 6; if (p.y > 370) { p.y = -10; p.vy = 20 + Math.random() * 40; p.x = Math.random() * 640; } });
       if (this.title && (this.title.t -= dt) <= 0) this.title = null;
     }

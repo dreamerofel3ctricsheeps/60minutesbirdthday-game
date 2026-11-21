@@ -192,7 +192,7 @@
       home.cat.x = 600; home.cat.y = 346; home.cat.hidden = true;
       home.jose.hidden = true;
       const xi = home.xi;
-      xi.hidden = false; xi.x = 800; xi.y = 470; xi.dir = 'down'; xi.expr = null; xi.speed = 130;
+      xi.hidden = false; xi.x = 800; xi.y = 470; xi.dir = 'down'; xi.expr = null; xi.speed = 165;
       W.xDoorOpen = true; // la puerta de SU cuarto (pasillo↔xroom) queda abierta
       home.follow(xi, 560);
       home.cam.x = xi.x; home.cam.z = xi.y - 30; home.cam.dist = 560;
@@ -209,7 +209,10 @@
       if (this.phase === 'depa') {
         const ax = G.input.axis();
         const ix = ax.x || (touchVec ? touchVec.x : 0), iy = ax.y || (touchVec ? touchVec.y : 0);
-        this.xi.walk(ix, iy, 132, dt);
+        // 165 u/s: caminata ágil. Queda por debajo de RUN_SPD (178,
+        // world.js) a propósito: usa los ciclos walk_* de su hoja
+        // definida y no los run_* — va a una cita, no huyendo.
+        this.xi.walk(ix, iy, 165, dt);
         this.home.update(dt);
         this.nearDoor = Math.hypot(this.xi.x - MAIN_DOOR.x, this.xi.y - MAIN_DOOR.y) < 52;
         if (this.nearDoor && (G.input.hit('action') || D.tap)) this.openDoor();
