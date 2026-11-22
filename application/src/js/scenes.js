@@ -2835,6 +2835,26 @@
   // balizas laterales y la marca dorada de distancia cada 500 u.
   const RING_SEG = 90, TRACK_BAND_W = 7, TRACK_DIST_EVERY = 500;
   const TRACK_BANDS = [['#b97f3e', '#a8732f'], ['#d9a45b', '#cb9c4e'], ['#a8743a', '#99662f']]; // [tramo de 1500 u][segmento par/impar]
+  // VELOCIDAD PROPIA DE LOS METEORITOS (corrección del playtest de
+  // Jose, 2026-11-21): antes las rocas estaban FIJAS en la pista y
+  // solo se acercaban por la velocidad del jugador. Ahora cada una
+  // vuela HACIA el jugador: nace con mv al azar en [26, 40] u/s y la
+  // rampa de carrera la acelera +0,35 u/s por segundo transcurrido,
+  // con tope de 65 u/s. La velocidad de cierre real es v + mv.
+  const METEOR_V_MIN = 26, METEOR_V_MAX = 40, METEOR_V_RAMP = 0.35, METEOR_V_CAP = 65;
+  // Con el cierre más rápido, la sombra roja de aviso se enciende
+  // antes (560 u en vez de 430): el tiempo hasta el impacto queda en
+  // ≈ 560/177 ≈ 3,2 s en el peor caso (cierre máximo: crucero del
+  // rival 112 + roca a 65) y ≈ 4 s al crucero típico del jugador.
+  const METEOR_WARN_Z = 560;
+  // ÍTEM DE IMPULSO (pedido de Jose, 2026-11-21): estrella dorada en
+  // la pista que SOLO recoge el jugador — es su herramienta para
+  // recuperarse tras un choque; el rival NO la recoge nunca. Al
+  // recogerla, la velocidad objetivo pasa a 1,5× cruise durante
+  // 2,8 s con aceleración rápida (de un post-choque a 0,45× vuelves
+  // a superar el crucero en ~1 s). Sin invulnerabilidad: chocar
+  // durante el impulso lo corta en seco.
+  const BOOST_W = 38, BOOST_DUR = 2.8, BOOST_MULT = 1.5, BOOST_EVERY_MIN = 650, BOOST_EVERY_MAX = 900, BOOST_SEP = 140;
   // Llama de motor por código (punta hacia abajo).
   let flameCvCache = null;
   function flameCv() {
@@ -2844,6 +2864,24 @@
     const drop = (w, h, col) => { x.fillStyle = col; x.beginPath(); x.moveTo(30 - w, 4); x.quadraticCurveTo(30 - w * 0.7, h * 0.55, 30, h); x.quadraticCurveTo(30 + w * 0.7, h * 0.55, 30 + w, 4); x.quadraticCurveTo(30, h * 0.22, 30 - w, 4); x.fill(); };
     drop(19, 80, '#e4573d'); drop(13, 62, '#ff9a2e'); drop(7, 40, '#2fa8a0');
     flameCvCache = cv; return cv;
+  }
+  // Estrella de impulso por código (canvas generado, como las rocas
+  // y las llamas: NADA de archivos externos a WebGL — la lección del
+  // bug del contador 4). Estrella dorada de 5 puntas con resplandor.
+  let boostStarCache = null;
+  function boostStarCv() {
+    if (boostStarCache) return boostStarCache;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 72;
+    const x = cv.getContext('2d');
+    const g = x.createRadialGradient(36, 36, 4, 36, 36, 34);
+    g.addColorStop(0, 'rgba(255,210,63,.55)'); g.addColorStop(1, 'rgba(255,210,63,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 72, 72);
+    x.beginPath();
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 11 : 24, px = 36 + Math.cos(a) * r, py = 36 + Math.sin(a) * r; if (i === 0) x.moveTo(px, py); else x.lineTo(px, py); }
+    x.closePath();
+    x.fillStyle = '#ffd23f'; x.fill(); x.lineWidth = 3; x.strokeStyle = '#fff3c4'; x.stroke();
+    x.fillStyle = 'rgba(255,255,255,.85)'; x.beginPath(); x.arc(31, 30, 4.5, 0, 6.3); x.fill();
+    boostStarCache = cv; return cv;
   }
   // Rocas por código: asteroide con cráteres y las 3 formas de fiesta
   // (pastel, globo, regalo) en roca gris, como guiño de Mass Meteor.
@@ -2976,6 +3014,7 @@
       this.crashT = 0; this.rcrashT = 0; this.crashesP = 0; this.crashesB = 0;
       this.doubtT = 0; this.sug = null; this.sugCd = 2.5;
       this.meteors = []; this.nextMet = 520; this.finished = false;
+      this.boosts = []; this.nextBoost = rnd(BOOST_EVERY_MIN, BOOST_EVERY_MAX); this.boostT = 0;
       this.cat.x = RING_LANES[2] + ROCKET_CAT_DX; this.cat.y = -40; this.cat.elev = 30;
     }
     press(dir) {
@@ -2990,10 +3029,29 @@
     spawnMeteor(at) {
       const dbl = Math.random() < 0.45;
       const lanes = dbl ? (Math.random() < 0.5 ? [0, 1] : [1, 2]) : [(Math.random() * 3) | 0];
-      this.meteors.push({ prog: at, lanes, hitP: false, hitB: false, rDodge: false, rot: rnd(0, 6.3), seed: (Math.random() * 3) | 0 });
+      this.meteors.push({ prog: at, lanes, hitP: false, hitB: false, rDodge: false, rot: rnd(0, 6.3), seed: (Math.random() * 3) | 0, mv: rnd(METEOR_V_MIN, METEOR_V_MAX) });
+    }
+    // Velocidad actual de una roca: su mv de nacimiento más la rampa
+    // de carrera (+0,35 u/s por segundo), con tope de 65 u/s.
+    meteorSpeed(m) { return Math.min(METEOR_V_CAP, m.mv + METEOR_V_RAMP * this.elapsed); }
+    spawnBoost(at, lane) {
+      // La estrella nunca nace pegada a un meteorito (≥140 u en
+      // prog): recogerla no puede ser un castigo. Si el punto cae
+      // junto a una roca se corre hacia adelante una vez; si sigue
+      // pegada, esta estrella simplemente no nace.
+      if (at > RING_LEN - 150) return;
+      const clear = (p) => this.meteors.every((m) => Math.abs(m.prog - p) >= BOOST_SEP);
+      if (!clear(at)) { at += 160; if (!clear(at) || at > RING_LEN - 150) return; }
+      this.boosts.push({ prog: at, lane: lane == null ? (Math.random() * 3) | 0 : lane, done: false });
+    }
+    startBoost() {
+      // IMPULSO: solo del jugador (el rival no recoge estrellas).
+      this.boostT = BOOST_DUR; G.sfx('ok');
+      this.say('¡IMPULSO!', '#ffd23f', 1.0);
     }
     crashP() {
       this.crashT = 2.3; this.crashesP++; this.v *= 0.45;
+      this.boostT = 0; // chocar CORTA el impulso: nada de invulnerabilidad
       W.puff(this.laneX, -4, 7, true); G.sfx('bad');
       this.say('¡Choque! El cohete se frena…', '#ff6b7a', 1.1);
       this.cat.hop(170); // Pollito se ríe del choque ajeno (salta en su ventanilla)
@@ -3019,14 +3077,24 @@
       if (G.input.hit('left')) this.press(-1); else if (G.input.hit('right')) this.press(1);
       if (this.doubtT > 0) this.doubtT -= dt;
       // El cohete acelera solo; chocar FRENA unos segundos, no elimina.
-      const cT = this.crashT > 0 ? this.cruise * 0.34 : this.cruise;
-      this.v += (cT - this.v) * Math.min(1, dt * (this.crashT > 0 ? 3.2 : 0.55));
+      // Con IMPULSO activo el objetivo es 1,5× cruise y la subida es
+      // rápida (tasa 3,4): es justo la herramienta para recuperar lo
+      // perdido en un choque — ver startBoost.
+      if (this.boostT > 0) this.boostT -= dt;
+      const boostOn = this.boostT > 0;
+      const cT = boostOn ? this.cruise * BOOST_MULT : this.crashT > 0 ? this.cruise * 0.34 : this.cruise;
+      this.v += (cT - this.v) * Math.min(1, dt * (boostOn ? 3.4 : this.crashT > 0 ? 3.2 : 0.55));
       if (this.crashT > 0) this.crashT -= dt;
       const rcT = this.rcrashT > 0 ? this.rcruise * 0.34 : this.rcruise;
       this.rv += (rcT - this.rv) * Math.min(1, dt * (this.rcrashT > 0 ? 3.2 : 0.55));
       if (this.rcrashT > 0) this.rcrashT -= dt;
       const prevP = this.prog, prevB = this.rprog;
       this.prog += this.v * dt; this.rprog += this.rv * dt;
+      // LOS METEORITOS SE MUEVEN (playtest de Jose): cada roca guarda
+      // su distancia relativa a ambos cohetes ANTES de volar hacia
+      // ellos este frame; el chequeo de choques de abajo detecta el
+      // cruce por el cambio de signo de esa distancia.
+      for (const m of this.meteors) { m.relP = m.prog - prevP; m.relB = m.prog - prevB; m.prog -= this.meteorSpeed(m) * dt; }
       // Carril real del jugador: con la duda puesta, el cambio tarda más.
       const tx = RING_LANES[this.lane], stL = (this.doubtT > 0 ? 120 : 300) * dt;
       this.laneX += Math.max(-stL, Math.min(stL, tx - this.laneX));
@@ -3043,19 +3111,32 @@
       while (this.nextMet < lead + 1500) { this.spawnMeteor(this.nextMet); this.nextMet += rnd(330, 500) * Math.max(0.72, 1 - this.elapsed / 300); }
       // El copiloto sugiere el carril seguro del próximo meteorito.
       if (this.sugCd > 0) this.sugCd -= dt;
-      if (this.sug) { this.sug.t -= dt; if (this.sug.t <= 0 || this.sug.mProg < this.prog - 40) this.sug = null; }
+      if (this.sug) { this.sug.t -= dt; if (this.sug.m) this.sug.mProg = this.sug.m.prog; if (this.sug.t <= 0 || this.sug.mProg < this.prog - 40) this.sug = null; }
       if (!this.sug && this.sugCd <= 0) {
         const m = this.meteors.find((mm) => mm.prog > this.prog + 120 && mm.prog < this.prog + 1000);
-        if (m) { const safe = [0, 1, 2].filter((l) => !m.lanes.includes(l)); const sl = safe.includes(this.lane) ? this.lane : safe[(Math.random() * safe.length) | 0]; this.sug = { lane: sl, t: 2.4, mProg: m.prog }; this.sugCd = 5.5; }
+        if (m) { const safe = [0, 1, 2].filter((l) => !m.lanes.includes(l)); const sl = safe.includes(this.lane) ? this.lane : safe[(Math.random() * safe.length) | 0]; this.sug = { lane: sl, t: 2.4, mProg: m.prog, m }; this.sugCd = 5.5; }
       }
-      // Choques al cruzar la línea de cada meteorito: el umbral es
-      // RING_HIT_W, derivado de los anchos reales de los sprites
-      // (núcleos al 70%), no un número mágico — ver la constante.
+      // Choques: roca y cohete se cruzan cuando la distancia relativa
+      // cambia de signo en este frame (la roca ya voló hacia el
+      // cohete). hitP/hitB garantizan UN solo choque por roca y
+      // cohete, igual que antes. El umbral lateral es RING_HIT_W,
+      // derivado de los anchos reales de los sprites (núcleos al
+      // 70%), no un número mágico — ver la constante.
       for (const m of this.meteors) {
-        if (!m.hitP && prevP < m.prog && this.prog >= m.prog) { m.hitP = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.laneX) < RING_HIT_W)) this.crashP(); }
-        if (!m.hitB && prevB < m.prog && this.rprog >= m.prog) { m.hitB = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.rlaneX) < RING_HIT_W)) this.crashB(); }
-        m.rot += dt * 0.7;
+        if (!m.hitP && m.relP > 0 && m.prog - this.prog <= 0) { m.hitP = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.laneX) < RING_HIT_W)) this.crashP(); }
+        if (!m.hitB && m.relB > 0 && m.prog - this.rprog <= 0) { m.hitB = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.rlaneX) < RING_HIT_W)) this.crashB(); }
+        m.rot += dt * (0.7 + this.meteorSpeed(m) * 0.015); // gira más rápido cuanto más rápido vuela
       }
+      // Estrellas de impulso: nacen por delante del líder cada
+      // 650–900 u de avance y se limpian al quedar atrás del jugador.
+      while (this.nextBoost < lead + 1200) { this.spawnBoost(this.nextBoost); this.nextBoost += rnd(BOOST_EVERY_MIN, BOOST_EVERY_MAX); }
+      // Recogida: SOLO el jugador, al cruzar la prog de la estrella
+      // en su carril (la misma huella del choque, pero a favor). El
+      // rival puede cruzarla y no pasa nada: no es su herramienta.
+      for (const b of this.boosts) {
+        if (!b.done && prevP < b.prog && this.prog >= b.prog) { b.done = true; if (Math.abs(RING_LANES[b.lane] - this.laneX) < RING_HIT_W) this.startBoost(); }
+      }
+      this.boosts = this.boosts.filter((b) => !b.done && b.prog > this.prog - 200);
       this.meteors = this.meteors.filter((m) => m.prog > Math.min(this.prog, this.rprog) - 260);
       // Pollito acompaña al cohete rival, asomado en su ventanilla.
       const rz = Math.max(-330, Math.min(150, -(this.rprog - this.prog)));
@@ -3113,9 +3194,18 @@
             if (mz < -1250 || mz > 90) continue;
             for (const l of m.lanes) {
               const mx = RING_LANES[l];
-              if (mz > -430) R.flat(R.glowTex, mx, 0.9, mz, METEOR_W * 0.6, { tint: [1, 0.35, 0.25], alpha: 0.35 + Math.sin(t * 10) * 0.15 }); // sombra de aviso en el carril
+              if (mz > -METEOR_WARN_Z) R.flat(R.glowTex, mx, 0.9, mz, METEOR_W * 0.6, { tint: [1, 0.35, 0.25], alpha: 0.35 + Math.sin(t * 10) * 0.15 }); // sombra de aviso en el carril (antes por el cierre más rápido)
               R.sprite(rockCv('rock', m.seed), mx, 16, mz, { w: METEOR_W, h: METEOR_W, roll: m.rot, lit: 0.5 });
             }
+          }
+          // Estrellas de impulso en la pista: resplandor dorado en el
+          // suelo y la estrella flotando con un leve balanceo.
+          for (const b of this.boosts) {
+            const bz = -(b.prog - this.prog);
+            if (bz < -1250 || bz > 90) continue;
+            const bx = RING_LANES[b.lane];
+            R.flat(R.glowTex, bx, 0.9, bz, BOOST_W * 0.75, { tint: [1, 0.85, 0.3], alpha: 0.4 + Math.sin(t * 6) * 0.12 });
+            R.sprite(boostStarCv(), bx, 15 + Math.sin(t * 3 + b.prog) * 2, bz, { w: BOOST_W, h: BOOST_W, nostretch: true, lit: 0 });
           }
           const gz = -(RING_LEN - this.prog);
           if (gz > -1100) R.sprite(ringGoalCv('luz'), 0, 6, gz, { w: 240, h: 240, nostretch: true, lit: 0 });
@@ -3129,7 +3219,8 @@
           // Llamas derivadas del tamaño del cohete: ancho = ½·ROCKET_W
           // y largo ≈ 0,8·ROCKET_H, pegadas a la tobera (base + 2).
           const fl = 0.75 + Math.sin(t * 31) * 0.18 + this.v / Math.max(40, this.cruise) * 0.35, fh = ROCKET_H * 0.8 * fl;
-          R.sprite(flameCv(), this.laneX, 12 + bob + 2 - fh, -6, { w: ROCKET_W * 0.5, h: fh, nostretch: true, lit: 0 });
+          const fhP = this.boostT > 0 ? fh * 1.5 : fh; // con IMPULSO, la llama del jugador crece (más larga y más ancha)
+          R.sprite(flameCv(), this.laneX, 12 + bob + 2 - fhP, -6, { w: ROCKET_W * 0.5 * (this.boostT > 0 ? 1.25 : 1), h: fhP, nostretch: true, lit: 0 });
           R.sprite(flameCv(), this.rlaneX, 10 + rbob + 2 - fh * 0.85, rz, { w: ROCKET_W * 0.5, h: fh * 0.85, nostretch: true, lit: 0 });
         },
         over: (c, t) => {
@@ -3140,6 +3231,12 @@
           c.fillStyle = '#2fa8a0'; c.beginPath(); c.roundRect(192, 58, 256 * Math.min(1, this.prog / RING_LEN), 6, 3); c.fill();
           c.fillStyle = '#b48cf0'; c.beginPath(); c.arc(192 + 256 * Math.min(1, this.rprog / RING_LEN), 61, 4.5, 0, 6.3); c.fill();
           c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(192 + 256 * Math.min(1, this.prog / RING_LEN), 61, 4.5, 0, 6.3); c.fill();
+          if (this.boostT > 0) { // IMPULSO activo: etiqueta y cuenta atrás dorada bajo la barra de meta
+            const bf = Math.max(0, this.boostT / BOOST_DUR);
+            G.text(c, 'IMPULSO', 320, 79, { size: 9, color: '#ffd23f', lw: 4 });
+            c.fillStyle = 'rgba(28,24,38,.8)'; c.beginPath(); c.roundRect(270, 85, 100, 5, 2.5); c.fill();
+            c.fillStyle = '#ffd23f'; c.beginPath(); c.roundRect(271, 86, 98 * bf, 3, 1.5); c.fill();
+          }
           if (this.st === 'play' && this.sug && this.sug.t > 0) {
             const pr = R.project(this.laneX, 118, -6);
             if (pr.ok) { if (this.sug.lane === this.lane) G.text(c, `${G.CHARS[this.copilotId].name}: ¡ese carril!`, pr.x, pr.y, { size: 10, color: '#7dff8a' }); else G.prompt(c, this.sug.lane < this.lane ? '←' : '→', pr.x + (this.sug.lane < this.lane ? -34 : 34), pr.y); }
@@ -3158,6 +3255,8 @@
   RingRaceDuel.HIT_W = RING_HIT_W;
   RingRaceDuel.ROCKET_FILES = ROCKET_FILES;
   RingRaceDuel.TRACK = { seg: RING_SEG, bandW: TRACK_BAND_W, distEvery: TRACK_DIST_EVERY, beacons: true, altTones: true };
+  RingRaceDuel.METEOR_V = { min: METEOR_V_MIN, max: METEOR_V_MAX, ramp: METEOR_V_RAMP, cap: METEOR_V_CAP, warnZ: METEOR_WARN_Z };
+  RingRaceDuel.BOOST = { w: BOOST_W, dur: BOOST_DUR, mult: BOOST_MULT, sep: BOOST_SEP, everyMin: BOOST_EVERY_MIN, everyMax: BOOST_EVERY_MAX };
 
   // ---------- 1B. CINTURÓN DE ASTEROIDES (Mass Meteor) ----------
   // VENTAJA CRUZADA: BELT_ADV = cuánto más cerca del aro empiezas si
