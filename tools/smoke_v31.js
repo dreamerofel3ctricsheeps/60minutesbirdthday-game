@@ -1428,9 +1428,20 @@ const tick = () => new Promise((r) => setImmediate(r));
     for (let i = 0; i < 20; i++) dMv.update(0.05); // 1 s de carrera
     check('J1407b meteoritos móviles: su prog baja POR SÍ SOLO (velocidad propia, no espera al jugador)',
       mMov.prog < mp0 - 20, `de ${mp0} a ${mMov.prog.toFixed(1)}`);
-    dMv.elapsed = 200;
-    check('J1407b meteoritos móviles: la rampa acelera con el tiempo de carrera y topa en 65 u/s',
-      dMv.meteorSpeed(mMov) === 65, 'v=' + dMv.meteorSpeed(mMov));
+    // La rampa es por PROGRESO hacia la meta (pedido de Jose, 3ª
+    // ronda): el mismo meteorito vuela ~1,95× más rápido junto al aro
+    // que en la salida, y el techo absoluto es 85 u/s.
+    const vSalida = dMv.meteorSpeed(mMov);
+    dMv.prog = 6200; dMv.rprog = 0; // el líder llega al aro: factor 1,95
+    const vMeta = dMv.meteorSpeed(mMov);
+    check('J1407b meteoritos móviles: la rampa es por PROGRESO — junto a la meta vuela ~el doble que en la salida',
+      Math.abs(vMeta / mMov.mv - (1 + Sc.RingRaceDuel.METEOR_V.prog)) < 0.01 && vMeta > vSalida * 1.8,
+      `salida=${vSalida.toFixed(1)} meta=${vMeta.toFixed(1)} mv=${mMov.mv.toFixed(1)}`);
+    check('J1407b meteoritos móviles: techo absoluto de 85 u/s junto a la meta',
+      dMv.meteorSpeed({ mv: 50 }) === 85 && Sc.RingRaceDuel.METEOR_V.cap === 85, 'v=' + dMv.meteorSpeed({ mv: 50 }));
+    check('J1407b aviso: METEOR_WARN_Z da ≥ ~3 s incluso al cierre máximo junto a la meta (≈199 u/s)',
+      Sc.RingRaceDuel.METEOR_V.warnZ / 199 >= 3, 'warnZ=' + Sc.RingRaceDuel.METEOR_V.warnZ);
+    dMv.prog = 0; dMv.rprog = 0;
     // (b) el choque con un meteorito en movimiento se detecta UNA sola vez
     const dHit = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
     dHit.meteors.push({ prog: dHit.prog + 40, lanes: [1], hitP: false, hitB: false, rDodge: false, rot: 0, seed: 0, mv: 30 });
@@ -1481,6 +1492,22 @@ const tick = () => new Promise((r) => setImmediate(r));
     dSep.spawnBoost(1000, 1); // pedida EXACTAMENTE sobre la roca
     check('J1407b impulso: la estrella nunca nace pegada a un meteorito (≥140 u en prog)',
       dSep.boosts.every((b) => Math.abs(b.prog - 1000) >= Sc.RingRaceDuel.BOOST.sep), JSON.stringify(dSep.boosts.map((b) => b.prog)));
+    // --- Tercera ronda del playtest de Jose (2026-11-21): Pollito
+    // fuera de la pista de 1A y anchos OPACOS medidos como la única
+    // verdad del tamaño/hitbox (la rampa por progreso va arriba) ---
+    const dSinCat = new Sc.RingRaceDuel('natalia', () => {});
+    const ringSrc = scenesTxt2.slice(scenesTxt2.indexOf('class RingRaceDuel'), scenesTxt2.indexOf('class AsteroidBeltDuel'));
+    check('J1407b sin Pollito en pista: la instancia de 1A no tiene Actor Pollito y la clase ni lo crea ni lo renderiza',
+      dSinCat.cat === undefined && !ringSrc.includes('this.cat') && !ringSrc.includes("new Actor('pollito'"),
+      'cat=' + dSinCat.cat);
+    check('J1407b 1B intacto: Pollito SÍ flota libre en el Cinturón (su Actor sigue en 1B)',
+      !!dB0.cat && dB0.cat.id === 'pollito', 'cat=' + (dB0.cat && dB0.cat.id));
+    const OPQ = Sc.RingRaceDuel.OPAQUE;
+    check('J1407b anchos opacos: los PNG traseros miden fracción 1,00 (sin relleno: ROCKET_W ya es el ancho opaco)',
+      OPQ.rocketFracW['cohete-party-back'] === 1 && OPQ.rocketFracW['cohete-rival-back'] === 1, JSON.stringify(OPQ.rocketFracW));
+    check('J1407b anchos opacos: la roca compensa su relleno — dibujada a meteorDrawW(seed), su silueta opaca mide METEOR_W = 50',
+      OPQ.rockFracW.every((f, s) => f > 0.6 && f < 0.85 && Math.abs(OPQ.meteorDrawW[s] * f - Sc.RingRaceDuel.METEOR_W) < 0.01),
+      'frac=' + OPQ.rockFracW.map((f) => f.toFixed(3)).join(',') + ' drawW=' + OPQ.meteorDrawW.map((w) => w.toFixed(1)).join(','));
   }
 
   // ================= M) Final LEYENDAS (LEYENDAS_MOVIE_ENDING) =============
