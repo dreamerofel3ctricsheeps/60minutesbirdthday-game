@@ -34,6 +34,8 @@ jobs:
           mkdir -p /tmp/ghpages/dev
           rsync -a --delete --exclude .git application/src/ /tmp/ghpages/dev/
           rm -rf /tmp/ghpages/dev/tests
+          sed -i -E 's#((href|src)="(css|js)/[^"]+)#\1?v='"${SHA}"'#g' /tmp/ghpages/dev/index.html
+          echo "index.html de /dev sellado: las referencias a CSS/JS llevan ?v=${SHA} (cada despliegue, URLs únicas y frescas)"
           cd /tmp/ghpages
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
