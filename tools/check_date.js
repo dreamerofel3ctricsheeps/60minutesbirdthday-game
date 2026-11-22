@@ -119,6 +119,19 @@
      cambia de personaje y las bolas ni nacen ni frenan; al
      terminar, el rearme exige separarse (>140 px) o esperar
      (~4 s). Funciona controlando a Ximena o a Jose.
+   Q) El sonido de la Puerta (pedido de Jose: «no ese sonido
+     de pixel»): los cruces de Puerta de la cita suenan con
+     una grabación REAL de una puerta cerrándose
+     (door-close.ogg: «Closing an old door» de ezwa,
+     pdsounds.org #661, DOMINIO PÚBLICO, versionada y
+     registrada en FUENTES.md), una sola vez por cruce y
+     cuando la Puerta se cierra tras la pareja — al abrir la
+     puerta del depa no suena nada; el cierre suena al llegar
+     a la plaza —. El blip sintetizado del juego principal ya
+     no suena en ningún cruce de la cita (y el juego principal
+     lo conserva intacto). El SFX usa un elemento <audio>
+     propio que no toca la canción ni el reloj, y respeta el
+     silencio de la cita (D.muted).
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -1596,6 +1609,84 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let hugDrawOk2 = true;
   for (const p of [0, 1200, 3260]) { sa3.pan = p; try { sa3.draw(0.016); } catch (e) { hugDrawOk2 = false; } }
   check('draw() de San Ángel tras los abrazos no explota en ningún punto del paseo (pan 0/1200/3260)', hugDrawOk2);
+  DM.stop();
+
+  console.log('\nQ) El sonido de la Puerta: grabación real al cruzar (nada de blip de pixel)');
+  // El asset: grabación de DOMINIO PÚBLICO (ezwa, pdsounds.org
+  // #661) recortada al golpe del cierre. Versionable: el
+  // .gitignore de assets/audio/ solo tapa la canción
+  // (*.m4a/*.mp3), no este .ogg.
+  const doorOgg = path.join(SRC, '..', 'assets', 'audio', 'door-close.ogg');
+  let doorIgnorado = null;
+  try { require('child_process').execSync('git check-ignore -q application/src/assets/audio/door-close.ogg', { cwd: path.join(__dirname, '..') }); doorIgnorado = true; }
+  catch (e) { doorIgnorado = false; } // exit 1 de check-ignore = NO ignorado (lo buscado)
+  check('door-close.ogg existe junto al audio de la cita, pesa decenas de KB y el .gitignore NO lo tapa (no es la canción: sí se versiona)',
+    fs.existsSync(doorOgg) && fs.statSync(doorOgg).size > 2000 && fs.statSync(doorOgg).size < 40000 && doorIgnorado === false,
+    fs.existsSync(doorOgg) ? `size=${fs.statSync(doorOgg).size}, ignorado=${doorIgnorado}` : 'no existe');
+  let doorDur = null;
+  try { doorDur = parseFloat(require('child_process').execSync('ffprobe -v error -show_entries format=duration -of csv=p=0 application/src/assets/audio/door-close.ogg', { cwd: path.join(__dirname, '..'), encoding: 'utf8' })); } catch (e) { doorDur = null; }
+  check('la grabación recortada dura ~0,5–1,2 s (solo el golpe del cierre, sin silencios largos; si ffprobe no está, se salta la medida)',
+    doorDur === null || (doorDur >= 0.4 && doorDur <= 1.3), 'dur=' + doorDur);
+  check('FUENTES.md registra la grabación con autor, fuente y licencia (ezwa, pdsounds.org, DOMINIO PÚBLICO)',
+    fuentes.includes('door-close.ogg') && fuentes.includes('ezwa') && fuentes.includes('pdsounds.org') && fuentes.includes('DOMINIO PÚBLICO'));
+  check('date.js ya NO pide el blip de puerta en ningún cruce de la cita, y el juego principal conserva el suyo intacto',
+    !/G\.sfx\('door'\)/.test(dateSrc) && gameSrc.includes("door: [[120, 0.1], [90, 0.12]]"));
+  // El disparo: se envuelve el sfx del juego para delatar
+  // cualquier blip, y se cuenta play() sobre el elemento
+  // propio de la Puerta (el FakeEl no trae play: se le pone
+  // un contador, como la sección K simula el de la canción).
+  const sfxLogQ = [];
+  const origSfxQ = G.sfx;
+  G.sfx = (n) => { sfxLogQ.push(n); };
+  DM.start(() => {});
+  const doorEl = DM.debug.getDoorSfx();
+  check('el modo crea un elemento de audio PROPIO para la Puerta (distinto del de la canción), apuntando a door-close.ogg',
+    !!doorEl && doorEl !== DM.debug.getSong() && String(doorEl.src || '').includes('door-close.ogg'),
+    'src=' + (doorEl && doorEl.src));
+  let doorPlays = 0;
+  doorEl.play = () => { doorPlays++; };
+  const scQ = G.scene, xiQ = scQ.xi;
+  // Cruce depa → plaza: al ABRIR no suena nada; el cierre
+  // suena UNA vez, al llegar (la puerta se cierra tras ella).
+  xiQ.x = 510; xiQ.y = 560; xiQ.vx = xiQ.vy = 0;
+  scQ.update(0.016);
+  key('Space', true); scQ.update(0.016); key('Space', false);
+  for (let i = 0; i < 10; i++) scQ.update(0.05);
+  check('abrir la puerta del depa y cruzar la luz NO dispara el sonido (suena el cierre, no la apertura)',
+    scQ.phase === 'door' && doorPlays === 0, 'plays=' + doorPlays + ', phase=' + scQ.phase);
+  for (let i = 0; i < 15; i++) scQ.update(0.05);
+  check('al llegar a la plaza, la Puerta se cierra tras Ximena: el sonido suena EXACTAMENTE una vez',
+    scQ.phase === 'plaza' && doorPlays === 1, 'plays=' + doorPlays + ', phase=' + scQ.phase);
+  check('en todo el cruce NO sonó el blip de puerta del juego principal',
+    !sfxLogQ.includes('door'), 'sfx=' + sfxLogQ.join(','));
+  check('el cruce no altera la canción ni el reloj (arrancaron al activarse la plaza y siguen corriendo)',
+    DM.state.clockStarted === true && DM.state.clockRunning === true && DM.dateNow() >= 0);
+  for (let i = 0; i < 100 && DM.state.state !== 'plaza-arrived'; i++) scQ.update(0.05);
+  // Cruce plaza → San Ángel: UNA vez más, al iniciar el
+  // fundido de salida; la llegada no lo repite.
+  const FQ = scQ.free, XQ = FQ.chars.ximena, JQ = FQ.chars.jose;
+  if (FQ.active !== 'ximena') scQ.switchActive();
+  XQ.x = scQ.exitDoorX - 10; XQ.y = scQ.groundY; JQ.x = XQ.x - 70; JQ.y = scQ.groundY;
+  scQ.update(0.05);
+  key('Space', true); scQ.update(0.016); key('Space', false);
+  check('cruzar la Puerta de salida a San Ángel dispara el sonido UNA vez más (una por cruce, al iniciar el fundido)',
+    scQ.phase === 'exitdoor' && doorPlays === 2, 'plays=' + doorPlays + ', phase=' + scQ.phase);
+  for (let i = 0; i < 25 && G.scene === scQ; i++) scQ.update(0.05);
+  const angQ = G.scene;
+  for (let i = 0; i < 25 && angQ.phase !== 'free'; i++) angQ.update(0.05);
+  check('la llegada a San Ángel NO repite el sonido (un disparo por cruce, no por llegada)',
+    doorPlays === 2 && angQ.id === 'sanangel' && !sfxLogQ.includes('door'), 'plays=' + doorPlays);
+  // Con la cita silenciada, la Puerta tampoco suena.
+  DM.debug.toggleMute();
+  const AFQ = angQ.free, AQ = AFQ.chars[AFQ.active], BQ = AFQ.chars[AFQ.active === 'ximena' ? 'jose' : 'ximena'];
+  AQ.x = angQ.entryDoorX + 10; AQ.y = angQ.groundY; BQ.x = AQ.x + 70; BQ.y = angQ.groundY;
+  angQ.update(0.05);
+  key('Space', true); angQ.update(0.016); key('Space', false);
+  for (let i = 0; i < 25 && G.scene === angQ; i++) angQ.update(0.05);
+  check('con la cita SILENCIADA (D.muted), cruzar de vuelta a la plaza no dispara ningún sonido',
+    DM.state.muted === true && doorPlays === 2 && G.scene === scQ, 'plays=' + doorPlays + ', muted=' + DM.state.muted);
+  DM.debug.toggleMute();
+  G.sfx = origSfxQ;
   DM.stop();
 
   DM.debug.setHash(realHash); // el hash real queda como estaba

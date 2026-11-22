@@ -238,6 +238,49 @@
     });
   }
 
+  // ---------- SFX de la Puerta: grabación real (dominio público) ----------
+  // Al cruzar las Puertas de la cita suena una puerta REAL
+  // cerrándose, no el blip sintetizado del sistema de sonido
+  // del juego principal (dos tonos de sierra a 120/90 Hz: el
+  // «sonido de pixel» que Jose pidió quitar de la cita, 2026-
+  // 11-21). La sustitución es SOLO de DateMode: el juego
+  // principal conserva su blip intacto, y dentro de la cita
+  // ningún cruce vuelve a pedirlo.
+  // La grabación: «Closing an old door» de ezwa (pdsounds.org
+  // #661, DOMINIO PÚBLICO), recortada al golpe del cierre
+  // (0,60 s) y normalizada; assets/audio/door-close.ogg, con
+  // su registro en assets/date/FUENTES.md. Es versionable (no
+  // es la canción): el .gitignore de la carpeta solo tapa los
+  // *.m4a/*.mp3 de la canción.
+  // Elemento <audio> PROPIO, independiente de la canción: ni
+  // la pausa, ni la reinicia, ni toca el reloj. Respeta el
+  // silencio de la cita (D.muted: con el modo silenciado, la
+  // Puerta tampoco suena). Se dispara UNA vez por cruce, en el
+  // momento en que la Puerta se cierra tras la pareja: en las
+  // escenas de franja y en el depa final, al iniciar el fundido
+  // de salida (beginExit); en la salida del depa de apertura,
+  // al llegar a la plaza (la puerta se cierra detrás de Ximena
+  // tras la luz). Al ABRIR la puerta del depa no suena nada:
+  // es una apertura, no un cierre.
+  let doorSfx = null;
+  function createDoorSfx() {
+    if (doorSfx) return doorSfx;
+    try {
+      doorSfx = document.createElement('audio');
+      doorSfx.preload = 'auto';
+      doorSfx.src = 'assets/audio/door-close.ogg';
+      doorSfx.volume = 0.9;
+    } catch (e) { doorSfx = null; }
+    return doorSfx;
+  }
+  function playDoorClose() {
+    if (D.muted) return; // el silencio de la cita manda también sobre la Puerta
+    const elx = createDoorSfx();
+    if (!elx || typeof elx.play !== 'function') return;
+    try { elx.currentTime = 0; } catch (e) { /* aún sin metadata: play() parte del inicio igual */ }
+    try { const p = elx.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* sin audio: el cruce sigue en silencio */ }
+  }
+
   // ---------- Botón de silencio (#dateMuteBtn) ----------
   // Botón DOM (no canvas) en la esquina superior derecha de la
   // pantalla de las escenas de caminata, creado por el propio
@@ -839,7 +882,8 @@
     openDoor() {
       if (this.phase !== 'depa') return;
       this.phase = 'door'; this.phaseT = 0; D.state = 'door';
-      G.sfx('door');
+      // Sin sonido al ABRIR: el cierre real de la puerta suena
+      // una sola vez por cruce, al llegar a la plaza.
       this.xi.route = null; this.xi.vx = this.xi.vy = 0; this.xi.moving = false;
     }
     update(dt) {
@@ -869,7 +913,7 @@
         this.phaseT += dt;
         if (this.phaseT >= 1) {
           this.phase = 'plaza'; this.phaseT = 0; D.state = 'plaza';
-          G.sfx('door'); // la misma puerta se cierra detrás de ella, ya en la plaza
+          playDoorClose(); // la misma puerta se cierra detrás de ella, ya en la plaza (grabación real)
         }
         return;
       }
@@ -920,7 +964,7 @@
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; D.tap = false;
-      G.sfx('door');
+      playDoorClose(); // la Puerta se cierra tras la pareja (grabación real)
     }
     // Vuelta desde San Ángel: se reaparece en modo libre junto
     // a la Puerta de salida, como se dejó la plaza.
@@ -1292,7 +1336,7 @@
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
-      G.sfx('door');
+      playDoorClose(); // la Puerta se cierra tras la pareja (grabación real)
     }
     update(dt) {
       this.t += dt;
@@ -1826,7 +1870,7 @@
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
-      G.sfx('door');
+      playDoorClose(); // la Puerta se cierra tras la pareja (grabación real)
     }
     update(dt) {
       this.t += dt;
@@ -2256,7 +2300,7 @@
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
-      G.sfx('door');
+      playDoorClose(); // la Puerta se cierra tras la pareja (grabación real)
     }
     update(dt) {
       this.t += dt;
@@ -2916,7 +2960,7 @@
     beginExit() {
       if (this.phase !== 'home') return;
       this.phase = 'exitlight'; this.phaseT = 0; D.tap = false;
-      G.sfx('door');
+      playDoorClose(); // la Puerta se cierra tras la pareja (grabación real)
     }
     update(dt) {
       this.t += dt;
@@ -3294,6 +3338,7 @@
   // ---------- API del modo ----------
   function start(onDone) {
     createSong();
+    createDoorSfx(); // la Puerta queda precargada: el primer cruce no espera al archivo
     ensureMuteBtn(); // el botón de silencio vive con el modo (visible solo con body.date-mode)
     D.active = true; D.state = 'depa'; D.arrived = false; D.joseJoined = false; D.clockRunning = false;
     D.clockStarted = false; // re-entrar a la cita re-arma el arranque: volverá a ocurrir al llegar a la plaza
@@ -3307,6 +3352,7 @@
     D.active = false; D.state = 'idle'; D.clockRunning = false; D.clockStarted = false; fbRunning = false;
     skipArmed = false; // sin arranque en curso: el metadata tardío ya no debe saltar nada
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
+    if (doorSfx && typeof doorSfx.pause === 'function') { try { doorSfx.pause(); } catch (e) {} }
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('date-mode');
     W.closet.target = 0; W.xDoorOpen = false;
     D.scene = null; D.plazaScene = null; D.angelScene = null; D.aeroScene = null; D.praderaScene = null; D.finaleScene = null;
@@ -3324,6 +3370,10 @@
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.
-      AUDIO_SKIP, getSong: () => song, onSongMetadata, startClock, toggleMute },
+      AUDIO_SKIP, getSong: () => song, onSongMetadata, startClock, toggleMute,
+      // Gancho del SFX de la Puerta (sección Q): el elemento
+      // propio de la grabación y su disparo, para contar
+      // cuántas veces suena por cruce en el harness.
+      getDoorSfx: () => doorSfx, playDoorClose },
   };
 })();

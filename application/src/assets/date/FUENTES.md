@@ -254,3 +254,30 @@
   corazoncitos dibujados por código. Si el archivo no
   cargara, la escena usa el respaldo de los dos sprites
   individuales frente a frente.
+
+## door-close.ogg — La puerta real que se cierra al cruzar las Puertas (audio, en assets/audio/)
+- **Grabación original:** «Closing an old door» (5,5 s) — una
+  puerta vieja que se cierra, grabada en 2008.
+- **Autor:** ezwa
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Closing_an_old_door.ogg
+  (original de pdsounds.org, registro #661: http://www.pdsounds.org/sounds/closing_an_old_door)
+- **Licencia:** DOMINIO PÚBLICO — el autor la liberó al
+  dominio público vía pdsounds.org (plantilla
+  {{PD-pdsounds.org}} de Commons: usable para cualquier fin,
+  sin condiciones). Por eso SÍ se versiona, como los recortes
+  CC: no es la canción.
+- **Descargada:** 2026-11-21 (el .ogg de Commons, 82 KB).
+- **Procesado:** la grabación es casi silencio con el golpe
+  del cierre al final: recorte al golpe (3,78–4,38 s del
+  original → 0,60 s), normalización de pico a −2,1 dB,
+  fundidos de 5 ms (entrada) y 120 ms (salida) contra clics,
+  mono 44,1 kHz Vorbis q4. Salida: 0,60 s, ~9,5 KB.
+- **Uso:** suena UNA vez por cruce de Puerta dentro de la
+  cita, cuando la Puerta se cierra tras la pareja (en las
+  escenas de franja y el depa final, al iniciar el fundido de
+  salida; en la salida del depa de apertura, al llegar a la
+  plaza). Reemplaza en DateMode al blip sintetizado del juego
+  principal (dos tonos de sierra), que Jose describió como
+  «sonido de pixel»; el juego principal no se tocó. Respeta
+  el silencio de la cita (botón/M) y usa un elemento <audio>
+  propio que no toca la canción ni el reloj.
