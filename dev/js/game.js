@@ -19,6 +19,9 @@
     // los no reclutados huyeron y no vuelven a aparecer en la run.
     partners: [], party: [], fled: [],
   });
+  // Foto profunda del estado recién nacido: el autoguardado la usa
+  // para restaurar S sobre una base limpia (ver applySave).
+  const S_INIT = JSON.parse(JSON.stringify(S));
   function recalc() {
     S.quality = clamp(Object.keys(S.inv).reduce((n, id) => n + (G.ITEMS[id] ? G.ITEMS[id].q : 0), 0) + S.qBonus, 0, 100);
     S.sus = clamp(Math.round(S.sus), 0, 100); S.noise = clamp(Math.round(S.noise), 0, 100); S.sleep = clamp(S.sleep, 0, 5);
@@ -444,6 +447,162 @@
   const phoneClose = phoneEl ? phoneEl.querySelector('#phoneclose') : null;
   if (phoneClose) phoneClose.onclick = () => { if (phone.visible) { phone.toggle(); syncDecisionPill(); } };
   msgs.addEventListener('click', () => (ui.fast = true));
+
+  // ---------- Autoguardado local: continuar tras un refresco ----------
+  // (Pedido de Jose, 2026-11-22: «¿qué pasa si de casualidad actualizo
+  // o refresco la pantalla? ¿Pierdo todo mi avance?») Sin base de
+  // datos ni servidor: el juego es un sitio estático y la partida
+  // vive en UNA ranura de localStorage del propio navegador — la
+  // misma familia que '1mtp.settings' y '1mtp.minigames' —,
+  // compartida entre '/' y '/dev/' como ya hacen los ajustes
+  // (mismo origen). El botón de «Borrar caché y datos» de Ajustes
+  // hace localStorage.clear(), así que también borra esta partida
+  // guardada: comportamiento coherente, sin trato especial.
+  // La partida SOLO se guarda en ESTADOS DE REPOSO (puntos de
+  // control), nunca a mitad de un duelo ni de una cadena: la
+  // reanudación aterriza siempre en uno de ellos, jamás resucita
+  // un frame a mitad de minijuego.
+  //   · 'collect' — protagonista recién elegido: al continuar se
+  //     reinicia el minuto de recolección con el mismo protagonista.
+  //   · 'arrival' — recolección cerrada (party, huyentes e
+  //     inventario guardado ya fijados; en la mano, res.inHand):
+  //     se repite la llegada de Ximena desde su inicio.
+  //   · 'night'   — inicio de un beat de la noche (storyIdx): la
+  //     «hora» de la gestión es cada evento de G.STORY, y el punto
+  //     de control abre cada iteración del bucle de actNight,
+  //     ANTES de los reactivos y del evento — así que un solo
+  //     enganche cubre «al entrar en gestión», «al inicio de cada
+  //     hora» y «al volver a la casa tras resolverse un duelo o
+  //     evento», que son el mismo instante del flujo.
+  //   · 'climax'  — la noche ya se resolvió (con ruina o sin
+  //     ella): quedan solo el enrutado de finales y la revelación.
+  // Decisiones pendientes al guardar: en un punto de control NUNCA
+  // hay una viva (las decisiones viven DENTRO de los eventos, y el
+  // bloque .decision ya se desmontó y dejó su eco en el historial),
+  // así que el chat guardado jamás contiene un bloque inerte.
+  // Al llegar a CUALQUIER final, showEnding BORRA el guardado: la
+  // partida terminó. Y si desde la pausa se lanza un duelo de
+  // práctica, la partida en curso se abandona (enterPractice) y su
+  // guardado se borra con ella; practicar desde el título no toca
+  // el guardado de una partida que ni siquiera se cargó.
+  const SAVE_KEY = '1mtp.save';
+  const SAVE_V = 1;
+  let lastSaveJSON = null; // último punto de control ya serializado (red de seguridad de pagehide)
+  function clearSave() {
+    lastSaveJSON = null;
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* sin almacenamiento: nada que borrar */ }
+  }
+  // El historial del chat viaja como el HTML de #msgs, pero los
+  // avatares son data URIs (Sp.portrait / G.specialURL) que se
+  // repiten en casi cada mensaje: se sustituyen por marcas con
+  // diccionario, para que el guardado pese kilobytes y no megabytes.
+  function packChat(html) {
+    const dict = [], seen = new Map();
+    const out = String(html || '').replace(/data:[a-z]+\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi, (m) => {
+      let i = seen.get(m);
+      if (i === undefined) { i = dict.length; dict.push(m); seen.set(m, i); }
+      return '\u0001' + i + '\u0002';
+    });
+    return { html: out, dict };
+  }
+  function unpackChat(html, dict) {
+    return String(html || '').replace(/\u0001(\d+)\u0002/g, (m, i) => (dict && dict[+i]) || '');
+  }
+  function saveCheckpoint(at, extra) {
+    try {
+      const packed = packChat(msgs.innerHTML);
+      const sv = { v: SAVE_V, at, state: JSON.parse(JSON.stringify(S)), chat: packed.html, dict: packed.dict };
+      if (extra) Object.assign(sv, extra);
+      lastSaveJSON = JSON.stringify(sv);
+      try { localStorage.setItem(SAVE_KEY, lastSaveJSON); } catch (e) { /* cuota llena o modo privado: se sigue jugando sin guardar */ }
+    } catch (e) { /* un fallo de guardado JAMÁS rompe el juego */ }
+  }
+  function readSave() {
+    let sv = null, raw = null;
+    try { raw = localStorage.getItem(SAVE_KEY); sv = raw ? JSON.parse(raw) : null; } catch (e) { sv = null; }
+    const ok = !!sv && sv.v === SAVE_V && !!sv.state && typeof sv.state === 'object'
+      && typeof sv.state.player === 'string' && !!G.CHARS[sv.state.player]
+      && (sv.at === 'collect' || sv.at === 'arrival' || sv.at === 'night' || sv.at === 'climax')
+      && (sv.at !== 'night' || (Number.isInteger(sv.storyIdx) && sv.storyIdx >= 0 && sv.storyIdx <= G.STORY.length))
+      && (sv.at !== 'arrival' || Array.isArray(sv.inHand));
+    if (!ok) { // corrupto, de otra versión o informe: se ignora y se borra; el arranque sigue normal
+      if (raw) clearSave();
+      return null;
+    }
+    return sv;
+  }
+  // Aplica un guardado ya validado: el estado vuelve a S (el MISMO
+  // objeto — G.S y las escenas lo referencian —, primero reiniciado
+  // a su forma inicial) y el chat se reconstruye tal como estaba.
+  // No crea escenas ni mueve el flujo: de eso se encarga tryResume
+  // según sv.at.
+  function applySave(sv) {
+    Object.assign(S, JSON.parse(JSON.stringify(S_INIT)), JSON.parse(JSON.stringify(sv.state)));
+    unmountDecision(); // en un punto de control no hay decisión viva; por si acaso, un bloque restaurado sería inerte
+    phone.reset();
+    msgs.innerHTML = unpackChat(sv.chat, sv.dict);
+    ui.refreshInv(); recalc();
+  }
+  // La casa en su estado de reposo de gestión — el que deja
+  // actArrival al terminar —: solo la party, Ximena dormida, luz
+  // de noche y deambulación. HomeScene sin ids ya nace con la
+  // party de S (recién restaurada) y con Ximena oculta.
+  function buildRestHome() {
+    const home = (G.home = new Sc.HomeScene());
+    home.xState = 'sleeping'; home.wander = true;
+    home.setLight('noche'); home.setView('todo');
+    G.setScene(home);
+    S.phase = 'act2';
+    if (G.Music) G.Music.play('gestion'); // el cue que deja sonando la llegada
+    return home;
+  }
+  // Reanuda la partida guardada y la juega hasta cerrar la noche;
+  // devuelve { ruina } para que main siga por el cierre de siempre,
+  // o null si no hay guardado válido o la reconstrucción falló
+  // (main cae entonces a partida nueva, sin romper el arranque).
+  async function tryResume() {
+    const sv = readSave();
+    if (!sv) return null;
+    try {
+      applySave(sv);
+      if (sv.at === 'collect') {
+        const res = await actCollect();
+        S.partners = res.partners || [];
+        S.party = [S.player, ...S.partners];
+        S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
+        saveCheckpoint('arrival', { inHand: res.inHand });
+        await actArrival(res);
+        return { ruina: await actNight(0) };
+      }
+      if (sv.at === 'arrival') {
+        await actArrival({ inHand: sv.inHand || [] });
+        return { ruina: await actNight(0) };
+      }
+      buildRestHome();
+      if (sv.at === 'climax') return { ruina: !!sv.ruina };
+      return { ruina: await actNight(sv.storyIdx || 0, true) };
+    } catch (e) {
+      return null;
+    }
+  }
+  // La línea de contexto del botón «Continuar partida» del título:
+  // quién y en qué punto de la partida quedó el guardado.
+  function saveContext(sv) {
+    const name = (G.CHARS[sv.state.player] || {}).name || 'La party';
+    if (sv.at === 'collect') return `${name} · por empezar el minuto de recolección`;
+    if (sv.at === 'arrival') return `${name} · Ximena está por llegar`;
+    if (sv.at === 'climax') return `${name} · la noche terminó: falta la revelación`;
+    const ev = G.EVENTS[G.STORY[sv.storyIdx || 0]];
+    return `${name} · en plena noche: sigue «${ev ? ev.title : '—'}»`;
+  }
+  // Red de seguridad: al ocultarse o cerrarse la pestaña se
+  // re-persiste el último punto de control (por si su escritura
+  // original falló o el navegador móvil descartó la pestaña).
+  function repersistSave() { if (lastSaveJSON) { try { localStorage.setItem(SAVE_KEY, lastSaveJSON); } catch (e) { /* sin almacenamiento */ } } }
+  if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('pagehide', repersistSave);
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') repersistSave(); });
+  }
 
   // ---------- Modo inmersivo: el cromo flota y se retira ----------
   // Opción A de Jose (2026-11-22): aun adelgazados, el HUD y el
@@ -1034,6 +1193,12 @@
     }, 620);
   }
   function enterPractice() {
+    // Autoguardado: si había una partida de historia EN CURSO en
+    // memoria, entrar a la práctica la abandona — y una partida
+    // abandonada no se puede continuar: su guardado se borra aquí.
+    // Desde el título (fase 'title' o ya en 'practice') no hay
+    // partida cargada: el guardado queda intacto.
+    if (S.phase === 'collect' || S.phase === 'arrival' || S.phase === 'act2' || S.phase === 'reveal') clearSave();
     if (!G.practiceMode) { G.practiceMode = true; G.dropTimers(); unmountDecision(); phone.reset(); }
     G.paused = false; document.body.classList.remove('paused');
     pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
@@ -1238,18 +1403,44 @@
   function titleScreen() {
     return new Promise((res) => {
       const show = () => {
+        // Autoguardado: con una partida guardada válida, el título
+        // ofrece CONTINUAR (con su línea de contexto) y la partida
+        // nueva pasa a llamarse NUEVA PARTIDA; sin guardado, el
+        // título es el de siempre (JUGAR). readSave valida y limpia
+        // lo corrupto: aquí solo llega lo continuable.
+        const sv = readSave();
         overlay.innerHTML = `<div class="modal"><div class="logo"><img class="logoico" src="assets/icons/pastel.png" alt=""><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
           <p>Siete roomies. Una fiesta sorpresa. Y Ximena, que vuelve de 36 horas de guardia, está por llegar.</p>
           <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa, vence en duelo a <b>Pollito</b> y a <b>José</b> y, sobre todo, <b>no la despiertes</b>.</p>
-          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt${G.minigamesUnlocked() ? '' : ' locked'}" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button><button class="big alt" id="tsettings"><span class="pic pic-gear"><i></i></span>AJUSTES</button><button class="big alt" id="tsecret">???</button></div></div>`;
+          <div class="pbtns">${sv ? `<button class="big" id="tcontinue"><span class="pic pic-play"></span>CONTINUAR PARTIDA</button><button class="big alt" id="tplay">NUEVA PARTIDA</button>` : `<button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button>`}<button class="big alt${G.minigamesUnlocked() ? '' : ' locked'}" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button><button class="big alt" id="tsettings"><span class="pic pic-gear"><i></i></span>AJUSTES</button><button class="big alt" id="tsecret">???</button></div>${sv ? `<p class="dim" id="tsaveinfo">Partida guardada: ${saveContext(sv)}. Si refrescaste sin querer, «Continuar» te deja donde estabas; «Nueva partida» la borra.</p>` : ''}</div>`;
         overlay.classList.add('show');
-        $('#tplay').onclick = () => {
+        const startNew = () => {
           overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok');
           // si estuvo practicando desde el título, se resetea el modo antes
           // de que arranque la partida de verdad
           if (G.practiceMode) { G.practiceMode = false; G.dropTimers(); S.phase = 'title'; }
-          res();
+          res('new');
         };
+        if (sv) {
+          $('#tcontinue').onclick = () => {
+            overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok');
+            if (G.practiceMode) { G.practiceMode = false; G.dropTimers(); S.phase = 'title'; }
+            res('continue');
+          };
+          let newArmed = false;
+          $('#tplay').onclick = () => {
+            // «Nueva partida» SOBRESCRIBE el guardado: confirmación
+            // en dos pasos dentro del propio botón (el patrón del
+            // botón de borrar caché de Ajustes, sin confirm()
+            // nativo). El primer toque solo arma; el segundo borra
+            // el guardado y arranca.
+            if (!newArmed) { newArmed = true; const b = $('#tplay'); b.textContent = '¿Seguro? Toca de nuevo: la guardada se borra'; b.classList.add('armed'); return; }
+            clearSave();
+            startNew();
+          };
+        } else {
+          $('#tplay').onclick = startNew;
+        }
         $('#tmg').onclick = async () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('pick'); await showMinigames('title'); show(); };
         $('#tsettings').onclick = async () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('pick'); await settingsScreen(); show(); };
         $('#tsecret').onclick = () => { overlay.classList.remove('show'); overlay.innerHTML = ''; showDateCode(() => show()); };
@@ -1700,11 +1891,21 @@
   }
   G.spaceBeats = spaceBeats; // expuesta para la prueba de humo
 
-  async function actNight() {
-    ui.raw('<div class="group">🎂 OPERACIÓN: NO LA DESPIERTEN</div>');
-    const n = Object.keys(S.inv).length;
-    await ui.postAll([{ who: 'majo', text: `Inventario: ${n} de ${Object.keys(G.ITEMS).length} cosas. ${n >= 9 ? 'Mejor de lo que esperaba.' : n >= 5 ? 'Vamos a tener que improvisar.' : 'Esto va a ser un desastre hermoso.'}` }]);
-    for (const id of G.STORY) {
+  // La noche, beat a beat (cada evento de G.STORY es una «hora»).
+  // fromIdx/resumed solo los usa la reanudación del autoguardado:
+  // el bucle arranca en el beat guardado y el prólogo no se repite
+  // (sus mensajes ya están en el historial restaurado).
+  async function actNight(fromIdx, resumed) {
+    if (!resumed) {
+      ui.raw('<div class="group">🎂 OPERACIÓN: NO LA DESPIERTEN</div>');
+      const n = Object.keys(S.inv).length;
+      await ui.postAll([{ who: 'majo', text: `Inventario: ${n} de ${Object.keys(G.ITEMS).length} cosas. ${n >= 9 ? 'Mejor de lo que esperaba.' : n >= 5 ? 'Vamos a tener que improvisar.' : 'Esto va a ser un desastre hermoso.'}` }]);
+    }
+    for (let k = fromIdx || 0; k < G.STORY.length; k++) {
+      const id = G.STORY[k];
+      // PUNTO DE CONTROL del autoguardado: el inicio de esta «hora»
+      // es un estado de reposo (ver el módulo de autoguardado).
+      saveCheckpoint('night', { storyIdx: k });
       if (await reactive()) return true;
       const ev = G.EVENTS[id];
       if (ev.when && !ev.when(S)) continue;
@@ -1760,6 +1961,7 @@
     // guard deja constancia de que ni la práctica ni la cita
     // (fase 'date') pueden abrir el candado por esta vía.
     if (!G.practiceMode && S.phase !== 'date') G.unlockMinigames();
+    clearSave(); // la partida TERMINÓ — cualquier final, también la ruina —: su guardado se borra (autoguardado)
     // Remate musical: 'ruina' (único final de derrota, tone 'bad') →
     // Controller_Down completa; cualquier final NO ruina (sorpresa,
     // caos y los alternativos espacio/leyendas, que no traen cierre
@@ -1849,7 +2051,7 @@
     const bg = new Sc.HomeScene(); bg.wander = true; G.setScene(bg);
     requestAnimationFrame(frame);
     if (G.Music) G.Music.play('menu'); // tema del título: Gold_Plated_Strut 0:00–0:16 en loop (si el autoplay lo frena, arranca al primer gesto)
-    await titleScreen();
+    const choice = await titleScreen(); // 'new' | 'continue' (autoguardado)
     // modo práctica: index.html?duelo=decoracion | pollito | mensajes | apagon | pizza | sonambula | memoria | cactus | repisas | pisoton | azotea
     const pr = /[?&]duelo=(\w+)/.exec(location.search);
     // El atajo de práctica también respeta el candado de Minijuegos:
@@ -1860,7 +2062,17 @@
       G.home = new Sc.HomeScene(); G.home.xState = 'sleeping'; G.home.wander = true; G.setScene(G.home);
       for (;;) { S.tired = null; await runEvent(pr[1]); await G.wait(1); }
     }
+    // AUTOGUARDADO: si el título resolvió «Continuar» y el guardado
+    // se reconstruyó, la partida reanudada se juega hasta cerrar la
+    // noche y sigue por el mismo cierre que una partida nueva.
+    if (choice === 'continue') {
+      const r = await tryResume();
+      if (r) { saveCheckpoint('climax', { ruina: r.ruina }); await finishNight(r.ruina); return; }
+      // Sin guardado válido o con la reconstrucción fallida: se cae
+      // a partida nueva, sin romper el arranque.
+    }
     S.player = await selectChar();
+    saveCheckpoint('collect'); // punto de control: protagonista elegido, el minuto por empezar
     const res = await actCollect();
     // La party queda fijada al cerrar la recolección: protagonista +
     // partners entregados en el armario. Los demás roomies son los que
@@ -1868,8 +2080,16 @@
     S.partners = res.partners || [];
     S.party = [S.player, ...S.partners];
     S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
+    saveCheckpoint('arrival', { inHand: res.inHand }); // punto de control: recolección cerrada, la llegada por jugarse
     await actArrival(res);
-    const ruina = await actNight();
+    const ruina = await actNight(0);
+    saveCheckpoint('climax', { ruina }); // punto de control: la noche quedó resuelta
+    await finishNight(ruina);
+  }
+
+  // Cierre de la noche, compartido por la partida nueva y la
+  // reanudada: enrutado de finales alternativos, revelación y final.
+  async function finishNight(ruina) {
     // CLÍMAX DE FINALES ALTERNATIVOS: se evalúan AMBOS antes de la
     // revelación estándar (G.altFinalsRoute). Solo uno listo → corre
     // ese final. AMBOS listos → ELIGE EL JUGADOR (decisión de Jose,
