@@ -601,6 +601,22 @@ body.date-mode #dateMuteBtn { display: flex; }
      lateral derecho de main, con el alto completo disponible y
      sus mensajes con scroll interno, como siempre. */
   #phone { position: absolute; top: 6px; right: 6px; bottom: 6px; width: min(320px, 44%); max-height: none; z-index: 30; }
+  /* Con un MENÚ o la PAUSA abiertos, el chat flotante se retira
+     (corrección de Jose, 2026-11-22: «cuando le doy a pausa y el
+     chat queda abierto, este último queda por encima del menú;
+     no debería ocurrir eso»). Los modales viven DENTRO del
+     escenario (#overlay/#pauseov, hijos de #stage) y el teléfono
+     es hijo de main con z 30: sin esta regla el panel pintaba
+     POR ENCIMA del menú y le robaba los toques de su franja.
+     Es el mismo tratamiento que ya recibe la capa táctil (ver
+     las reglas con :has de #touchpad): ocultación PURAMENTE
+     CSS — la máquina del teléfono no se entera (visible, scroll
+     e insignia intactos) — así que al cerrar el menú el chat
+     reaparece exactamente como estaba: pausar NO es cerrar el
+     chat. En retrato y en escritorio el panel vive en flujo y
+     nunca solapa el escenario, así que la regla solo hace
+     falta aquí, donde el panel flota. */
+  main:has(#overlay.show) > #phone, main:has(#pauseov.show) > #phone { display: none; }
   /* ----- Modo inmersivo (Opción A): el cromo FLOTA sobre la escena -----
      #hud sale del flujo de #app y cuelga del borde superior de
      la pantalla (con los safe-area de siempre: en horizontal el
