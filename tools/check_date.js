@@ -295,11 +295,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   xi.x = 510; xi.y = 560; xi.vx = xi.vy = 0;
   sc.update(0.016);
   check('junto a la puerta principal se ofrece la interacción', sc.nearDoor === true);
+  // Arranque de la canción (decisión de Jose, 2026-11-21): en el
+  // depa NO suena nada; el reloj espera a la escena 1 (la plaza).
+  check('en el depa el reloj NO corre (silencio: la canción espera a la plaza)',
+    DM.state.clockRunning === false && DM.state.clockStarted === false && DM.dateNow() === 0);
   key('Space', true); sc.update(0.016); key('Space', false);
   check('ESPACIO abre la puerta (fase door)', sc.phase === 'door', 'phase=' + sc.phase);
-  for (let i = 0; i < 25; i++) sc.update(0.05);
+  for (let i = 0; i < 10; i++) sc.update(0.05); // media transición (~0,5 s de luz)
+  check('abrir la puerta y cruzar la luz NO arranca el reloj (la transición es en silencio)',
+    sc.phase === 'door' && DM.state.clockRunning === false && DM.dateNow() === 0, 'phase=' + sc.phase);
+  for (let i = 0; i < 15; i++) sc.update(0.05);
   check('tras la luz (~1 s) estamos en la plaza', sc.phase === 'plaza' && DM.state.state === 'plaza', 'phase=' + sc.phase);
   check('el reloj de la cita corre SIN archivo de audio (respaldo)', DM.state.clockRunning === true && DM.dateNow() > 0);
+  check('el arranque ocurrió AL ACTIVARSE la plaza (flag de sesión en true, una sola vez)',
+    DM.state.clockStarted === true);
+  check('el cero del reloj de respaldo es la llegada a la plaza, no el depa (recién arrancado: < 1 s)',
+    DM.dateNow() < 1, 'dateNow=' + DM.dateNow().toFixed(3));
   const tA = DM.dateNow();
   DM.setPaused(true); await sleep(70);
   const tB = DM.dateNow();
@@ -821,10 +832,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     /#dateMuteBtn\s*\{[^}]*display:\s*none/.test(cssSrc) && cssSrc.includes('body.date-mode #dateMuteBtn') && cssSrc.includes('#dateMuteBtn.muted'));
   check('el pictograma del botón es SVG (ondas/aspa), sin emojis en date.js',
     dateSrc.includes('id = \'dateMuteBtn\'') || dateSrc.includes("b.id = 'dateMuteBtn'"));
+  // (e) El arranque es UNA SOLA VEZ por sesión de la cita: los
+  // viajes por la cadena de Puertas no reinician el reloj ni
+  // re-aplican el salto (el tiempo de la cita es continuo).
+  songEl.currentTime = 60;
+  const tViaje0 = DM.dateNow();
+  DM.debug.travelTo('sanangel'); DM.debug.travelTo('aero'); DM.debug.travelTo('plaza');
+  check('los viajes plaza ⇄ San Ángel ⇄ aeropuerto NO reinician el reloj ni el arranque',
+    DM.dateNow() === tViaje0 && DM.state.clockStarted === true, 'dateNow=' + DM.dateNow());
   DM.stop();
   check('al salir del modo, el body pierde date-mode (el botón desaparece con él)', !documentFake.body.classList.contains('date-mode'));
   key('KeyM', true); key('KeyM', false);
   check('con el modo inactivo, la tecla M no hace nada', DM.state.muted === false);
+  // (f) Re-entrar a la cita tras salir al título: start()
+  // reinicia el flag de arranque y la canción vuelve a arrancar
+  // AL LLEGAR A LA PLAZA (ni en el depa ni durante la luz).
+  DM.start(() => {});
+  const sc2 = G.scene, xi2 = sc2 && sc2.xi;
+  check('al re-entrar, el modo vuelve al depa con el reloj detenido y el flag de arranque reiniciado',
+    !!xi2 && DM.state.state === 'depa' && DM.state.clockRunning === false && DM.state.clockStarted === false,
+    'state=' + DM.state.state);
+  xi2.x = 510; xi2.y = 560; xi2.vx = xi2.vy = 0;
+  sc2.update(0.016);
+  key('Space', true); sc2.update(0.016); key('Space', false);
+  for (let i = 0; i < 10; i++) sc2.update(0.05);
+  check('en el reingreso, la puerta y la luz siguen en silencio (el reloj no corre)',
+    sc2.phase === 'door' && DM.state.clockRunning === false, 'phase=' + sc2.phase);
+  for (let i = 0; i < 15; i++) sc2.update(0.05);
+  check('al llegar a la plaza del reingreso, la canción arranca de nuevo',
+    sc2.phase === 'plaza' && DM.state.clockRunning === true && DM.state.clockStarted === true, 'phase=' + sc2.phase);
+  DM.stop();
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);

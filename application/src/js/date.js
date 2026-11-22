@@ -109,6 +109,19 @@
     { id: 'cita', t0: 120, t1: 149, finaleAt: 137 },
   ];
   const sceneOf = (id) => DATE_SCENES.find((s) => s.id === id);
+  // Corrimiento del arranque (decisión de Jose, 2026-11-21): la
+  // tabla conserva la estructura de la CANCIÓN (apertura 0–12 =
+  // intro), pero la canción NO suena en el departamento: arranca
+  // desde su inicio recién al activarse la plaza, y el reloj de
+  // la cita (dateNow) parte de 0 en ese instante. Por eso, en
+  // tiempo de RELOJ, la ventana de cada escena posterior a la
+  // apertura es [t0−12, t1−12] (plaza 0–29, San Ángel 29–55,
+  // aeropuerto 55–79, castillo 79–108, cita 108–137) y sobran
+  // 12 s de outro al final de la cadena (el reloj sigue hasta
+  // 149 con la cita ya cerrada en 137) para la cinemática de
+  // cierre. Los suckAt y el finaleAt de la tabla están en
+  // tiempo de canción: al construir la secuencia (absorción,
+  // disparos) hay que restarles esos 12 s.
   const SUCK_DUR = 1.8, DOOR_CALL_T = 5, DOOR_OPEN_T = 2, JOSE_LAG = 0.15;
   const MAIN_DOOR = { x: 510, y: 566 }; // puerta principal: borde sur del pasillo
 
@@ -117,7 +130,10 @@
     active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|sanangel|aero|done
     scene: null, plazaScene: null, angelScene: null, aeroScene: null,
     arrived: false, joseJoined: false,
-    clockRunning: false, factor: 1, tap: false,
+    clockRunning: false, clockStarted: false, factor: 1, tap: false,
+    // clockStarted: la canción ya arrancó en ESTA sesión de la
+    // cita (al activarse la plaza); start() lo reinicia para que
+    // el arranque vuelva a ocurrir al re-entrar a la cita.
     muted: false, // preferencia de silencio del botón #dateMuteBtn (persiste entre escenas y reingresos de la sesión)
   };
 
@@ -730,18 +746,27 @@
       }
       if (this.phase === 'door') {
         // La puerta se abre y la LUZ se lo traga todo (~1 s): al
-        // otro lado ya no está el pasillo, está la plaza. El reloj
-        // de la cita arranca AQUÍ, con el primer acorde.
+        // otro lado ya no está el pasillo, está la plaza. La
+        // transición es en SILENCIO (decisión de Jose, 2026-11-21):
+        // la canción no arranca en el depa ni cruzando la puerta;
+        // arranca cuando la escena de la plaza se activa (la fase
+        // 'plaza', justo debajo), y desde su inicio.
         this.home.update(dt);
         this.phaseT += dt;
         if (this.phaseT >= 1) {
           this.phase = 'plaza'; this.phaseT = 0; D.state = 'plaza';
-          startClock();
           G.sfx('door'); // la misma puerta se cierra detrás de ella, ya en la plaza
         }
         return;
       }
       if (this.phase === 'plaza') {
+        // La escena de la plaza SE ACTIVA: aquí arranca la
+        // canción (desde su inicio, con el salto del silencio
+        // del archivo) y el reloj de la cita parte de 0. Una
+        // sola vez por sesión de la cita: D.clockStarted lo
+        // garantiza, y los viajes entre escenas nunca vuelven
+        // por esta fase (regresan directo a 'free').
+        if (!D.clockStarted) { D.clockStarted = true; startClock(); }
         this.phaseT += dt;
         const k = Math.min(1, this.phaseT / 4);
         // El paneo del revelado ES la cámara (this.pan, en px de
@@ -1590,6 +1615,7 @@
     createSong();
     ensureMuteBtn(); // el botón de silencio vive con el modo (visible solo con body.date-mode)
     D.active = true; D.state = 'depa'; D.arrived = false; D.joseJoined = false; D.clockRunning = false;
+    D.clockStarted = false; // re-entrar a la cita re-arma el arranque: volverá a ocurrir al llegar a la plaza
     if (G.S) G.S.phase = 'date';
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.add('date-mode');
     D.scene = new DateScene(onDone);
@@ -1597,7 +1623,7 @@
     G.setScene(D.scene);
   }
   function stop() {
-    D.active = false; D.state = 'idle'; D.clockRunning = false; fbRunning = false;
+    D.active = false; D.state = 'idle'; D.clockRunning = false; D.clockStarted = false; fbRunning = false;
     skipArmed = false; // sin arranque en curso: el metadata tardío ya no debe saltar nada
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('date-mode');
