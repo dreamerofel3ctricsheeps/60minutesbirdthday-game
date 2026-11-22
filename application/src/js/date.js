@@ -315,9 +315,11 @@
   // Más recortes de FOTO real con el mismo acabado que la Catedral
   // (tools/mkcutout.py: fondo fuera, borde blanco horneado y sombra
   // suave): un avión que cruza el cielo, un puesto de tacos de
-  // fondo, la Parroquia de la Purísima Concepción de Mineral del
-  // Chico como segundo hito y el vocho que maneja Pollito por la
-  // calle de primer plano. Fuentes y licencias: assets/date/FUENTES.md.
+  // fondo, los hitos de la capa lejana (la Parroquia de la
+  // Purísima Concepción de Mineral del Chico, el Palacio de
+  // Bellas Artes y el Ángel de la Independencia) y el vocho que
+  // maneja Pollito por la calle de primer plano. Fuentes y
+  // licencias: assets/date/FUENTES.md.
   // La VISTA de San Ángel es la excepción: arte de la película El
   // Libro de la Vida aportado por Jose, SOLO-LOCAL (en .gitignore,
   // como la canción); si el archivo no está, no se dibuja y ya.
@@ -330,33 +332,41 @@
   const vochoImg = loadDateImg('assets/date/vocho.png');
   const tacosImg = loadDateImg('assets/date/tacos.png');
   const parroquiaImg = loadDateImg('assets/date/parroquia.png');
+  const bellasArtesImg = loadDateImg('assets/date/bellasartes.png');
+  const angelImg = loadDateImg('assets/date/angel.png');
   const vistaImg = loadDateImg('assets/date/sanangel-vista.png');
 
   // Geometría y ciclos de los complementos. Las x de los elementos
   // fijos viven en el espacio de SU capa (pantalla con pan=0): la
   // franja mide 4350 px de mundo (29 s × PACE, la regla de la
   // tabla maestra) y la cámara recorre pan 0..3710.
-  // Reparto a lo largo del paseo (centros en pantalla, pan 0 →
-  // pan 3710; el «momento protagonista» de cada hito es el pan en
-  // que su centro cruza el centro de la pantalla): Catedral
-  // 268 → −660 (el recibimiento: protagonista al llegar, pan 0),
-  // tacos 1155 → −700 (centrado a pan 1670, ~45% del paseo),
-  // Parroquia 970 → 43 (centrada a pan 2600, ~70%) y la vista
-  // 1282 → 540, que con la cámara al fondo coincide con la
-  // Puerta de salida (mundo 4250 → pantalla 540): la Puerta se
-  // apoya justo delante de San Ángel. Ojo con la matemática de
-  // capas: un hito L1 (parallax 0,25) recorre 928 px de pantalla
-  // en todo el paseo, así que un hito ancho se deja ver durante
-  // un trecho largo del recorrido; las x elegidas mantienen
-  // ≥250 px de capa entre vecinas (Catedral→Parroquia 702,
-  // Parroquia→vista 312) y los momentos protagonistas quedan
-  // separados por ≥900 px de cámara.
+  // Reparto de los HITOS DE FONDO a lo largo del paseo (el
+  // «momento protagonista» de cada hito es el pan en que su
+  // centro cruza el centro de la pantalla; x de capa = 320 +
+  // pan × parallax): Catedral pan 0 (0%, el recibimiento),
+  // Palacio de Bellas Artes pan 840 (~23%), el Ángel de la
+  // Independencia pan 1848 (~50%), la Parroquia de Mineral del
+  // Chico pan 2848 (~77%) y la vista de San Ángel al fondo, pan
+  // 3710 (100%), que coincide con la Puerta de salida (mundo
+  // 4250 → pantalla 540): la Puerta se apoya justo delante de
+  // San Ángel. Los centros en L1 quedan separados por ≥250 px
+  // de capa (268 → 530 → 782 → 1032, y 1032 → 1282 de la vista)
+  // y los protagonistas por ≥840 px de cámara. Ojo: la Catedral
+  // (430 de ancho) y Bellas Artes (380) se solapan en la capa —
+  // en el skyline se leen como edificios vecinos de la misma
+  // manzana, con Bellas Artes dibujado delante. El puesto de
+  // tacos (L2, protagonista a pan 1560, ~42%) va en otra capa y
+  // otra altura visual que el Ángel (pan 1848): se corrió de
+  // 1155 a 1100 para que al cruzarse no se encimen de forma
+  // confusa (el puesto tapa apenas el arranque del pedestal).
   const PLAZA_FX = {
     avion: { w: 138, y: 54, ciclo: 28, cruce: 14, desfase: 7, par: 0.15 },
     vocho: { w: 246, base: 351, ciclo: 32, cruce: 7, desfase: 11 },
     catedralX: 268,                       // L1 (parallax 0,25), con el asta en 96
-    tacosX: 1155, tacosW: 128,            // L2 (parallax 0,5)
-    parroquiaX: 970, parroquiaW: 322,     // L1 (parallax 0,25)
+    bellasArtesX: 530, bellasArtesW: 380, // L1 (parallax 0,25)
+    angelX: 782, angelW: 92,              // L1 (parallax 0,25); 92 de ancho → ~322 de alto, como la Catedral
+    tacosX: 1100, tacosW: 128,            // L2 (parallax 0,5)
+    parroquiaX: 1032, parroquiaW: 322,    // L1 (parallax 0,25)
     vistaX: 1282, vistaW: 352,            // capa lejana (parallax 0,2)
     vistaWorldX: 4250,                    // su ancla en el mundo L4 (el final de la franja)
     vistaSquash: 0.86,                    // aplana un pelo la vista para que las torres quepan en la banda del cielo
@@ -914,15 +924,40 @@
         c.fillRect(catX - 165, catBase - 225, 52, 225); c.fillRect(catX + 113, catBase - 225, 52, 225);
         c.beginPath(); c.arc(catX - 139, catBase - 225, 26, 3.14, 0); c.arc(catX + 139, catBase - 225, 26, 3.14, 0); c.fill();
       }
+      // L1 · el Palacio de BELLAS ARTES (recorte de FOTO real):
+      // el palacio de mármol blanco con su cúpula anaranjada,
+      // segundo hito del paseo (~23%). Un poco más bajo que la
+      // Catedral y dibujado delante de ella: en la capa se
+      // solapan como edificios vecinos de la misma manzana. En
+      // la foto (y en el recorte) quedan las dos astas con águila
+      // de su explanada, delante de la fachada.
+      if (imgOk(bellasArtesImg)) {
+        const bw2 = PLAZA_FX.bellasArtesW, bx = PLAZA_FX.bellasArtesX - pan * 0.25;
+        const bh2 = bw2 * bellasArtesImg.naturalHeight / bellasArtesImg.naturalWidth;
+        c.drawImage(bellasArtesImg, bx - bw2 / 2, catBase - bh2, bw2, bh2);
+      }
       // L1 · la Parroquia de la Purísima Concepción de MINERAL
-      // DEL CHICO (recorte de FOTO real), segundo hito: vive en el
-      // lado derecho de la franja y se descubre al explorarla en
-      // el modo libre; un poco más pequeña que la Catedral (es
-      // una parroquia de pueblo junto a la metropolitana).
+      // DEL CHICO (recorte de FOTO real): vive en el lado derecho
+      // de la franja y se descubre tarde en el paseo (~77%); un
+      // poco más pequeña que la Catedral (es una parroquia de
+      // pueblo junto a la metropolitana).
       if (imgOk(parroquiaImg)) {
         const pw = PLAZA_FX.parroquiaW, px = PLAZA_FX.parroquiaX - pan * 0.25;
         const ph2 = pw * parroquiaImg.naturalHeight / parroquiaImg.naturalWidth;
         c.drawImage(parroquiaImg, px - pw / 2, catBase - ph2, pw, ph2);
+      }
+      // L1 · el ÁNGEL DE LA INDEPENDENCIA (recorte de FOTO
+      // real): la columna completa con su ángel dorado y el
+      // pedestal escalonado, hito de la mitad del paseo (~50%).
+      // Muy esbelto: con 92 px de ancho alcanza ~322 de alto,
+      // como la Catedral. Se dibuja DESPUÉS de la Parroquia a
+      // propósito: en la capa su pedestal (736–828) queda junto
+      // al arranque de la Parroquia (871) sin tocarla, y así el
+      // orden de dibujo no tapa a ningún vecino.
+      if (imgOk(angelImg)) {
+        const aw2 = PLAZA_FX.angelW, ax2 = PLAZA_FX.angelX - pan * 0.25;
+        const ah2 = aw2 * angelImg.naturalHeight / angelImg.naturalWidth;
+        c.drawImage(angelImg, ax2 - aw2 / 2, catBase - ah2, aw2, ah2);
       }
       // asta y bandera de México, DIBUJADA y ondeando por código
       const astaX = 96 - pan * 0.25, astaBase = horizon + 4;

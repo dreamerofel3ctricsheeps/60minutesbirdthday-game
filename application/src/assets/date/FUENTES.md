@@ -69,6 +69,42 @@
   conserva el kiosco de la plaza real frente a la iglesia.
   Salida: 932 × 693.
 
+## bellasartes.png — Palacio de Bellas Artes (Ciudad de México)
+- **Foto original:** «Bellas Artes 01.jpg» (4140 × 2760)
+- **Autor:** Xavier Quetzalcoatl Contreras Castillo
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Bellas_Artes_01.jpg
+- **Licencia:** CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)
+- **Descargada:** 2026-11-21 (versión de 1920 px)
+- **Procesado:** `tools/mkcutout.py` (rembg) con recorte
+  x 0,115–0,88 / y 0,08–0,86 (fuera los Pegasos de las esquinas
+  y el edificio vecino de la derecha), borde blanco horneado y
+  sombra suave. Vista frontal desde su explanada: en la foto —
+  y en el recorte — quedan las dos astas con águila y las
+  luminarias de la explanada, delante de la fachada.
+  Salida: 1200 × 797.
+
+## angel.png — El Ángel de la Independencia (Ciudad de México)
+- **Foto original:** «ANGEL DE LA INDEPENDENCIA FOTO1.jpg» (3456 × 5184)
+- **Autor:** Marcoantonio0074
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:ANGEL_DE_LA_INDEPENDENCIA_FOTO1.jpg
+- **Licencia:** CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+- **Descargada:** 2026-11-21 (versión de 1920 px)
+- **Procesado:** rembg (u2net e isnet) solo segmenta la columna
+  contra el cielo — el pedestal se pierde entero —, así que la
+  máscara final es la **unión del alfa de rembg con la silueta
+  poligonal del monumento completo trazada a mano** sobre la
+  foto (precedente: la máscara poligonal de `tacos.png`), con
+  limpieza cromática de los píxeles de cielo que solo el
+  polígono reclamaba y borrado manual de las intrusiones de los
+  edificios de atrás (la estatua parcial de la esquina
+  izquierda, las lamas del edificio tras la estatua derecha y
+  una esquirla de techo abajo). Acabado de `tools/mkcutout.py`:
+  erosión de 1 px, borde blanco horneado y sombra suave.
+  Salida: 642 × 2247. Nota: tras las estatuas de la esquina
+  izquierda del pedestal se asoma un fragmento de la torre de
+  vidrios de Reforma que se ve en la foto original; a la escala
+  del juego son unos pocos píxeles.
+
 ## sanangel-vista.png — Vista lejana de San Ángel (NO versionado)
 - Vista de San Ángel (El Libro de la Vida) — imagen aportada por
   Jose, uso personal, **asset solo-local no incluido en el

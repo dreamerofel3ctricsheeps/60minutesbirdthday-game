@@ -395,19 +395,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('y se queda en idle estable (0 transiciones en 1 s más)', J.animWalk === false && trans2 === 0, `transiciones=${trans2}`);
   sc.draw(0.016); // el modo libre se sigue dibujando sin explotar
 
-  console.log('\nI) Complementos de la plaza: avión, tacos, vocho de Pollito, Parroquia y vista de San Ángel');
+  console.log('\nI) Complementos de la plaza: avión, tacos, vocho de Pollito, hitos de fondo y vista de San Ángel');
   // Recortes de foto nuevos (mismo acabado que la Catedral) y la
   // vista lejana de San Ángel (asset SOLO-LOCAL: no se versiona).
   const FX = DM.debug.PLAZA_FX, DATE_DIR = path.join(SRC, '..', 'assets', 'date');
-  check('PLAZA_FX reúne los 5 complementos (avión, vocho, tacos, parroquia, vista)',
-    !!FX && !!FX.avion && !!FX.vocho && FX.tacosX > 0 && FX.parroquiaX > 0 && FX.vistaX > 0);
+  check('PLAZA_FX reúne los complementos (avión, vocho, tacos) y los 5 hitos de fondo (Catedral, Bellas Artes, Ángel, Parroquia, vista)',
+    !!FX && !!FX.avion && !!FX.vocho && FX.tacosX > 0 && FX.catedralX > 0 && FX.bellasArtesX > 0 && FX.angelX > 0 && FX.parroquiaX > 0 && FX.vistaX > 0);
   const fuentes = fs.readFileSync(path.join(DATE_DIR, 'FUENTES.md'), 'utf8');
-  for (const file of ['avion.png', 'vocho.png', 'tacos.png', 'parroquia.png']) {
+  for (const file of ['avion.png', 'vocho.png', 'tacos.png', 'parroquia.png', 'bellasartes.png', 'angel.png']) {
     check(`el asset ${file} existe en assets/date y FUENTES.md lo registra`,
       fs.existsSync(path.join(DATE_DIR, file)) && fuentes.includes(file));
   }
-  check('date.js referencia los 5 assets (los 4 recortes + la vista)',
-    ['avion.png', 'vocho.png', 'tacos.png', 'parroquia.png', 'sanangel-vista.png'].every((f) => dateSrc.includes(f)));
+  check('date.js referencia los 7 assets (los 6 recortes + la vista)',
+    ['avion.png', 'vocho.png', 'tacos.png', 'parroquia.png', 'bellasartes.png', 'angel.png', 'sanangel-vista.png'].every((f) => dateSrc.includes(f)));
+  // Los dos hitos nuevos son CC (como la Catedral y la
+  // Parroquia): van VERSIONADOS en el repo, con su autor y su
+  // licencia registrados en FUENTES.md.
+  const versionado = (file) => {
+    try {
+      const out = require('child_process').execSync(
+        'git ls-files application/src/assets/date/' + file,
+        { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+      return out.trim().length > 0;
+    } catch (e) { return false; }
+  };
+  check('bellasartes.png y angel.png están versionados (son CC) y FUENTES.md trae su autor y licencia',
+    versionado('bellasartes.png') && versionado('angel.png') &&
+    fuentes.includes('Xavier Quetzalcoatl Contreras Castillo') && fuentes.includes('CC BY-SA 3.0') &&
+    fuentes.includes('Marcoantonio0074') && fuentes.includes('CC BY-SA 4.0'));
   // El avión: monótono creciente dentro de su ventana de cruce y
   // fuera de escena (=-9999) el resto del ciclo (28 s: 14 cruzando).
   const ax = DM.debug.avionXAt;
@@ -439,17 +454,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const PAN_MAX = sc.worldW - 640;
   check('la franja de la plaza mide 4350 px de mundo (29 s × PACE; cámara 0..3710) y sale de la tabla DATE_SCENES',
     sc.worldW === 4350 && sc.worldW === DM.scenes.find((s) => s.id === 'plaza').w, 'worldW=' + sc.worldW);
-  check('tacos y parroquia tienen posición fija dentro de la franja (0..worldW)',
-    FX.tacosX > 0 && FX.tacosX < sc.worldW && FX.parroquiaX > 0 && FX.parroquiaX < sc.worldW,
-    `tacos=${FX.tacosX}, parroquia=${FX.parroquiaX}, worldW=${sc.worldW}`);
+  check('los elementos fijos (tacos, Bellas Artes, Ángel, Parroquia) tienen posición dentro de la franja (0..worldW)',
+    FX.tacosX > 0 && FX.tacosX < sc.worldW && FX.bellasArtesX > 0 && FX.bellasArtesX < sc.worldW &&
+    FX.angelX > 0 && FX.angelX < sc.worldW && FX.parroquiaX > 0 && FX.parroquiaX < sc.worldW,
+    `tacos=${FX.tacosX}, bellasArtes=${FX.bellasArtesX}, angel=${FX.angelX}, parroquia=${FX.parroquiaX}, worldW=${sc.worldW}`);
   // Descubribilidad: muestreando la cámara en todo su recorrido,
   // cada hito llega a verse casi entero DENTRO de su zona del
   // paseo (la fracción visible se calcula con su capa y ancho:
-  // Catedral 430 en L1, tacos/Parroquia/vista desde PLAZA_FX).
+  // Catedral 430 en L1, el resto desde PLAZA_FX). Los 5 hitos de
+  // fondo reparten el paseo: Catedral 0%, Bellas Artes ~25%,
+  // Ángel ~50%, Parroquia ~75% y la vista 100%.
   const hitos = [
     { n: 'Catedral', x: FX.catedralX, par: 0.25, w: 430, min: 0.75, zona: [0, 0.15] },
+    { n: 'Bellas Artes', x: FX.bellasArtesX, par: 0.25, w: FX.bellasArtesW, min: 0.75, zona: [0.17, 0.33] },
     { n: 'tacos', x: FX.tacosX, par: 0.5, w: FX.tacosW, min: 0.75, zona: [0.35, 0.55] },
-    { n: 'Parroquia', x: FX.parroquiaX, par: 0.25, w: FX.parroquiaW, min: 0.75, zona: [0.60, 0.80] },
+    { n: 'Ángel de la Independencia', x: FX.angelX, par: 0.25, w: FX.angelW, min: 0.75, zona: [0.42, 0.58] },
+    { n: 'Parroquia', x: FX.parroquiaX, par: 0.25, w: FX.parroquiaW, min: 0.75, zona: [0.67, 0.83] },
     { n: 'vista de San Ángel', x: FX.vistaX, par: 0.2, w: FX.vistaW, min: 0.70, zona: [0.90, 1.0] },
   ];
   const visFrac = (h, pan) => {
@@ -462,16 +482,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     check(`el hito ${h.n} se descubre en su zona del paseo (${(h.zona[0] * 100).toFixed(0)}–${(h.zona[1] * 100).toFixed(0)}% del recorrido, visibilidad ≥${(h.min * 100).toFixed(0)}%)`,
       best >= h.min, `vis máx en zona=${(best * 100).toFixed(0)}%`);
   }
-  // Separación: ≥250 px de capa entre vecinas comparables
-  // (Catedral→Parroquia→vista) y los momentos protagonistas (el
-  // pan en que cada centro cruza el centro de pantalla, acotado
-  // al recorrido) separados por ≥400 px de cámara.
+  // Separación y reparto: ≥250 px de capa entre vecinas de la
+  // cadena de fondo (Catedral→Bellas Artes→Ángel→Parroquia→
+  // vista) y los momentos protagonistas de esa cadena (el pan
+  // en que cada centro cruza el centro de pantalla, acotado al
+  // recorrido) separados por ≥400 px de cámara y en orden
+  // monótono a lo largo de todo el paseo.
   const protPan = (h) => Math.max(0, Math.min(PAN_MAX, (h.x - 320) / h.par));
-  check('los hitos quedan separados: ≥250 px de capa (Catedral→Parroquia→vista) y protagonistas a ≥400 px de cámara',
-    (FX.parroquiaX - FX.catedralX) >= 250 && (FX.vistaX - FX.parroquiaX) >= 250 &&
-    (protPan(hitos[1]) - protPan(hitos[0])) >= 400 && (protPan(hitos[2]) - protPan(hitos[1])) >= 400 &&
-    (protPan(hitos[3]) - protPan(hitos[2])) >= 400,
-    `capa: cat=${FX.catedralX}, parr=${FX.parroquiaX}, vista=${FX.vistaX}; prot: ${hitos.map((h) => protPan(h).toFixed(0)).join('/')}`);
+  const fondo = [hitos[0], hitos[1], hitos[3], hitos[4], hitos[5]];
+  check('los hitos de fondo quedan separados: ≥250 px de capa entre vecinas y protagonistas a ≥400 px de cámara, en orden monótono',
+    (FX.bellasArtesX - FX.catedralX) >= 250 && (FX.angelX - FX.bellasArtesX) >= 250 &&
+    (FX.parroquiaX - FX.angelX) >= 250 && (FX.vistaX - FX.parroquiaX) >= 250 &&
+    fondo.every((h, i) => i === 0 || protPan(h) - protPan(fondo[i - 1]) >= 400) &&
+    hitos.every((h, i) => i === 0 || protPan(h) > protPan(hitos[i - 1])),
+    `capa: cat=${FX.catedralX}, ba=${FX.bellasArtesX}, ang=${FX.angelX}, parr=${FX.parroquiaX}, vista=${FX.vistaX}; prot: ${hitos.map((h) => protPan(h).toFixed(0)).join('/')}`);
+  // El reparto pedido: cada hito de fondo es protagonista en su
+  // quinto del paseo (objetivos 0/25/50/75/100%, tolerancia
+  // ±8 puntos), y el puesto de tacos (L2) no se pega al Ángel
+  // (L1): sus protagonistas quedan a ≥250 px de cámara y viven
+  // en capas y alturas visuales distintas.
+  const objetivos = [0, 25, 50, 75, 100];
+  check('el reparto del paseo se cumple: protagonistas de fondo en 0/25/50/75/100% (±8) y tacos↔Ángel a ≥250 px de cámara',
+    fondo.every((h, i) => Math.abs(protPan(h) / PAN_MAX * 100 - objetivos[i]) <= 8) &&
+    (protPan(hitos[3]) - protPan(hitos[2])) >= 250,
+    `%: ${fondo.map((h) => (protPan(h) / PAN_MAX * 100).toFixed(1)).join('/')}; tacos→ángel=${(protPan(hitos[3]) - protPan(hitos[2])).toFixed(0)}`);
   // La vista de San Ángel: ancla de mundo en el tramo final
   // (4150–4350, donde va la Puerta de salida, ~100 px de margen
   // al borde) y, con la cámara al fondo, su centro cae tras esa
@@ -486,8 +520,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (let i = 0; i < 30; i++) sc.update(0.05);
   check('la cámara se asienta al fondo de la franja (pan > 3400, sin pasar de 3710)', sc.pan > 3400 && sc.pan <= 3710.01, `pan=${sc.pan.toFixed(0)}`);
   let plazaDrawOk = true;
-  for (const p of [0, 900, 1855, 2800, 3710]) { sc.pan = p; try { sc.draw(0.016); } catch (e) { plazaDrawOk = false; } }
-  check('draw() de la plaza no explota en ningún punto del paseo (pan 0/900/1855/2800/3710)', plazaDrawOk);
+  for (const p of [0, 840, 1848, 2848, 3710]) { sc.pan = p; try { sc.draw(0.016); } catch (e) { plazaDrawOk = false; } }
+  check('draw() de la plaza no explota en ningún punto del paseo (pan 0/840/1848/2848/3710, los protagonistas de los hitos)', plazaDrawOk);
   check('el dibujo de la vista está condicionado a que la imagen cargó (si falta el asset local, no se dibuja ni se rompe)',
     dateSrc.includes('imgOk(vistaImg)') && dateSrc.includes('sanangel-vista.png'));
   check('FUENTES.md registra la vista como asset solo-local aportado por Jose',
