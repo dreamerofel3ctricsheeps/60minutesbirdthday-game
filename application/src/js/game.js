@@ -332,7 +332,7 @@
   try { savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { savedSettings = {}; }
   G.settings = Object.assign({ touch: detectTouch(), musicVol: 100, sfxVol: 100, muted: false }, savedSettings);
   function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(G.settings)); } catch (e) { /* almacenamiento no disponible */ } }
-  function applySettings() { document.body.classList.toggle('touch-on', !!G.settings.touch); }
+  function applySettings() { document.body.classList.toggle('touch-on', !!G.settings.touch); if (G.touchLayoutRefresh) G.touchLayoutRefresh(); }
   applySettings();
 
   // ---------- Sonido: la fuente de verdad es G.settings ----------
@@ -490,6 +490,69 @@
     zone.addEventListener('pointerup', end);
     zone.addEventListener('pointercancel', end);
     zone.addEventListener('contextmenu', (e) => e.preventDefault());
+  })();
+
+  // ---------- Posición de la capa táctil: sobre la escena o en los márgenes ----------
+  // Pedido de Jose (2026-11-22): con la escena 16:9 centrada en un
+  // teléfono horizontal más ancho que 16:9 sobran dos franjas del
+  // fondo de la página, y los controles deben vivir AHÍ en vez de
+  // tapar las esquinas de la escena (el joystick caía sobre el
+  // minimapa). La capa (#touchpad) es hija de #stagewrap; este
+  // cálculo la calca sobre el rect REAL del escenario (así los
+  // porcentajes CSS de los controles siguen valiendo para el modo
+  // superpuesto de siempre) y después decide con la función pura
+  // G.input.touchLayout, por lado, si la franja libre alcanza para
+  // mudar cada control centrado en su franja — a la misma altura
+  // inferior de siempre, porque solo se toca el `left`. Si la
+  // franja no alcanza (escena casi a ancho completo, retrato,
+  // escritorio), el control se queda superpuesto como hoy. Sin
+  // capa táctil (body sin .touch-on) no se toca nada. Se recalcula
+  // al cambiar el tamaño del contenedor o del escenario
+  // (ResizeObserver: cubre resize, giro del teléfono, que el chat
+  // se abra/cierre y el modo cita) y al activar/desactivar la capa
+  // desde Ajustes (applySettings llama a G.touchLayoutRefresh).
+  (function initTouchLayout() {
+    const pad = $('#touchpad'), wrap = $('#stagewrap'), stage = $('#stage');
+    const joy = $('#joystick'), act = pad ? pad.querySelector('.taction') : null;
+    if (!pad || !wrap || !stage || !joy || !act) return;
+    const clear = (el) => { el.style.left = ''; el.style.right = ''; el.style.top = ''; el.style.bottom = ''; el.style.width = ''; el.style.height = ''; };
+    function layout() {
+      if (!document.body.classList.contains('touch-on')) { clear(pad); joy.style.left = ''; act.style.left = ''; act.style.right = ''; return; }
+      if (!wrap.getBoundingClientRect || !stage.getBoundingClientRect) return;
+      const wr = wrap.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+      if (!(wr.width > 0) || !(sr.width > 0)) return;
+      // La capa calca el escenario (coordenadas relativas a #stagewrap).
+      pad.style.left = (sr.left - wr.left) + 'px';
+      pad.style.top = (sr.top - wr.top) + 'px';
+      pad.style.width = sr.width + 'px';
+      pad.style.height = sr.height + 'px';
+      pad.style.right = 'auto';
+      pad.style.bottom = 'auto';
+      const lay = G.input.touchLayout({
+        fringeL: sr.left - wr.left,
+        fringeR: wr.right - sr.right,
+        stageW: sr.width,
+        joyW: joy.offsetWidth,
+        btnW: act.offsetWidth,
+      });
+      // Joystick: su CSS usa `left`, basta fijarlo o soltarlo.
+      joy.style.left = lay.joyLeft !== null ? lay.joyLeft + 'px' : '';
+      pad.classList.toggle('joy-margin', lay.joyLeft !== null);
+      // Botón de acción: su CSS usa `right`; en modo margen manda
+      // el `left` calculado y el `right` se apaga, y al volver al
+      // modo superpuesto se sueltan ambos y manda el CSS.
+      if (lay.actLeft !== null) { act.style.left = lay.actLeft + 'px'; act.style.right = 'auto'; }
+      else { act.style.left = ''; act.style.right = ''; }
+      pad.classList.toggle('act-margin', lay.actLeft !== null);
+    }
+    G.touchLayoutRefresh = layout;
+    layout();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => layout());
+      ro.observe(wrap); ro.observe(stage);
+    }
+    window.addEventListener('resize', layout);
+    window.addEventListener('orientationchange', layout);
   })();
   window.addEventListener('blur', () => G.input.touchReset());
   window.addEventListener('keydown', (e) => {

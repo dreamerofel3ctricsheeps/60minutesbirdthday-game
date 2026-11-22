@@ -56,7 +56,7 @@ main { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 12px; }
    puede desbordar. En el media query de retrato se desactiva
    (container-type: normal): ahí el alto del wrap depende del
    contenido y manda el ancho, como siempre en vertical. */
-#stagewrap { flex: 1; min-width: 0; min-height: 0; container-type: size; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+#stagewrap { position: relative; flex: 1; min-width: 0; min-height: 0; container-type: size; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 /* El escenario es SIEMPRE 16:9 exacto (aspect-ratio) y los canvas
    internos son 1280×720: la imagen nunca se estira ni se deforma
    en ninguna proporción de pantalla; lo que sobra a los lados o
@@ -152,12 +152,22 @@ button.big.locked { opacity: .55; filter: grayscale(.75); } /* candado de Miniju
 .optrow .volval { flex: none; width: 42px; text-align: right; font-size: 13px; color: var(--dim); }
 
 /* ---------- Controles táctiles ---------- */
+/* La capa es hija de #stagewrap (position:relative) y el cableado
+   de game.js la CALCA sobre el rect del escenario con left/top/
+   width/height en px: los porcentajes de los controles siguen
+   refiriéndose al escenario, como cuando vivía dentro de él, y en
+   el modo márgenes los controles pueden asomar FUERA de la capa
+   (sin overflow que los recorte) hacia las franjas del letterbox.
+   El inset:0 de aquí es solo el estado previo al primer cálculo. */
 #touchpad { display: none; position: absolute; inset: 0; z-index: 4; pointer-events: none; }
 body.touch-on #touchpad { display: block; }
 /* Mientras hay un modal sobre el escenario (título, ajustes, pausa, elegir
    personaje, VS, resultado…) los botones táctiles se ocultan: evitan
-   tapar el modal y no hace falta moverse ni actuar mientras se decide. */
-#overlay.show ~ #touchpad, #pauseov.show ~ #touchpad { display: none !important; }
+   tapar el modal y no hace falta moverse ni actuar mientras se decide.
+   La capa ya no es hermana de los overlays (vive fuera del escenario),
+   así que la regla mira DENTRO de #stage con :has() y apaga a su
+   hermana siguiente, que es donde quedó la capa. */
+#stage:has(> #overlay.show) ~ #touchpad, #stage:has(> #pauseov.show) ~ #touchpad { display: none !important; }
 /* Joystick circular analógico (reemplaza al D-pad de flechas):
    base circular semitransparente en la esquina inferior izquierda
    y perilla que sigue el dedo dentro del radio (la mueve game.js
