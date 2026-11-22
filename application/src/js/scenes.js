@@ -3864,11 +3864,11 @@
     }
   }
   const albCvCache = {};
-  function albCv(pose, glow, glowColor) {
-    const key = (pose || 'idle') + '|' + (glow == null ? -1 : glow) + '|' + (glowColor || '');
-    if (!albCvCache[key]) albCvCache[key] = codeCv(200, 220, (x) => drawAlbFigure(x, { pose, glow, glowColor, t: 1 }));
-    return albCvCache[key];
-  }
+  // albCv (la figura completa por código en escenas) se retiró el
+  // 2026-11-21: la cinemática del final pasó a los sprites reales
+  // (alebrije-director/feliz) y ningún duelo ni escena lo llama ya.
+  // drawAlbFigure queda SOLO como respaldo de la cara del HUD en
+  // albFaceCv, debajo del recorte del sprite real.
   function albFaceCv() {
     // Respaldo mientras la imagen real no cargó: la figura por código
     // con la cabeza centrada de verdad (el encuadre anterior,
@@ -3936,7 +3936,11 @@
     x.restore();
   }
   const teoCvCache = {};
-  function teoCv(pose) { const k = pose || 'idle'; if (!teoCvCache[k]) teoCvCache[k] = codeCv(170, 210, (x) => drawTeoFigure(x, { pose })); return teoCvCache[k]; }
+  // teoCv (la figura completa por código en escenas) se retiró el
+  // 2026-11-21: «La soga de fuego» era su último consumidor y pasó
+  // a los sprites de G.TEODORA_DATA. drawTeoFigure queda SOLO como
+  // respaldo de la cara del HUD en teoFaceCv, debajo del recorte
+  // del sprite real.
   function teoFaceCv() {
     // Respaldo por código mientras la imagen real no cargó (mismo
     // patrón que albFaceCv con el Alebrije).
@@ -3957,18 +3961,10 @@
     }
     return teoCvCache.face;
   }
-  // Calaverita utilera de la soga (extra simple dibujado por código;
-  // NO es uno de los Hermanos Calavera, que son otro final).
-  function calCv() {
-    if (!teoCvCache.cal) teoCvCache.cal = codeCv(90, 110, (x) => {
-      circ(x, 45, 32, 21, '#f4f1e8', '#2b2130'); ell(x, 37, 32, 5, 7, '#2b2130'); ell(x, 53, 32, 5, 7, '#2b2130');
-      x.fillStyle = '#2b2130'; x.beginPath(); x.moveTo(45, 40); x.lineTo(41, 47); x.lineTo(49, 47); x.closePath(); x.fill();
-      x.strokeStyle = '#2b2130'; x.lineWidth = 1.6; for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(36 + i * 5, 52); x.lineTo(36 + i * 5, 58); x.stroke(); }
-      x.fillStyle = '#e23b4e'; x.fillRect(30, 62, 30, 20); x.fillStyle = '#3a2c50'; x.fillRect(30, 82, 30, 10);
-      x.strokeStyle = '#f4f1e8'; x.lineWidth = 6; x.lineCap = 'round'; x.beginPath(); x.moveTo(30, 66); x.lineTo(14, 52); x.moveTo(60, 66); x.lineTo(76, 52); x.stroke();
-    });
-    return teoCvCache.cal;
-  }
+  // La calaverita utilera de la soga (calCv, dibujada por código)
+  // se retiró el 2026-11-21: ahora son dos sprites diseñados en
+  // G.JUMP_DATA (calaverita-clasica/morada). NO eran los Hermanos
+  // Calavera, que son otro final.
   G.specialFace = (id) => (id === 'alebrije' ? albFaceCv() : teoFaceCv());
   const specialURLs = {};
   // El retrato de los especiales (pantalla VS y avatar del chat)
@@ -4549,13 +4545,51 @@
   TrazoDuel.COUNT = TRAZO_COUNT_T;
 
   // ----- Boss 2B: «La soga de fuego» (Hot Rope Jump) -----
+  // ----- «La soga de fuego» (2B): cámara, luz y sprites -----
+  // CÁMARA (corrección de Jose, 2026-11-21): la anterior (dist 350,
+  // pitch 0,30, objetivo y=0) proyectaba con la lente real del
+  // renderer (26° fijos en gl3d.js; el fov:42 del objeto no lo lee
+  // nadie) los postes a x≈2 y x≈638 del canvas — pegados a los
+  // bordes, con las calaveritas medio fuera —, el punto más alto
+  // del arco de la soga (y=122) a py≈-33, FUERA de pantalla, y los
+  // personajes a ~141 px, demasiado grandes. La nueva (dist 520,
+  // pitch 0,36, objetivo y=26, verificada con la proyección real)
+  // deja los postes a x≈109/531 (margen de sobra para las
+  // calaveritas), el arco completo dentro (su cima a py≈71) y el
+  // jugador a ~90 px en el canvas 640×360, como los demás duelos
+  // corregidos.
+  const SOGA_CAM = { x: 0, y: 26, z: 6, dist: 520, pitch: 0.36 };
+  // LUZ NEUTRA propia del duelo: la W.LIGHT.noche de world.js trae
+  // ambiente azulado y los puntos de luz del departamento (que caen
+  // fuera de este patio y no aportan). Esta es noche equilibrada —
+  // canales casi iguales, sin puntos de color — con el patrón de
+  // PATRON_LIGHT/TRAZO_LIGHT/FINALE_LIGHT, solo para este duelo.
+  const SOGA_LIGHT = { amb: [0.52, 0.52, 0.56], sun: [0.26, 0.26, 0.3], sky: '#14101f', points: [] };
+  const SOGA_TEO_H = 76; // alto de mundo de Teodora (≈87 px en pantalla con SOGA_CAM)
+  const JUMP_H = 84; // alto de mundo del sprite de salto (el del Actor definido)
+  // Sprites GENERADOS para este duelo (a pedido expreso de Jose,
+  // 2026-11-21): el salto de soga de cada roomie desde su idle
+  // definido (tools/mkjumps.py → G.JUMP_DATA) y las dos calaveritas
+  // utileras de los postes. Como todo el arte WebGL del proyecto,
+  // data URIs: desde file:// una imagen de archivo es cross-origin
+  // y texImage2D revienta (bug del contador 4).
+  const JUMP_FILES = ['salto-natalia', 'salto-saulo', 'salto-itzel', 'salto-fatima', 'salto-samantha', 'salto-majo', 'salto-alan', 'calaverita-clasica', 'calaverita-morada'];
+  const jumpImgs = {};
+  function jumpImg(name) {
+    if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
+    if (!G.JUMP_DATA || !G.JUMP_DATA[name]) return null; // sin jump-sheets.js cargado: no reventar
+    if (!jumpImgs[name]) { const im = new Image(); im.src = G.JUMP_DATA[name]; jumpImgs[name] = im; }
+    return jumpImgs[name];
+  }
+  function jumpPreload() { for (const n of JUMP_FILES) jumpImg(n); }
   class SogaDuel extends Duel {
     constructor(who, done) {
       super(who, 'teodora', done, { rounds: 1, need: 1, time: 240, label: 'BOSS', title: 'LA SOGA DE FUEGO', hint: 'Mantén ESPACIO para cargar el salto y SUELTA para saltar · la llama azul va lento, la naranja rápido', rendT: 1.8 });
       this.timeMax = 240;
       this.p = new Actor(who, -32, 0);
       this.partners = (G.S && G.S.party ? G.S.party.filter((id) => id !== who) : []).slice(0, 2).map((id, i) => new Actor(id, i ? 118 : -112, 0));
-      this.cam = { x: 0, y: 0, z: 6, dist: 350, pitch: 0.3, fov: 42 };
+      this.cam = SOGA_CAM;
+      teoPreload(); jumpPreload();
       this.begin();
     }
     setup() {
@@ -4615,18 +4649,55 @@
     }
     draw(dt) {
       const t = performance.now() / 1000, J = this.J;
+      // Intercambio de salto: en el suelo manda el Actor con su arte
+      // definido; al despegar (j.h > 0) el Actor se oculta y lo
+      // sustituye el billboard con su sprite de salto generado, a la
+      // altura física del salto. La anticipación se lee en el Actor
+      // (squash mientras carga) y el aterrizaje en su squash de
+      // siempre (stepJumper ya lo fija al tocar el suelo). Si el
+      // sprite aún no cargó, el Actor NO se oculta (salta como
+      // siempre, con su jy).
+      const airSwap = (a, j) => { const im = jumpImg('salto-' + a.id); const on = !j.out && j.h > 0 && rocketReady(im); a.hidden = on; return on; };
+      const pAir = airSwap(this.p, J.p), nAir = this.partners.map((a, i) => airSwap(a, J.n[i]));
+      if (J.p.charge > 0 && !J.p.out) this.p.squash = Math.max(this.p.squash, 0.12 * (J.p.charge / 0.5)); // se agacha al cargar
       W.render({
-        cam: this.cam, dt, light: W.LIGHT.noche, noApartment: true, actors: [this.p, ...this.partners], focusZ: 0,
+        cam: this.cam, dt, light: SOGA_LIGHT, noApartment: true, actors: [this.p, ...this.partners], focusZ: 0,
         boxes: (mb) => {
           mb.box(0, -5, 0, 560, 10, 130, '#4a3049'); // piso del patio nocturno
           mb.box(0, 60, -78, 620, 140, 10, '#2c2138'); mb.box(0, 128, -78, 620, 14, 12, '#1d1626'); // pared de la casona
           mb.box(-185, 26, 0, 12, 52, 12, '#6b4a2f'); mb.box(185, 26, 0, 12, 52, 12, '#6b4a2f'); // postes de la soga
         },
         sprites: () => {
-          R.sprite(calCv(), -185, 40, 0, { w: 40, h: 49, feet: 0, lit: 0.3, nostretch: true });
-          R.sprite(calCv(), 185, 40, 0, { w: 40, h: 49, feet: 0, lit: 0.3, nostretch: true });
-          R.flat(R.glowTex, J.t.x, 0.8, 0, 42, 28, { color: [0.1, 0.05, 0.16], alpha: 0.5 });
-          R.sprite(teoCv(this.teoSelfieT > 0 ? 'selfie' : 'idle'), J.t.x, 10 + J.t.h + Math.sin(t * 2.2) * 2.5, 0, { w: 54, h: 67, feet: 0, lit: 0.25, nostretch: true, alpha: J.t.out ? 0.45 : 1 });
+          // Las calaveritas utileras que coronan los postes dejan
+          // de dibujarse por código (calCv): son dos sprites
+          // diseñados y generados en el estilo del juego (calavera
+          // de azúcar decorada con su cuerpito y brazos en alto
+          // sobre su base, borde sticker) — la clásica a la
+          // izquierda y la morada a la derecha, al tamaño que
+          // ocupaba la figura por código (49 u de alto).
+          const calA = jumpImg('calaverita-clasica'), calB = jumpImg('calaverita-morada');
+          if (rocketReady(calA)) R.sprite(calA, -185, 40, 0, { w: 49 * (calA.naturalWidth / calA.naturalHeight), h: 49, feet: 0, lit: 0.3, nostretch: true });
+          if (rocketReady(calB)) R.sprite(calB, 185, 40, 0, { w: 49 * (calB.naturalWidth / calB.naturalHeight), h: 49, feet: 0, lit: 0.3, nostretch: true });
+          // Sombra de Teodora con la firma VIGENTE de R.flat
+          // (canvas, x, y, z, r, opciones): la llamada anterior era
+          // la antigua de 7 argumentos — el 28 caía como «opciones»
+          // y el {color, alpha} se ignoraba en silencio, así que la
+          // sombra salía como un disco blanco a alfa plena. Radio
+          // 21 con ry 0,67 = la elipse de 42×28 que se buscaba.
+          R.flat(R.glowTex, J.t.x, 0.8, 0, 21, { ry: 0.67, tint: [0.1, 0.05, 0.16], alpha: 0.5 });
+          // Teodora DISEÑADA también aquí (era el último rincón por
+          // código): flota con su bob; en el aire va con su pose de
+          // salto de la hoja de boss; en su ventana de selfie, con
+          // la selfie; y si se quema, con la quemada cómica de la
+          // hoja de faltantes. Quieta alterna los dos puntos del
+          // bob (idle/idle2), como en el Trazo.
+          let teoName = J.t.out ? 'teodora-quemada' : this.teoSelfieT > 0 ? 'teodora-selfie' : J.t.h > 0 ? 'teodora-salto' : (Math.sin(t * 2.2) > 0 ? 'teodora-idle' : 'teodora-idle2');
+          const tim = teoImg(teoName);
+          if (rocketReady(tim)) R.sprite(tim, J.t.x, 10 + J.t.h + Math.sin(t * 2.2) * 2.5, 0, { w: SOGA_TEO_H * (tim.naturalWidth / tim.naturalHeight), h: SOGA_TEO_H, feet: 0, lit: 0.25, nostretch: true, alpha: J.t.out ? 0.9 : 1 });
+          // Los saltos en el aire, con su sombra en el suelo.
+          const drawJump = (a, j) => { const im = jumpImg('salto-' + a.id); if (!rocketReady(im)) return; R.shadow(a.x, 0, 14, 0.5); R.sprite(im, a.x, j.h, 0, { w: JUMP_H * (im.naturalWidth / im.naturalHeight), h: JUMP_H, feet: 0, lit: 0.25, nostretch: true }); };
+          if (pAir) drawJump(this.p, J.p);
+          this.partners.forEach((a, i) => { if (nAir[i]) drawJump(a, J.n[i]); });
           for (const j of [J.p, J.t, ...J.n]) if (j.out && j.smoke > 0) R.sprite(R.glowTex, j.x, 26, 0, { w: 30, h: 30, feet: 0, lit: 0, nostretch: true, alpha: 0.4 });
         },
         over: (c) => {
@@ -4653,6 +4724,10 @@
       G.text(c, 'Prueba 2B de la boss final de Leyendas', 320, 208, { size: 11.5 });
     }
   }
+
+  SogaDuel.CAM = SOGA_CAM;
+  SogaDuel.LIGHT = SOGA_LIGHT;
+  SogaDuel.JUMP = { files: JUMP_FILES, teoH: SOGA_TEO_H, jumpH: JUMP_H };
 
   // ----- Cadena del clímax de Leyendas -----
   // Revelación del set → 2A Trazo → 2B Soga → resolución por la

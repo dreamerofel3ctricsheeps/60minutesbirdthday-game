@@ -180,6 +180,7 @@ load('rocket-sheets.js');
 load('belt-sheets.js');
 load('alebrije-sheets.js');
 load('teodora-sheets.js');
+load('jump-sheets.js');
 load('sprites.js');
 load('data.js');
 load('gl3d.js');
@@ -1716,8 +1717,37 @@ const tick = () => new Promise((r) => setImmediate(r));
       const trazoSrc = scenesTxtT.slice(scenesTxtT.indexOf('class TrazoDuel'), scenesTxtT.indexOf('class SogaDuel'));
       check('trazo: la clase ya no dibuja a Teodora por código (sin teoCv) y sí usa sus sprites diseñados',
         !trazoSrc.includes('teoCv(') && trazoSrc.includes("teoImg('teodora-' + teoPoseName)") && trazoSrc.includes('teoPreload()'), '');
-      check('trazo: la figura por código de Teodora sigue viva SOLO para la soga y el final (teoCv selfie/idle fuera de esta clase)',
-        scenesTxtT.includes("teoCv(this.teoSelfieT > 0 ? 'selfie' : 'idle')"), '');
+      check('trazo: la figura por código de Teodora ya no se usa en NINGÚN duelo ni escena (teoCv retirado; drawTeoFigure queda solo de respaldo de cara)',
+        !scenesTxtT.includes('function teoCv(') && !scenesTxtT.includes('teoCv(') && scenesTxtT.includes('function drawTeoFigure'), '');
+      // --- Corrección de Jose (2026-11-21, 3ª tarea): «La soga de
+      // fuego» — cámara, luz neutra, Teodora diseñada, saltos
+      // generados para todos y calaveritas diseñadas ---
+      const sogaSrc = scenesTxtT.slice(scenesTxtT.indexOf('class SogaDuel'), scenesTxtT.indexOf('SogaDuel.CAM = SOGA_CAM'));
+      const imgDirS = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+      check('soga: la clase no dibuja a Teodora ni las calaveritas por código (sin teoCv/calCv) y usa sus sprites',
+        !sogaSrc.includes('teoCv(') && !sogaSrc.includes('calCv(') && sogaSrc.includes("teoImg(teoName)") && sogaSrc.includes("jumpImg('calaverita-clasica')") && sogaSrc.includes("jumpImg('calaverita-morada')"), '');
+      check('soga: Teodora suma salto (de su hoja de boss) y quemada (de la de faltantes) como PNG y data URI',
+        ['teodora-salto', 'teodora-quemada'].every((n) => fs.existsSync(path.join(imgDirS, n + '.png'))
+          && typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
+        G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
+      check('soga: cámara verificada con la proyección real (dist 520, pitch 0,36, objetivo y=26; la anterior cortaba el arco y pegaba los postes a los bordes)',
+        !!Sc.SogaDuel.CAM && Sc.SogaDuel.CAM.dist === 520 && Sc.SogaDuel.CAM.pitch === 0.36 && Sc.SogaDuel.CAM.y === 26 && Sc.SogaDuel.CAM.z === 6,
+        JSON.stringify(Sc.SogaDuel.CAM));
+      check('soga: luz neutra propia (noche equilibrada, sin puntos de color, sin W.LIGHT.noche heredada)',
+        !!Sc.SogaDuel.LIGHT && Sc.SogaDuel.LIGHT.amb[0] === Sc.SogaDuel.LIGHT.amb[1] && Sc.SogaDuel.LIGHT.sun[0] === Sc.SogaDuel.LIGHT.sun[1]
+        && Sc.SogaDuel.LIGHT.points.length === 0 && sogaSrc.includes('light: SOGA_LIGHT') && !sogaSrc.includes('W.LIGHT.noche'),
+        JSON.stringify(Sc.SogaDuel.LIGHT));
+      check('soga: la sombra de Teodora usa la firma vigente de R.flat (la antigua de 7 args ignoraba las opciones)',
+        sogaSrc.includes('R.flat(R.glowTex, J.t.x, 0.8, 0, 21, { ry: 0.67') && !sogaSrc.includes('42, 28, { color:'), '');
+      check('soga: G.JUMP_DATA trae los 7 saltos y las 2 calaveritas como data URIs PNG y sus PNG existen',
+        !!G.JUMP_DATA && Sc.SogaDuel.JUMP.files.length === 9 && Sc.SogaDuel.JUMP.files.every((n) => typeof G.JUMP_DATA[n] === 'string' && G.JUMP_DATA[n].startsWith('data:image/png;base64,') && fs.existsSync(path.join(imgDirS, n + '.png'))),
+        G.JUMP_DATA ? Object.keys(G.JUMP_DATA).join(',') : 'sin JUMP_DATA');
+      check('soga: index.html incluye js/jump-sheets.js ANTES que js/scenes.js',
+        htmlTxtT.includes('js/jump-sheets.js') && htmlTxtT.indexOf('js/jump-sheets.js') < htmlTxtT.indexOf('js/scenes.js'));
+      check('soga: el salto sustituye al Actor solo en el aire (hidden + billboard) y las figuras por código completas quedaron retiradas',
+        sogaSrc.includes('a.hidden = on') && sogaSrc.includes("jumpImg('salto-' + a.id)")
+        && !scenesTxtT.includes('function albCv(') && !scenesTxtT.includes('function calCv(')
+        && scenesTxtT.includes('function drawAlbFigure') && scenesTxtT.includes('function drawTeoFigure'), '');
       check('trazo: luz NEUTRA propia (amb/sun blancos equilibrados, sin puntos de color, sin W.LIGHT.fiesta)',
         !!Sc.TrazoDuel.LIGHT && Sc.TrazoDuel.LIGHT.amb[0] === Sc.TrazoDuel.LIGHT.amb[1] && Sc.TrazoDuel.LIGHT.amb[1] === Sc.TrazoDuel.LIGHT.amb[2]
         && Sc.TrazoDuel.LIGHT.sun[0] === Sc.TrazoDuel.LIGHT.sun[1] && Sc.TrazoDuel.LIGHT.sun[1] === Sc.TrazoDuel.LIGHT.sun[2]
