@@ -1,7 +1,8 @@
 # Publica el juego («1 Minuto para la Fiesta») en GitHub Pages.
 # El juego es un sitio estático sin build. En cada push a main, este workflow
-# copia application/src a la raíz de la rama gh-pages, que es la fuente que
-# GitHub Pages sirve (Settings → Pages → Deploy from a branch → gh-pages).
+# sincroniza application/src a la RAÍZ de la rama gh-pages, CONSERVANDO la
+# carpeta dev/ (el sitio de pruebas de la rama develop, que publica su propio
+# workflow). GitHub Pages sirve gh-pages: raíz = juego publicado, /dev = testing.
 name: Publicar en GitHub Pages
 
 on:
@@ -13,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: pages
+  group: pages-deploy
   cancel-in-progress: false
 
 jobs:
@@ -22,21 +23,20 @@ jobs:
     steps:
       - name: Descargar el repo
         uses: actions/checkout@v4
-      - name: Sincronizar application/src → rama gh-pages
+      - name: Sincronizar application/src → raíz de gh-pages (sin tocar /dev)
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
-          rm -rf /tmp/site && mkdir -p /tmp/site
-          cp -r application/src/. /tmp/site/
-          rm -rf /tmp/site/tests
-          cd /tmp/site
-          git init -q -b gh-pages
+          set -e
+          git clone -q --depth 1 --branch gh-pages "https://x-access-token:${TOKEN}@github.com/${REPO}.git" /tmp/ghpages
+          rsync -a --delete --exclude dev --exclude .git application/src/ /tmp/ghpages/
+          rm -rf /tmp/ghpages/tests
+          cd /tmp/ghpages
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -q -m "Despliegue desde main ${SHA}"
-          git remote add origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
-          git push -q -f origin gh-pages
-          echo "gh-pages actualizado desde ${SHA}"
+          git diff --cached --quiet || git commit -q -m "Despliegue de main ${SHA}"
+          for i in 1 2 3; do git push -q origin gh-pages && break || git pull -q --rebase origin gh-pages; done
+          echo "Raíz de gh-pages actualizada desde main ${SHA} (dev/ intacto)"
