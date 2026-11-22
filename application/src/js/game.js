@@ -952,6 +952,17 @@
     if (CW < 108) { per = 1; CW = Math.min(FULL, avail); }
     CW = Math.min(CW, FULL);
     const node = el('div', 'car' + (slim ? ' slim' : ''));
+    // El ALTO real del escenario viaja al CSS como --stageh: en
+    // pantallas chicas la tarjeta pasa a ser SOLO-CABEZA (directiva
+    // de Jose, 2026-11-22) y cada bloque (compacto horizontal y
+    // retrato) dimensiona la caja cuadrada de la cabeza restando
+    // de este alto el cromo de SU modal — el mismo criterio que
+    // ya se aplicaba al ancho (avail), extendido al alto. En
+    // escritorio nadie consume la variable: el carrusel se ve
+    // como siempre. (setProperty va protegido: el arnés de
+    // pruebas usa objetos style sin métodos.)
+    const stageH = (stageEl && stageEl.clientHeight) || (typeof window !== 'undefined' && window.innerHeight) || 0;
+    if (stageH && node.style && node.style.setProperty) node.style.setProperty('--stageh', stageH + 'px');
     const view = el('div', 'cview'); view.style.width = (per * CW + (per - 1) * GAP) + 'px';
     const track = el('div', 'ctrack');
     ids.forEach((id) => { const b = el('button', 'pcard', cardHTML(id)); b.dataset.id = id; b.style.width = CW + 'px'; b.onclick = () => onPick(id); track.appendChild(b); });
@@ -992,7 +1003,7 @@
   function pickCharScreen(ev) {
     return new Promise((res) => {
       let done = false; const off = () => done;
-      const car = charCarousel(G.PLAYABLE, (id) => { const c = G.CHARS[id]; return `<img src="${Sp.full(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small>`; }, true, (id) => finish(id));
+      const car = charCarousel(G.PLAYABLE, (id) => { const c = G.CHARS[id]; return `<img class="pfull" src="${Sp.full(id)}" alt=""><img class="phead" src="${Sp.portrait(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small>`; }, true, (id) => finish(id));
       const un = charKeys(car, off);
       const modal = el('div', 'modal wide noscroll');
       modal.appendChild(el('h2', '', ev.title));
@@ -1123,13 +1134,26 @@
       show();
     });
   }
+  // Etiquetas cortas de atributo para la línea compacta (.stline)
+  // que la tarjeta muestra en pantallas chicas: la ficha completa
+  // no cabe y los cuatro atributos deben entrar en UNA línea
+  // (~100px en retrato), así que van pegados a su valor —
+  // «Vel9 Sig3 Car5 Lóg5» — en el orden canónico de siempre.
+  const STAT_SHORT = { velocidad: 'Vel', sigilo: 'Sig', carisma: 'Car', logica: 'Lóg' };
   function selectChar() {
     return new Promise((res) => {
       let done = false; const off = () => done;
       const car = charCarousel(G.PLAYABLE, (id) => {
         const c = G.CHARS[id];
         const stats = Object.keys(c.stats).map((k) => `<div class="st"><span>${G.STAT_LABEL[k]}</span><i><u style="width:${c.stats[k] * 10}%"></u></i><em>${c.stats[k]}</em></div>`).join('');
-        return `<img src="${Sp.full(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small>${stats}<p class="good">✔ ${c.skill}</p><p class="bad">✖ ${c.defect}</p>`;
+        const short = Object.keys(c.stats).map((k) => `${STAT_SHORT[k] || G.STAT_LABEL[k]}${c.stats[k]}`).join(' ');
+        // La tarjeta trae DOS retratos: el cuerpo completo (.pfull,
+        // el de siempre) y la cabeza (.phead, Sp.portrait — el
+        // recorte cuadrado centrado en los ojos que ya usa el
+        // chat). En la base manda .pfull; en pantallas chicas el
+        // CSS apaga el cuerpo y la tarjeta es solo-cabeza, con
+        // la línea compacta .stline en vez de las filas .st.
+        return `<img class="pfull" src="${Sp.full(id)}" alt=""><img class="phead" src="${Sp.portrait(id)}" alt=""><h3 style="color:${c.color}">${c.name}</h3><small>${c.role}</small>${stats}<p class="stline">${short}</p><p class="good">✔ ${c.skill}</p><p class="bad">✖ ${c.defect}</p>`;
       }, false, (id) => finish(id));
       const un = charKeys(car, off);
       const modal = el('div', 'modal wide noscroll');

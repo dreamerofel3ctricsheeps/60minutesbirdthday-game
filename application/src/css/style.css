@@ -332,6 +332,12 @@ body.touch-on .cnav { width: 52px; height: 52px; }
 .pcard > small { display: block; text-align: center; color: var(--dim); margin-bottom: 8px; }
 .pcard p { font-size: 11px; margin: 6px 0 0; line-height: 1.35; }
 .pcard .good { color: var(--green); } .pcard .bad { color: #ff9aa5; }
+/* La cabeza (.phead, Sp.portrait) y la línea compacta de
+   atributos (.stline) solo existen para pantallas chicas: en la
+   base van ocultas y manda la ficha completa (cuerpo entero +
+   filas .st + habilidad/defecto). Los bloques compacto
+   horizontal y de retrato las encienden y apagan la ficha. */
+.pcard .phead, .pcard .stline { display: none; }
 .st { display: grid; grid-template-columns: 62px 1fr 16px; gap: 6px; align-items: center; font-size: 11px; margin: 2px 0; }
 .st i { height: 7px; background: #120f1b; border-radius: 3px; overflow: hidden; }
 .st u { display: block; height: 100%; background: var(--yellow); }
@@ -599,6 +605,44 @@ body.date-mode #dateMuteBtn { display: flex; }
     background: rgba(23, 18, 38, .55); border: 2px solid rgba(18, 15, 27, .55); border-radius: 10px; padding: 4px 6px;
     transition: opacity .35s ease; }
   #inv.chrome-off { opacity: 0; }
+  /* ----- Selector de personaje SOLO-CABEZA (directiva de Jose) -----
+     La ficha completa (cuerpo entero + epíteto + filas de stats
+     con barras + habilidad + defecto ≈ 280px) más el cromo del
+     modal (título, párrafo de ayuda, puntos) se comía el
+     escenario horizontal (~340px) y el recorte del .noscroll
+     dejaba las tarjetas inutilizables: se veía el cuerpo pero
+     no los atributos ni el final de la tarjeta (capturas de
+     Jose, 2026-11-22). Aquí la tarjeta muestra SOLO la cabeza
+     (.phead = Sp.portrait, el recorte cuadrado centrado en los
+     ojos que ya usa el chat) en una caja cuadrada protagonista,
+     el nombre y UNA línea compacta de atributos (.stline); el
+     epíteto, las filas .st y habilidad/defecto se apagan.
+     La caja se dimensiona desde el ALTO REAL del escenario
+     (--stageh, lo mide charCarousel en game.js) menos el cromo
+     de este modal (≈288px: paddings de overlay y modal, título,
+     el párrafo de ayuda acotado a 3 líneas, pista y puntos),
+     con suelo de 46px y techo de 118px (en tabletas sobra alto
+     y la cabeza no necesita más). Las flechas ‹ › se reanclan
+     al centro de la caja de la cabeza (pista 4 + borde 3 +
+     padding de tarjeta 8 + media caja): quedan a su altura y
+     fuera de la ventana — la cabeza va centrada en la tarjeta
+     y su borde siempre queda por dentro del borde interior de
+     la flecha, así que no se montan sobre ella. */
+  .car { --headh: clamp(46px, calc(var(--stageh, 350px) - 288px), 118px); }
+  .car .pcard { padding: 8px 10px; }
+  .car .pcard img.pfull { display: none; }
+  .car .pcard img.phead { display: block; width: var(--headh); height: var(--headh); margin: 0 auto; background: rgba(18, 15, 27, .35); border-radius: 10px; }
+  .car .pcard > small { display: none; }
+  .car .pcard .st, .car .pcard p.good, .car .pcard p.bad { display: none; }
+  .car .pcard .stline { display: block; margin: 3px 0 0; font-size: 10.5px; text-align: center; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .car .pcard h3 { font-size: 15px; margin-top: 4px; }
+  .car .ctrack { padding: 4px 0 6px; }
+  .car .cnav, .car.slim .cnav { top: calc(15px + var(--headh) / 2); }
+  /* El párrafo de ayuda del selector de protagonista (hermano
+     posterior de .car; el de práctica va ANTES del carrusel —
+     es la pregunta — y no se toca) se acota a 3 líneas para
+     que el modal quepa entero en este alto. */
+  .modal.noscroll .car ~ p.dim { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 }
 
 /* ---------- Modo vertical: HUD y elección COMPACTOS ----------
@@ -656,4 +700,43 @@ body.date-mode #dateMuteBtn { display: flex; }
   .card strong { margin-left: auto; font-size: 15px; }
   .card:hover:not(:disabled) { transform: none; }
   .card:focus-visible { border-color: var(--yellow); outline: none; }
+  /* Selector de personaje SOLO-CABEZA (directiva de Jose): la
+     misma receta que en el compacto horizontal, con las cuentas
+     del retrato. Aquí el escenario mide ~210px de alto en un
+     teléfono típico (390 de ancho × 9/16) y ni la ficha
+     completa ni su cromo caben: solo asomaban las cabezas de
+     las tarjetas recortadas (captura IMG_7627 de Jose). El
+     cromo se aprieta SOLO en el modal del carrusel (:has(.car),
+     para no tocar el panel «???», que también es .noscroll):
+     padding menor, título más chico, puntos con menos margen
+     y el overlay con 2% de aire. El párrafo de ayuda del
+     selector de protagonista se OCULTA (es hermano posterior
+     de .car; el párrafo de práctica va antes del carrusel —
+     es la pregunta — y solo se le recortan los márgenes): con
+     sus ~128px no cabe ni la tarjeta mínima. Y el botón de
+     volver de práctica sale del flujo como pastilla en la
+     esquina superior izquierda del escenario (en columna se
+     comía ~59px; la animación de entrada del modal lo ancla
+     unos instantes a la esquina del modal, que casi coincide).
+     La caja de la cabeza se dimensiona desde el alto real
+     (--stageh) menos ≈170px de cromo, suelo 44px, techo 92px;
+     las flechas se anclan al centro de la caja, como en
+     horizontal. */
+  #overlay:has(.modal.noscroll) { padding: 2%; }
+  .modal.noscroll:has(.car) { padding: 10px 12px; }
+  .modal.noscroll:has(.car) h2 { margin-bottom: 6px; font-size: 17px; }
+  .modal.noscroll:has(.car) > p.dim { margin: 4px 0; }
+  .modal.noscroll .car ~ p.dim { display: none; }
+  .modal.noscroll:has(.car) > button.big { position: absolute; top: 8px; left: 8px; z-index: 4; margin: 0; padding: 5px 10px; font-size: 12px; }
+  .modal.noscroll .cdots { margin-bottom: 4px; }
+  .car { --headh: clamp(44px, calc(var(--stageh, 212px) - 170px), 92px); }
+  .car .pcard { padding: 8px 7px; }
+  .car .pcard img.pfull { display: none; }
+  .car .pcard img.phead { display: block; width: var(--headh); height: var(--headh); margin: 0 auto; background: rgba(18, 15, 27, .35); border-radius: 10px; }
+  .car .pcard > small { display: none; }
+  .car .pcard .st, .car .pcard p.good, .car .pcard p.bad { display: none; }
+  .car .pcard .stline { display: block; margin: 3px 0 0; font-size: 9.5px; letter-spacing: -.2px; text-align: center; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .car .pcard h3 { font-size: 15px; margin-top: 4px; }
+  .car .ctrack { padding: 4px 0 6px; }
+  .car .cnav, .car.slim .cnav { top: calc(15px + var(--headh) / 2); }
 }

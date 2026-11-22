@@ -3128,8 +3128,77 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('vertical: fuera del bloque NADA cambió — la tarjeta base sigue en columna con retrato de 52px y el min-width base del sueño sigue en 128px',
       cssY.includes('.card { flex: 1;') && cssY.includes('.card img { width: 52px; height: 52px')
       && cssY.includes('#m-sleep .val { min-width: 128px; }') && cssY.includes('.cards { display: flex; gap: 6px; }'), '');
-    check('vertical: el selector compacto acota a las tarjetas con retrato (.card de ui.assign) — las opciones de texto (.opt) no aparecen en el bloque',
-      !por.includes('.opt {') && !por.includes('.pcard {'), '');
+    check('vertical: el selector compacto no toca las opciones de texto (.opt) y las reglas de .pcard del bloque van SIEMPRE acotadas al carrusel (.car .pcard, nunca la clase pelada — la receta solo-cabeza de la sección Z)',
+      !por.includes('.opt {') && !/(^|\n)\s*\.pcard\s*\{/.test(por), '');
+  }
+
+  // --- Sección Z: selector SOLO-CABEZA en pantallas chicas ---
+  // Directiva de Jose (capturas IMG_7627 vertical e IMG_7630
+  // horizontal, 2026-11-22): el carrusel de protagonista y de
+  // práctica se perdía en pantallas chicas — en vertical las
+  // tarjetas se recortaban y solo asomaban las cabezas por el
+  // borde del modal; en horizontal la ficha se salía por abajo.
+  // En los bloques compacto horizontal y de retrato la tarjeta
+  // muestra SOLO la cabeza (Sp.portrait) + nombre + una línea
+  // compacta de atributos, con la caja dimensionada desde el
+  // alto real del escenario (--stageh que charCarousel mide,
+  // menos el cromo de cada modal). El arnés no mide layout:
+  // checks de fuente sobre ambos bloques, del invariante de
+  // escritorio y de comportamiento sobre el DOM generado.
+  {
+    console.log('\nZ) Selector solo-cabeza — en pantallas chicas la tarjeta muestra la cabeza y nada más');
+    const cssZ = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameZ = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const iLandZ = cssZ.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const iPorZ = cssZ.indexOf('(max-width: 760px) and (orientation: portrait)');
+    const landZ = iLandZ >= 0 && iPorZ > iLandZ ? cssZ.slice(iLandZ, iPorZ) : '';
+    const porZ = iPorZ >= 0 ? cssZ.slice(iPorZ) : '';
+    const iSelZ = gameZ.indexOf('function selectChar()');
+    const selZ = iSelZ >= 0 ? gameZ.slice(iSelZ, iSelZ + 2600) : '';
+    const iPickZ = gameZ.indexOf('function pickCharScreen');
+    const pickZ = iPickZ >= 0 ? gameZ.slice(iPickZ, iPickZ + 1600) : '';
+    check('solo-cabeza: AMBOS selectores (protagonista y práctica) montan la cabeza (Sp.portrait) junto al cuerpo en su tarjeta',
+      selZ.includes('Sp.portrait(id)') && selZ.includes('class="phead"') && pickZ.includes('Sp.portrait(id)') && pickZ.includes('class="pfull"'), '');
+    check('solo-cabeza: el protagonista genera la línea compacta de atributos con etiquetas cortas (STAT_SHORT) y la clase .stline',
+      selZ.includes('STAT_SHORT') && selZ.includes('class="stline"') && gameZ.includes("velocidad: 'Vel'"), '');
+    check('solo-cabeza: el carrusel mide el alto REAL del escenario y lo pasa al CSS (--stageh desde clientHeight, setProperty protegido)',
+      gameZ.includes('stageEl.clientHeight') && gameZ.includes("setProperty('--stageh'") && gameZ.includes('node.style.setProperty'), '');
+    check('solo-cabeza: en la base la cabeza y la línea compacta nacen ocultas y la ficha de escritorio queda intacta (retrato con su clamp, tarjeta de 248px)',
+      cssZ.includes('.pcard .phead, .pcard .stline { display: none; }')
+      && cssZ.includes('.pcard img { height: 150px; height: clamp(96px, 36cqh, 150px); width: auto;')
+      && cssZ.includes('.car .pcard { flex: none; width: 248px; }'), '');
+    check('solo-cabeza horizontal: el cuerpo se apaga y la cabeza es una caja cuadrada dimensionada por --stageh menos el cromo (suelo 46, techo 118)',
+      landZ.includes('.car .pcard img.pfull { display: none; }')
+      && landZ.includes('.car .pcard img.phead { display: block; width: var(--headh); height: var(--headh);')
+      && landZ.includes('--headh: clamp(46px, calc(var(--stageh, 350px) - 288px), 118px)'), '');
+    check('solo-cabeza horizontal: contenido mínimo — fuera epíteto, filas .st y habilidad/defecto; dentro la línea compacta; flechas al centro de la cabeza; ayuda acotada a 3 líneas',
+      landZ.includes('.car .pcard > small { display: none; }') && landZ.includes('.car .pcard .stline { display: block;')
+      && landZ.includes('.car .pcard p.good, .car .pcard p.bad { display: none; }')
+      && landZ.includes('.car .cnav, .car.slim .cnav { top: calc(15px + var(--headh) / 2); }')
+      && landZ.includes('-webkit-line-clamp: 3'), '');
+    check('solo-cabeza retrato: misma receta con su cromo (reserva 170, suelo 44, techo 92) y la tarjeta acotada al carrusel',
+      porZ.includes('--headh: clamp(44px, calc(var(--stageh, 212px) - 170px), 92px)')
+      && porZ.includes('.car .pcard img.phead { display: block; width: var(--headh); height: var(--headh);')
+      && porZ.includes('.car .pcard .stline { display: block;'), '');
+    check('solo-cabeza retrato: el cromo se aprieta SOLO en el modal del carrusel (padding/título con :has(.car)), la ayuda se oculta y Volver queda como pastilla en la esquina',
+      porZ.includes('.modal.noscroll:has(.car) { padding: 10px 12px; }')
+      && porZ.includes('.modal.noscroll .car ~ p.dim { display: none; }')
+      && porZ.includes('.modal.noscroll:has(.car) > button.big { position: absolute;'), '');
+    // Comportamiento: el DOM real del selector trae la cabeza y
+    // la línea compacta en las 7 tarjetas, y elegir sigue igual.
+    const overlayZ = documentFake.querySelector('#overlay');
+    let pickedZ = null;
+    const pSelZ = G.debug.selectChar().then((id) => { pickedZ = id; });
+    await tick(); await tick();
+    const modalZ = overlayZ.children[0];
+    const cardsZ = modalZ ? queryWithin(modalZ, '.pcard', true) : [];
+    check('solo-cabeza: las 7 tarjetas del selector traen la imagen de la cabeza y la línea compacta en su HTML',
+      cardsZ.length === 7 && cardsZ.every((b) => (b.innerHTML || '').includes('phead') && (b.innerHTML || '').includes('stline')),
+      'cards=' + cardsZ.length);
+    check('solo-cabeza: la línea compacta lleva los atributos pegados a su etiqueta corta («Vel9» y «Lóg» en la tarjeta de Natalia)',
+      cardsZ.length === 7 && (cardsZ[0].innerHTML || '').includes('Vel9') && (cardsZ[0].innerHTML || '').includes('Lóg'), '');
+    cardsZ[0].onclick(); await pSelZ;
+    check('solo-cabeza: elegir desde la tarjeta sigue resolviendo al roomie tocado', pickedZ === G.PLAYABLE[0], 'picked=' + pickedZ);
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
