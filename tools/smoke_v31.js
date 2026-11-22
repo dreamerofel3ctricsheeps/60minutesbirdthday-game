@@ -1787,8 +1787,33 @@ const tick = () => new Promise((r) => setImmediate(r));
         scenesTxtU.includes("teoImg('teodora-idle')") && scenesTxtU.includes('function teoFaceCv()'), '');
       check('trazo: cuenta regresiva PROPIA de 5 s (palabra de Jose, 3ª ronda; stT pisado en el constructor)',
         Sc.TrazoDuel.COUNT === 5 && trazoSrcU.includes('this.stT = TRAZO_COUNT_T'), '');
-      check('trazo: la presentación del set dura ~3,4 s y es saltable desde 0,4 s (antes 8,4 s)',
-        scenesTxtU.includes('const REVEAL_DUR = 3.4') && scenesTxtU.includes('REVEAL_DUR - 0.05') && !scenesTxtU.includes('this.t >= 8.4'), '');
+      check('trazo: la presentación del set dura lo que suman sus beats con tiempo de lectura (~13,4 s; ya no los 3,4 s ilegibles) y sigue saltable desde 0,4 s',
+        !!Sc.LegendsRevealScene && Sc.LegendsRevealScene.DUR > 13 && Sc.LegendsRevealScene.DUR < 14
+        && scenesTxtU.includes('REVEAL_DUR - 0.05') && !scenesTxtU.includes('const REVEAL_DUR = 3.4') && !scenesTxtU.includes('this.t >= 8.4'),
+        `DUR=${Sc.LegendsRevealScene && Sc.LegendsRevealScene.DUR}`);
+      // --- Corrección de Jose (2026-11-21, 4ª ronda): la
+      // cinemática del final de Leyendas iba tan rápida que no se
+      // entendía — entradas con tiempo de registro y textos con
+      // tiempo de LECTURA en la presentación y en el cierre ---
+      const RD = Sc.LegendsRevealScene.READ, RL = Sc.LegendsRevealScene.LINES, RB = Sc.LegendsRevealScene.BEATS;
+      check('leyendas: regla de lectura nombrada (mínimo 2,4 s + 0,045 s/carácter, pausa 0,5 s entre líneas)',
+        !!RD && RD.min === 2.4 && RD.perChar === 0.045 && RD.gap === 0.5
+        && Math.abs(RD.time('x'.repeat(100)) - 4.5) < 1e-9 && RD.time('corta') === 2.4,
+        JSON.stringify(RD && { min: RD.min, perChar: RD.perChar, gap: RD.gap }));
+      check('leyendas: cada línea de la presentación dura ≥ su tiempo de lectura calculado (con su pausa)',
+        !!RL && RL.length === 3
+        && Math.abs((RB.line2 - RB.line1) - (RD.time(RL[1]) + RD.gap)) < 1e-9
+        && Math.abs((Sc.LegendsRevealScene.DUR - RB.line2) - (RD.time(RL[2]) + 0.6)) < 1e-9
+        && RB.line1 >= RD.time(RL[0]) + RD.gap, JSON.stringify(RB));
+      check('leyendas: entradas escalonadas con tiempo de registro (Alebrije 1,9 s con easing y su pausa; Teodora desciende 2,0 s y aterriza al empezar su línea)',
+        RB.albDur === 1.9 && RB.teoDur === 2 && Math.abs(RB.teoIn + RB.teoDur - RB.line2) < 1e-9
+        && RB.line1 >= RB.albIn + RB.albDur + 0.5 - 1e-9, JSON.stringify(RB));
+      const TL0 = Sc.LegendsFinaleScene.TIMELINE(0), TL1 = Sc.LegendsFinaleScene.TIMELINE(1), TL2 = Sc.LegendsFinaleScene.TIMELINE(2);
+      check('leyendas: el cierre aplica la misma regla de lectura y el flash/selfie se desplaza con los créditos (1/2: flash 12,6 → ~15,2)',
+        Math.abs(TL1.bT - (4.5 + RD.time('XIMENA: «¿Me hicieron una fiesta… en una película?»'))) < 1e-9
+        && TL1.flashT > 12.6 && Math.abs(TL1.flashT - (TL1.creditsT + 4.6)) < 1e-9
+        && TL2.dur >= TL2.creditsT + 7 * 0.62 + RD.min - 1e-9 && TL0.dur > 5,
+        JSON.stringify({ t0: TL0, t1: TL1, t2: TL2 }));
       const dc = new Sc.TrazoDuel('natalia', () => {});
       check('trazo: un duelo recién creado arranca con la cuenta en 5 (stT = 5)', dc.st === 'count' && dc.stT === 5, `stT=${dc.stT}`);
       // Vuelo por estados: la pose depende de la dirección y la velocidad.

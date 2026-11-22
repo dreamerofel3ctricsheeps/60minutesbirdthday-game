@@ -4250,7 +4250,8 @@
   // super() (la base arranca con stT = 3,6 y anuncia un «4»). Su
   // duración la fija Jose y su palabra más reciente manda: 3 s en
   // la 2ª ronda, **5 s en la 3ª (2026-11-21)**. La presentación del
-  // set (LegendsRevealScene, ~3,4 s y saltable) no cambia.
+  // set (LegendsRevealScene, ~13,4 s de cinemática con tiempo de
+  // lectura desde la 4ª ronda, y saltable desde 0,4 s) no cambia.
   const TRAZO_COUNT_T = 5.0;
   // PAUSA PREVIA AL ANUNCIO DEL COLOR (3ª ronda, palabra de Jose):
   // entre el fin del trazo y el anuncio del color seguro pasan
@@ -5024,13 +5025,39 @@
     panel(c, 70, 294, 500, 54, 'rgba(14,10,24,.88)');
     wrap(c, text, 84, 308, 472, 13, color || '#fff');
   }
-  // Duración de la presentación del set antes de la primera prueba
-  // de Teodora: era 8,4 s (más la cuenta del duelo, Jose medía hasta
-  // ~8 s sin poder jugar). Comprimida a ~3,4 s con los mismos hitos
-  // (apagón → set encendido → Alebrije → Teodora reta) en tiempos
-  // cortos, y saltable con la acción desde 0,4 s, como las demás
-  // cinemáticas del juego. Corrección de Jose, 2026-11-21.
-  const REVEAL_DUR = 3.4;
+  // TIEMPO DE LECTURA de las cinemáticas de Leyendas (corrección
+  // de Jose, 2026-11-21): la presentación se había comprimido a
+  // 3,4 s y ni las entradas ni los textos se alcanzaban a leer.
+  // Regla: cada línea dura como mínimo READ_MIN (2,4 s) y crece a
+  // READ_PER_CHAR (0,045 s ≈ 22 caracteres/s) por carácter, con
+  // LINE_GAP (0,5 s) de aire entre líneas. Los beats de ambas
+  // escenas se CALCULAN desde esta regla, no a mano.
+  const READ_MIN = 2.4, READ_PER_CHAR = 0.045, LINE_GAP = 0.5;
+  function readTime(text) { return Math.max(READ_MIN, READ_PER_CHAR * text.length); }
+  // Presentación del set (LegendsRevealScene): los textos no se
+  // reescriben; duran lo que toma leerlos y las entradas se
+  // escalonan (entra uno, su momento; entra la otra, el suyo).
+  // Desglose con las líneas actuales (28/82/111 caracteres):
+  //   [0,00–2,40)  línea del apagón (parpadeo hasta 1,0; el set
+  //                se enciende a 1,0)
+  //   [1,20–3,10]  el Alebrije entra deslizándose (1,9 s con
+  //                easing de llegada) y respira 0,5 s
+  //   [3,60–7,29)  su línea (3,69 s); Teodora desciende flotando
+  //                [5,79–7,79] (2,0 s) durante la línea y aterriza
+  //                justo cuando empieza la suya
+  //   [7,79–12,79) el reto de Teodora (5,00 s) + 0,6 s de cierre
+  // Total ≈ 13,4 s de cinemática, SALTABLE con la acción desde
+  // 0,4 s como siempre: quien repite la cadena no espera, y la
+  // cuenta de 5 s del Trazo no cambia.
+  const REVEAL_LINE_0 = 'La sala se apaga un segundo…';
+  const REVEAL_LINE_1 = '…y se enciende COMO UN SET DE CINE. EL ALEBRIJE: «¡Sorpresa! ¡Su casa era mi set!»';
+  const REVEAL_LINE_2 = 'TEODORA: «¿Esta es la sorpresa? Yo he visto mejores… Si quieren su final de película, superen mis dos pruebas.»';
+  const ALB_ENTER_T = 1.2, ALB_ENTER_DUR = 1.9;
+  const TEO_ENTER_DUR = 2.0;
+  const T_LINE_1 = Math.max(readTime(REVEAL_LINE_0) + LINE_GAP, ALB_ENTER_T + ALB_ENTER_DUR + 0.5);
+  const T_LINE_2 = T_LINE_1 + readTime(REVEAL_LINE_1) + LINE_GAP;
+  const TEO_ENTER_T = T_LINE_2 - TEO_ENTER_DUR;
+  const REVEAL_DUR = T_LINE_2 + readTime(REVEAL_LINE_2) + 0.6;
   // LUZ NEUTRA de la cinemática del final de Leyendas (corrección
   // de Jose, 2026-11-21): las dos escenas usaban W.LIGHT.fiesta y el
   // set salía con el lavado saturado de la fiesta (magenta/cyan por
@@ -5062,10 +5089,16 @@
     }
     draw(dt) {
       const t = this.t, cs = this.cast();
-      const albX = t < 0.9 ? 380 : 380 + Math.min(1, (t - 0.9) / 0.8) * 120; // el Alebrije sale de su escondite entre la decoración
-      const teoElev = t < 1.7 ? 150 : Math.max(24, 150 - (t - 1.7) * 115); // Teodora desciende flotando
+      // Entrada del Alebrije: se desliza desde su escondite con
+      // easing de llegada (rápido al salir, suave al frenar).
+      const albP = Math.min(1, Math.max(0, (t - ALB_ENTER_T) / ALB_ENTER_DUR));
+      const albX = 380 + (1 - Math.pow(1 - albP, 3)) * 120;
+      // Entrada de Teodora: desciende flotando (smoothstep) y
+      // aterriza justo cuando empieza su línea.
+      const teoP = Math.min(1, Math.max(0, (t - TEO_ENTER_T) / TEO_ENTER_DUR));
+      const teoElev = 150 + (24 - 150) * (teoP * teoP * (3 - 2 * teoP));
       W.render({
-        cam: CAM_SALA(), dt, light: t < 0.7 && (t % 0.3) < 0.15 ? W.LIGHT.oscuro : FINALE_LIGHT, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
+        cam: CAM_SALA(), dt, light: t < 1.0 && (t % 0.3) < 0.15 ? W.LIGHT.oscuro : FINALE_LIGHT, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
         sprites: () => {
           // Personajes DISEÑADOS, no por código (corrección de
           // Jose): el Alebrije director con su claqueta, recortado
@@ -5073,16 +5106,21 @@
           // poses de boss — billboards con el alto que ocupaban las
           // figuras por código (115 y 77 u) y el ancho de su
           // aspecto real. Sin imagen cargada, no se pinta nada.
-          if (t > 0.7) { const im = albImg('alebrije-director'); if (rocketReady(im)) R.sprite(im, albX, 0, 168, { w: 115 * (im.naturalWidth / im.naturalHeight), h: 115, feet: 0, lit: 0.25, nostretch: true }); }
-          if (t > 1.6) { R.flat(R.glowTex, 772, 0.8, 168, 23, { ry: 0.65, tint: [0.1, 0.05, 0.16], alpha: 0.5 }); const im = teoImg('teodora-altiva'); if (rocketReady(im)) R.sprite(im, 772, teoElev + Math.sin(t * 2.2) * 2, 168, { w: 82 * (im.naturalWidth / im.naturalHeight), h: 82, feet: 0, lit: 0.2, nostretch: true }); }
+          if (t > 1.0) { const im = albImg('alebrije-director'); if (rocketReady(im)) R.sprite(im, albX, 0, 168, { w: 115 * (im.naturalWidth / im.naturalHeight), h: 115, feet: 0, lit: 0.25, nostretch: true }); }
+          if (t > TEO_ENTER_T) { R.flat(R.glowTex, 772, 0.8, 168, 23, { ry: 0.65, tint: [0.1, 0.05, 0.16], alpha: 0.5 }); const im = teoImg('teodora-altiva'); if (rocketReady(im)) R.sprite(im, 772, teoElev + Math.sin(t * 2.2) * 2, 168, { w: 82 * (im.naturalWidth / im.naturalHeight), h: 82, feet: 0, lit: 0.2, nostretch: true }); }
         },
         over: (c) => {
-          if (t > 0.8) { // reflectores del set apuntando a la sala
+          if (t > 1.0) { // reflectores del set apuntando a la sala
             for (const sx of [70, 570]) { const grd = c.createLinearGradient(sx, 0, 320, 300); grd.addColorStop(0, 'rgba(255,240,180,0.30)'); grd.addColorStop(1, 'rgba(255,240,180,0)'); c.fillStyle = grd; c.beginPath(); c.moveTo(sx, 0); c.lineTo(sx + 26, 0); c.lineTo(400, 310); c.lineTo(240, 310); c.closePath(); c.fill(); }
             G.text(c, 'SET DE FILMACIÓN · ESCENA 1 · TOMA 1', 320, 26, { size: 13, color: '#ffe96a', lw: 6 });
           }
-          const line = t < 0.8 ? 'La sala se apaga un segundo…' : t < 1.8 ? '…y se enciende COMO UN SET DE CINE. EL ALEBRIJE: «¡Sorpresa! ¡Su casa era mi set!»' : 'TEODORA: «¿Esta es la sorpresa? Yo he visto mejores… Si quieren su final de película, superen mis dos pruebas.»';
-          legendsSubtitle(c, line, t >= 1.8 ? '#ffd7f0' : '#fff');
+          // Cada línea dura su tiempo de lectura (readTime); entre
+          // líneas hay aire (las entradas terminan de asentarse).
+          const line = t < readTime(REVEAL_LINE_0) ? REVEAL_LINE_0
+            : t < T_LINE_1 ? null
+            : t < T_LINE_1 + readTime(REVEAL_LINE_1) ? REVEAL_LINE_1
+            : t < T_LINE_2 ? null : REVEAL_LINE_2;
+          legendsSubtitle(c, line, line === REVEAL_LINE_2 ? '#ffd7f0' : '#fff');
           if (t > 0.4) G.prompt(c, 'ESPACIO: saltar', 590, 344);
         },
       });
@@ -5090,6 +5128,43 @@
   }
   LegendsRevealScene.DUR = REVEAL_DUR;
   LegendsRevealScene.LIGHT = FINALE_LIGHT;
+  LegendsRevealScene.READ = { min: READ_MIN, perChar: READ_PER_CHAR, gap: LINE_GAP, time: readTime };
+  LegendsRevealScene.LINES = [REVEAL_LINE_0, REVEAL_LINE_1, REVEAL_LINE_2];
+  LegendsRevealScene.BEATS = { albIn: ALB_ENTER_T, albDur: ALB_ENTER_DUR, teoIn: TEO_ENTER_T, teoDur: TEO_ENTER_DUR, line1: T_LINE_1, line2: T_LINE_2 };
+  // Línea de tiempo de la escena de cierre (LegendsFinaleScene):
+  // sus líneas sufrían lo mismo que la presentación (la de Ximena
+  // duraba 2,0 s y la de Teodora 1,5 s, con 51 y 76 caracteres), así
+  // que se calculan con la MISMA regla de lectura (readTime). Los
+  // beats y el orden no cambian; el flash/selfie conserva su
+  // distancia a los créditos (llegaba 4,6 s tras abrirlos: 12,6
+  // con créditos a 8) y el cierre completo se desplaza con él:
+  //   0/2: línea de Teodora (2,52 s) → «el set se apaga» → 5,7 s
+  //   2/2: suspenso 4,5 → Ximena (2,40 s) → créditos a 7,2 →
+  //        flash/selfie a 11,8 → 13,9 s
+  //   1/2: suspenso 4,5 → Ximena (2,40 s) → Teodora invitada
+  //        (3,42 s) → créditos a 10,6 → flash a 15,2 → 17,4 s
+  // La duración garantiza además que la última línea de créditos
+  // tenga su tiempo de lectura completo (READ_MIN) en pantalla.
+  const FINALE_LINE_0A = 'TEODORA: «No apta para cine. Su fiesta, no mi película.»';
+  const FINALE_LINE_0B = 'El set se apaga. La fiesta sigue… como fiesta.';
+  const FINALE_LINE_A = 'El set entero contiene la respiración…';
+  const FINALE_LINE_B = 'XIMENA: «¿Me hicieron una fiesta… en una película?»';
+  const FINALE_LINE_C = 'TEODORA: «Esa línea era MÍA en el guion. Pero bueno: protagonista invitada.»';
+  const FINALE_SUSPENSE = 4.5; // el set contiene la respiración (≥ readTime de su línea)
+  const CREDIT_STEP = 0.62; // ritmo al que ruedan los créditos (sin cambio)
+  const FLASH_AFTER_CREDITS = 4.6; // distancia créditos → flash/selfie (sin cambio)
+  function finaleTimeline(w) {
+    if (w === 0) {
+      const bT = readTime(FINALE_LINE_0A) + LINE_GAP;
+      return { zero: true, bT, cEnd: bT, creditsT: 0, flashT: 0, dur: bT + readTime(FINALE_LINE_0B) + 0.3 };
+    }
+    const bT = FINALE_SUSPENSE + readTime(FINALE_LINE_B);
+    const cEnd = w === 1 ? bT + readTime(FINALE_LINE_C) : bT;
+    const creditsT = cEnd + 0.3;
+    const flashT = creditsT + FLASH_AFTER_CREDITS;
+    const dur = Math.max(flashT + 0.9, creditsT + 7 * CREDIT_STEP + READ_MIN);
+    return { zero: false, aEnd: FINALE_SUSPENSE, bT, cEnd, creditsT, flashT, dur };
+  }
   class LegendsFinaleScene {
     constructor(results, who, done) { this.results = results; this.who = who; this.done = done; this.t = 0; G.captureKeys = true; albPreload(); teoPreload(); }
     wins() { return (this.results.trazo && this.results.trazo.win === 'win' ? 1 : 0) + (this.results.soga && this.results.soga.win === 'win' ? 1 : 0); }
@@ -5107,13 +5182,13 @@
     update(dt) {
       const cs = this.cast(); cs.p.update(dt); cs.party.forEach((a) => a.update(dt)); cs.xim.update(dt); cs.jose.update(dt); cs.cat.update(dt);
       this.t += dt;
-      const w = this.wins(), dur = w === 0 ? 5 : 13.5;
-      if (this.t > 4.5 && this.t < 6.5 && w > 0) cs.xim.goTo(655, 208, 90); // Ximena despierta y camina al centro del set
-      if (this.t > 1 && G.input.hit('action')) this.t = Math.max(this.t, dur - 0.05);
-      if (this.t >= dur) { const d = this.done; this.done = null; if (d) d({ movie: w >= 1, full: w === 2, wins: w }); }
+      const w = this.wins(), tl = finaleTimeline(w);
+      if (this.t > FINALE_SUSPENSE && this.t < tl.bT && w > 0) cs.xim.goTo(655, 208, 90); // Ximena despierta y camina al centro del set mientras dura su línea
+      if (this.t > 1 && G.input.hit('action')) this.t = Math.max(this.t, tl.dur - 0.05);
+      if (this.t >= tl.dur) { const d = this.done; this.done = null; if (d) d({ movie: w >= 1, full: w === 2, wins: w }); }
     }
     draw(dt) {
-      const t = this.t, cs = this.cast(), w = this.wins();
+      const t = this.t, cs = this.cast(), w = this.wins(), tl = finaleTimeline(w);
       W.render({
         cam: CAM_SALA(), dt, light: FINALE_LIGHT, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
         sprites: () => {
@@ -5121,21 +5196,21 @@
           // Jose): el Alebrije aceptado/feliz de su hoja de poses,
           // celebrando con un brinco por código, y Teodora según el
           // resultado — versión plena: presenta y al flash de los
-          // créditos (t = 12,6, el mismo instante del destello 2D)
+          // créditos (tl.flashT, el mismo instante del destello 2D)
           // se toma la selfie con su sprite; 1/2: altiva, la
           // protagonista invitada; 0/2: su idle flotando. Alturas
           // las de las figuras por código (115 y 77 u), ancho por
           // el aspecto real de cada sprite.
           const alb = albImg('alebrije-feliz'); if (rocketReady(alb)) R.sprite(alb, 500, Math.abs(Math.sin(t * 3.2)) * 5, 168, { w: 115 * (alb.naturalWidth / alb.naturalHeight), h: 115, feet: 0, lit: 0.25, nostretch: true });
           R.flat(R.glowTex, 772, 0.8, 168, 23, { ry: 0.65, tint: [0.1, 0.05, 0.16], alpha: 0.5 });
-          const teoName = w === 2 ? (t >= 12.6 ? 'teodora-selfie' : 'teodora-presentadora') : w === 1 ? 'teodora-altiva' : 'teodora-idle';
+          const teoName = w === 2 ? (t >= tl.flashT ? 'teodora-selfie' : 'teodora-presentadora') : w === 1 ? 'teodora-altiva' : 'teodora-idle';
           const teo = teoImg(teoName); if (rocketReady(teo)) R.sprite(teo, 772, 24 + Math.sin(t * 2.2) * 3, 168, { w: 82 * (teo.naturalWidth / teo.naturalHeight), h: 82, feet: 0, lit: 0.2, nostretch: true });
         },
         over: (c) => {
-          if (w === 0) { legendsSubtitle(c, t < 2.6 ? 'TEODORA: «No apta para cine. Su fiesta, no mi película.»' : 'El set se apaga. La fiesta sigue… como fiesta.', '#ffd7f0'); return; }
-          if (t < 4.5) legendsSubtitle(c, 'El set entero contiene la respiración…', '#fff');
-          else if (t < 6.5) legendsSubtitle(c, 'XIMENA: «¿Me hicieron una fiesta… en una película?»', '#ffd7f0');
-          else if (t < 8 && w === 1) legendsSubtitle(c, 'TEODORA: «Esa línea era MÍA en el guion. Pero bueno: protagonista invitada.»', '#ffd7f0');
+          if (w === 0) { legendsSubtitle(c, t < tl.bT ? FINALE_LINE_0A : FINALE_LINE_0B, '#ffd7f0'); return; }
+          if (t < tl.aEnd) legendsSubtitle(c, FINALE_LINE_A, '#fff');
+          else if (t < tl.bT) legendsSubtitle(c, FINALE_LINE_B, '#ffd7f0');
+          else if (t < tl.cEnd && w === 1) legendsSubtitle(c, FINALE_LINE_C, '#ffd7f0');
           else {
             // créditos ridículos del guion, rodando sobre el set
             const credits = [
@@ -5148,11 +5223,11 @@
               w === 2 ? 'Teodora … Presentadora' : 'Teodora … Protagonista invitada',
               'La casa … como el set',
             ];
-            const shown = Math.min(credits.length, 1 + Math.floor((t - 8) / 0.62));
+            const shown = Math.min(credits.length, 1 + Math.floor((t - tl.creditsT) / CREDIT_STEP));
             panel(c, 120, 44, 400, 20 + shown * 19, 'rgba(14,10,24,.88)');
             G.text(c, 'CRÉDITOS', 320, 58, { size: 12, color: '#ffe96a', lw: 4 });
             credits.slice(0, shown).forEach((ln, i) => G.text(c, ln, 320, 78 + i * 19, { size: 12.5, color: '#fff', lw: 4 }));
-            if (t > 12.6) { c.fillStyle = `rgba(255,255,255,${Math.max(0, 0.85 - (t - 12.6) * 2)})`; c.fillRect(0, 0, 640, 360); G.text(c, '¡SELFIE OFICIAL DEL ELENCO!', 320, 330, { size: 13, color: '#ffd7f0', lw: 6 }); }
+            if (t > tl.flashT) { c.fillStyle = `rgba(255,255,255,${Math.max(0, 0.85 - (t - tl.flashT) * 2)})`; c.fillRect(0, 0, 640, 360); G.text(c, '¡SELFIE OFICIAL DEL ELENCO!', 320, 330, { size: 13, color: '#ffd7f0', lw: 6 }); }
           }
           if (t > 1) G.prompt(c, 'ESPACIO: saltar', 590, 344);
         },
@@ -5160,6 +5235,8 @@
     }
   }
   LegendsFinaleScene.LIGHT = FINALE_LIGHT;
+  LegendsFinaleScene.TIMELINE = finaleTimeline;
+  LegendsFinaleScene.READ = { min: READ_MIN, perChar: READ_PER_CHAR, gap: LINE_GAP, time: readTime };
   class LegendsEndingScene {
     // Escena-orquesta (mismo patrón que SpaceEndingScene de J1407b):
     // ES una escena que delega update/draw en la subescena actual y
