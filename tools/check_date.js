@@ -3,7 +3,9 @@
    HUMO DEL EASTER EGG «LA CITA» — Parte 1 (feat/easter-egg-cita)
    Node, sin navegador: carga los scripts REALES (incluido
    date.js) sobre el mismo DOM falso del smoke_v31 y ejercita:
-   A) La tabla DATE_SCENES suma 149 s y los suckAt cuadran.
+   A) La tabla DATE_SCENES suma 149 s, los suckAt cuadran y la
+      REGLA DE DISTANCIAS se cumple: w = (t1−t0) × PACE (150 px/s)
+      en las 4 escenas de franja (4350/3900/3600/4350).
    B) El SHA-256 propio de date.js contra vectores conocidos.
    C) verify(): código falso NO activa; con un hash de PRUEBA
       inyectado (gancho debug, el hash real jamás se toca en el
@@ -28,11 +30,13 @@
       parpadeo walk/idle al caminar juntos (histéresis), y Jose
       ya sin ramo en la plaza (sin drawBouquet en date.js).
    J) Escena 2 «San Ángel» (Parte 2): la Puerta de salida de la
-      plaza (mundo x=1900, el final de la franja de 2000 px) cruza a la franja de San Ángel
-      (1500 px, mismo modo libre), el cameo de Manolo y María
-      con Chuy camina a la izquierda una sola vez, las velas
-      parpadean, la Puerta del árbol devuelve a la plaza, y la
-      carpeta sanangel/ queda solo-local (.gitignore + FUENTES).
+      plaza (mundo x=4250, el final de la franja de 4350 px)
+      cruza a la franja de San Ángel (3900 px, mismo modo libre),
+      el cameo de Manolo y María con Chuy se dispara por cámara
+      (pan > 900) y camina a la izquierda una sola vez por
+      visita, las velas parpadean, la Puerta del árbol devuelve
+      a la plaza, y la carpeta sanangel/ queda solo-local
+      (.gitignore + FUENTES).
    K) Audio (pedidos de Jose): el archivo de la canción trae
       ~4 s de silencio inicial → AUDIO_SKIP=4: al arrancar se
       salta a esa posición (con re-aplicación ÚNICA si el
@@ -154,6 +158,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('cortes continuos (t1 de una = t0 de la siguiente)', DM.scenes.every((s, i) => i === 0 || DM.scenes[i - 1].t1 === s.t0));
   check('suckAt = t1 − 1,8 en las escenas 1–4', DM.scenes.slice(1, 5).every((s) => Math.abs(s.suckAt - (s.t1 - 1.8)) < 0.001));
   check('SUCK_DUR = 1,8 y JOSE_LAG = 0,15', DM.SUCK_DUR === 1.8 && DM.JOSE_LAG === 0.15);
+  // Regla de distancias (documento §5): caminar cada franja a
+  // PACE = 150 px/s (la velocidad del modo libre) dura lo que
+  // dura su bloque de la canción: w = (t1 − t0) × PACE.
+  const stripScenes = DM.scenes.filter((s) => s.w !== undefined);
+  check('PACE = 150 px/s (el ritmo de recorrido del modo libre)', DM.debug.PACE === 150, 'PACE=' + DM.debug.PACE);
+  check('la regla de distancias: w = (t1−t0) × PACE en las 4 escenas de franja (plaza 4350, sanangel 3900, aero 3600, castillo 4350)',
+    stripScenes.length === 4 && stripScenes.every((s) => s.w === (s.t1 - s.t0) * DM.debug.PACE) &&
+    DM.scenes.find((s) => s.id === 'plaza').w === 4350 && DM.scenes.find((s) => s.id === 'sanangel').w === 3900 &&
+    DM.scenes.find((s) => s.id === 'aero').w === 3600 && DM.scenes.find((s) => s.id === 'castillo').w === 4350,
+    JSON.stringify(stripScenes.map((s) => s.id + '=' + s.w)));
+  check('apertura y cita NO llevan w (son el departamento real, sin franja)',
+    DM.scenes.find((s) => s.id === 'apertura').w === undefined && DM.scenes.find((s) => s.id === 'cita').w === undefined);
 
   console.log('\nB) SHA-256 propio contra vectores conocidos');
   check("sha256('abc') correcto", DM.debug.sha256hex('abc') === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
@@ -291,7 +307,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (let i = 0; i < 60; i++) sc.update(0.05);
   key('ArrowRight', false);
   check('input sostenido mueve al activo (Ximena) por la franja', X.x > fx0 + 200, `x ${fx0} → ${X.x.toFixed(0)}`);
-  check('la cámara sigue al activo y no se sale de la franja (0..1360, mundo de 2000)', sc.pan > 100 && sc.pan <= 1360.01, `pan=${sc.pan.toFixed(1)}`);
+  check('la cámara sigue al activo y no se sale de la franja (0..3710, mundo de 4350)', sc.pan > 100 && sc.pan <= 3710.01, `pan=${sc.pan.toFixed(1)}`);
   check('el activo camina con su ciclo lateral al moverse (moving + distancia acumulada)', X.dist > 200, `dist=${X.dist.toFixed(0)}`);
   sc.draw(0.016); // el modo libre se dibuja sin explotar (walk_right incluido)
   key('Tab', true); key('Tab', false);
@@ -392,35 +408,61 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('el vocho espera FUERA de escena fuera de su ventana (t=20 → fase 31 ≥ cruce 7)', vx(20) === 9999, 'vx(20)=' + vx(20));
   check('el vocho va por la calle de primer plano (base 348–354) con Pollito a la ventanilla del conductor',
     FX.vocho.base >= 348 && FX.vocho.base <= 354 && FX.winCx > 0.3 && FX.winCx < 0.5);
-  // La franja creció a pedido de Jose: 2000 px de mundo, cámara
-  // 0..1360, para un paseo largo con los hitos bien separados.
-  check('la franja de la plaza mide 2000 px de mundo (cámara 0..1360)', sc.worldW === 2000, 'worldW=' + sc.worldW);
-  // Fijos: dentro de la franja y descubribles al fondo (con la
-  // cámara en pan máximo, el centro de tacos cae en pantalla y
-  // el de la Parroquia entra por la derecha: su mitad izquierda
-  // ya se ve, centro > 640 pero su span cruza el borde).
+  // La franja obedece la REGLA DE DISTANCIAS: 4350 px de mundo
+  // (29 s × PACE, el w de 'plaza' en la tabla), cámara 0..3710,
+  // con los hitos repartidos a lo largo del paseo.
+  const PAN_MAX = sc.worldW - 640;
+  check('la franja de la plaza mide 4350 px de mundo (29 s × PACE; cámara 0..3710) y sale de la tabla DATE_SCENES',
+    sc.worldW === 4350 && sc.worldW === DM.scenes.find((s) => s.id === 'plaza').w, 'worldW=' + sc.worldW);
   check('tacos y parroquia tienen posición fija dentro de la franja (0..worldW)',
     FX.tacosX > 0 && FX.tacosX < sc.worldW && FX.parroquiaX > 0 && FX.parroquiaX < sc.worldW,
     `tacos=${FX.tacosX}, parroquia=${FX.parroquiaX}, worldW=${sc.worldW}`);
-  check('con la cámara al fondo (pan=1360), tacos cae en pantalla y la Parroquia entra por la derecha (se descubren explorando)',
-    (FX.tacosX - 1360 * 0.5) > 200 && (FX.tacosX - 1360 * 0.5) < 640 &&
-    (FX.parroquiaX - 1360 * 0.25) > 600 && (FX.parroquiaX - 1360 * 0.25) - FX.parroquiaW / 2 < 640,
-    `tacos@${(FX.tacosX - 1360 * 0.5).toFixed(0)}, parroquia@${(FX.parroquiaX - 1360 * 0.25).toFixed(0)}`);
-  // Separación mínima entre hitos (≥250 px entre vecinas):
-  // dentro de la MISMA capa L1 (comparable 1:1), la Parroquia
-  // dista de la Catedral y de la vista; y en pantalla, con la
-  // cámara al fondo, los centros de tacos y Parroquia también.
-  check('los hitos quedan separados ≥250 px entre vecinos (Catedral→vista→Parroquia en su capa; tacos↔Parroquia en pantalla al fondo)',
-    (FX.vistaX - FX.catedralX) >= 250 && (FX.parroquiaX - FX.vistaX) >= 250 &&
-    Math.abs((FX.tacosX - 1360 * 0.5) - (FX.parroquiaX - 1360 * 0.25)) >= 250,
-    `capa: cat=${FX.catedralX}, vista=${FX.vistaX}, parr=${FX.parroquiaX}; pantalla: tacos=${(FX.tacosX - 680).toFixed(0)}, parr=${(FX.parroquiaX - 340).toFixed(0)}`);
-  // La vista de San Ángel: ancla de mundo en el NUEVO tramo
-  // final (1850–1950, donde va la Puerta de salida) y, con la
-  // cámara al fondo, su centro cae tras esa zona (pantalla
-  // 380–620, alineada con la Puerta: 1900−1360 = 540).
-  check('la vista de San Ángel ancla en el nuevo tramo final del mundo (1850–1950) y queda tras la Puerta de salida',
-    FX.vistaWorldX >= 1850 && FX.vistaWorldX <= 1950 && (FX.vistaX - 1360 * 0.2) >= 380 && (FX.vistaX - 1360 * 0.2) <= 620,
-    `worldX=${FX.vistaWorldX}, pantalla al fondo=${(FX.vistaX - 1360 * 0.2).toFixed(0)}`);
+  // Descubribilidad: muestreando la cámara en todo su recorrido,
+  // cada hito llega a verse casi entero DENTRO de su zona del
+  // paseo (la fracción visible se calcula con su capa y ancho:
+  // Catedral 430 en L1, tacos/Parroquia/vista desde PLAZA_FX).
+  const hitos = [
+    { n: 'Catedral', x: FX.catedralX, par: 0.25, w: 430, min: 0.75, zona: [0, 0.15] },
+    { n: 'tacos', x: FX.tacosX, par: 0.5, w: FX.tacosW, min: 0.75, zona: [0.35, 0.55] },
+    { n: 'Parroquia', x: FX.parroquiaX, par: 0.25, w: FX.parroquiaW, min: 0.75, zona: [0.60, 0.80] },
+    { n: 'vista de San Ángel', x: FX.vistaX, par: 0.2, w: FX.vistaW, min: 0.70, zona: [0.90, 1.0] },
+  ];
+  const visFrac = (h, pan) => {
+    const cx = h.x - pan * h.par;
+    return Math.max(0, Math.min(cx + h.w / 2, 640) - Math.max(cx - h.w / 2, 0)) / h.w;
+  };
+  for (const h of hitos) {
+    let best = 0;
+    for (let pan = h.zona[0] * PAN_MAX; pan <= h.zona[1] * PAN_MAX; pan += 10) best = Math.max(best, visFrac(h, pan));
+    check(`el hito ${h.n} se descubre en su zona del paseo (${(h.zona[0] * 100).toFixed(0)}–${(h.zona[1] * 100).toFixed(0)}% del recorrido, visibilidad ≥${(h.min * 100).toFixed(0)}%)`,
+      best >= h.min, `vis máx en zona=${(best * 100).toFixed(0)}%`);
+  }
+  // Separación: ≥250 px de capa entre vecinas comparables
+  // (Catedral→Parroquia→vista) y los momentos protagonistas (el
+  // pan en que cada centro cruza el centro de pantalla, acotado
+  // al recorrido) separados por ≥400 px de cámara.
+  const protPan = (h) => Math.max(0, Math.min(PAN_MAX, (h.x - 320) / h.par));
+  check('los hitos quedan separados: ≥250 px de capa (Catedral→Parroquia→vista) y protagonistas a ≥400 px de cámara',
+    (FX.parroquiaX - FX.catedralX) >= 250 && (FX.vistaX - FX.parroquiaX) >= 250 &&
+    (protPan(hitos[1]) - protPan(hitos[0])) >= 400 && (protPan(hitos[2]) - protPan(hitos[1])) >= 400 &&
+    (protPan(hitos[3]) - protPan(hitos[2])) >= 400,
+    `capa: cat=${FX.catedralX}, parr=${FX.parroquiaX}, vista=${FX.vistaX}; prot: ${hitos.map((h) => protPan(h).toFixed(0)).join('/')}`);
+  // La vista de San Ángel: ancla de mundo en el tramo final
+  // (4150–4350, donde va la Puerta de salida, ~100 px de margen
+  // al borde) y, con la cámara al fondo, su centro cae tras esa
+  // zona (pantalla 380–620, alineada con la Puerta: 4250−3710
+  // = 540).
+  check('la vista de San Ángel ancla en el tramo final del mundo (4150–4350) y queda tras la Puerta de salida',
+    FX.vistaWorldX >= 4150 && FX.vistaWorldX <= 4350 && (FX.vistaX - PAN_MAX * 0.2) >= 380 && (FX.vistaX - PAN_MAX * 0.2) <= 620,
+    `worldX=${FX.vistaWorldX}, pantalla al fondo=${(FX.vistaX - PAN_MAX * 0.2).toFixed(0)}`);
+  // La cámara llega al fondo de la franja y el dibujo aguanta
+  // en todo el recorrido (muestreo de pans con draw()).
+  X.x = sc.worldW - 100; X.y = sc.groundY;
+  for (let i = 0; i < 30; i++) sc.update(0.05);
+  check('la cámara se asienta al fondo de la franja (pan > 3400, sin pasar de 3710)', sc.pan > 3400 && sc.pan <= 3710.01, `pan=${sc.pan.toFixed(0)}`);
+  let plazaDrawOk = true;
+  for (const p of [0, 900, 1855, 2800, 3710]) { sc.pan = p; try { sc.draw(0.016); } catch (e) { plazaDrawOk = false; } }
+  check('draw() de la plaza no explota en ningún punto del paseo (pan 0/900/1855/2800/3710)', plazaDrawOk);
   check('el dibujo de la vista está condicionado a que la imagen cargó (si falta el asset local, no se dibuja ni se rompe)',
     dateSrc.includes('imgOk(vistaImg)') && dateSrc.includes('sanangel-vista.png'));
   check('FUENTES.md registra la vista como asset solo-local aportado por Jose',
@@ -433,8 +475,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('\nJ) Escena 2 «San Ángel»: Puerta de salida, franja libre, cameo, velas y vuelta');
   // La plaza ganó su Puerta de salida al final de la franja,
   // exactamente donde ancla la vista lejana de San Ángel.
-  check('la plaza tiene su Puerta de salida en el mundo x=1900 (el ancla de la vista de San Ángel, al final de la franja de 2000)',
-    sc.exitDoorX === 1900 && FX.vistaWorldX === sc.exitDoorX, 'exitDoorX=' + sc.exitDoorX);
+  check('la plaza tiene su Puerta de salida en el mundo x=4250 (el ancla de la vista de San Ángel, al final de la franja de 4350)',
+    sc.exitDoorX === 4250 && FX.vistaWorldX === sc.exitDoorX, 'exitDoorX=' + sc.exitDoorX);
   if (F.active !== 'ximena') sc.switchActive();
   X.x = sc.exitDoorX - 10; X.y = sc.groundY; J.x = X.x - 70; J.y = sc.groundY;
   sc.update(0.05);
@@ -447,20 +489,63 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ang !== sc && !!ang && ang.id === 'sanangel' && DM.state.state === 'sanangel', 'id=' + (ang && ang.id) + ', state=' + DM.state.state);
   for (let i = 0; i < 25 && ang.phase !== 'free'; i++) ang.update(0.05);
   check('San Ángel amanece en modo libre tras ~1 s de luz (sin paneo largo)', ang.phase === 'free', 'phase=' + ang.phase);
-  check('la franja de San Ángel mide 1500 px, con Puerta de entrada (90) y de salida junto al árbol (1400)',
-    ang.worldW === 1500 && ang.entryDoorX === 90 && ang.exitDoorX === 1400 && DM.debug.SANANGEL.worldW === 1500);
+  check('la franja de San Ángel mide 3900 px (26 s × PACE, el w de su tabla), con Puerta de entrada (90) y de salida junto al árbol (3800)',
+    ang.worldW === 3900 && ang.entryDoorX === 90 && ang.exitDoorX === 3800 && DM.debug.SANANGEL.worldW === 3900 &&
+    ang.worldW === DM.scenes.find((s) => s.id === 'sanangel').w,
+    `worldW=${ang.worldW}, exitDoorX=${ang.exitDoorX}`);
+  check('la pileta quedó en la zona media del paseo (x 1700–2200, ~50% del recorrido de 3900)',
+    ang.piletaX >= 1700 && ang.piletaX <= 2200, 'piletaX=' + ang.piletaX);
+  check('la Puerta del árbol está en el tramo final (3700–3900) y el árbol se apoya tras ella (su centro cae a pantalla 380–560 con la cámara al fondo)',
+    ang.exitDoorX >= 3700 && ang.exitDoorX <= 3900 &&
+    (ang.treeLayerCx - (ang.worldW - 640) * 0.25) >= 380 && (ang.treeLayerCx - (ang.worldW - 640) * 0.25) <= 560,
+    `exitDoorX=${ang.exitDoorX}, árbol@${(ang.treeLayerCx - (ang.worldW - 640) * 0.25).toFixed(0)}`);
+  // Cobertura de las casas (capa 0,4): con la cámara en pan
+  // 0..3260 la capa se desplaza 1304 px; los segmentos (anchos
+  // según los PNG reales: a=228×150, b=226×180, full=422×180)
+  // deben encadenarse sin huecos >30 px y cubrir hasta x≥1944
+  // de capa (= 0,4×3260 + 640) para que la calle nunca se quede
+  // sin casas.
+  const SA_ASPECT = { 'casas-a.png': 228 / 150, 'casas-b.png': 226 / 180, 'casas-full.png': 422 / 180 };
+  const saSegs = (DM.debug.SA_HOUSES || []).map((s) => {
+    const src = (s.img && s.img.src) || '';
+    const key = Object.keys(SA_ASPECT).find((k) => src.endsWith(k));
+    return { x: s.x, w: key ? s.h * SA_ASPECT[key] : 0 };
+  }).sort((a, b) => a.x - b.x);
+  let saCover = saSegs.length >= 8 && saSegs[0].x <= 0;
+  for (let i = 1; i < saSegs.length; i++) if (saSegs[i].x - (saSegs[i - 1].x + saSegs[i - 1].w) > 30) saCover = false;
+  const saCoverEnd = saSegs.length ? saSegs[saSegs.length - 1].x + saSegs[saSegs.length - 1].w : 0;
+  check('las casas de San Ángel cubren la calle en toda la franja (segmentos encadenados sin huecos >30 px de capa, hasta ≥1944)',
+    saCover && saCoverEnd >= 1944, `segmentos=${saSegs.length}, cobertura hasta ${saCoverEnd.toFixed(0)}`);
   const AF = ang.free, AX = AF.chars[AF.active];
   const ax0 = AX.x;
   key('ArrowRight', true);
   for (let i = 0; i < 40; i++) ang.update(0.05);
   key('ArrowRight', false);
-  check('en San Ángel el input mueve al activo y la cámara sigue dentro de la franja (pan 0..860)',
-    AX.x > ax0 + 150 && ang.pan >= 0 && ang.pan <= 860.01, `x ${ax0} → ${AX.x.toFixed(0)}, pan=${ang.pan.toFixed(0)}`);
+  check('en San Ángel el input mueve al activo y la cámara sigue dentro de la franja (pan 0..3260)',
+    AX.x > ax0 + 150 && ang.pan >= 0 && ang.pan <= 3260.01, `x ${ax0} → ${AX.x.toFixed(0)}, pan=${ang.pan.toFixed(0)}`);
   const aBefore = AF.active;
   key('Tab', true); key('Tab', false);
   check('TAB también alterna el personaje activo en San Ángel', AF.active !== aBefore, 'active=' + AF.active);
-  // El cameo: Manolo y María caminan juntos a la izquierda y
-  // Chuy acompaña a María; las distancias entre ellos no varían.
+  let saDrawOk = true;
+  for (const p of [0, 1000, 2000, 3260]) { ang.pan = p; try { ang.draw(0.016); } catch (e) { saDrawOk = false; } }
+  check('draw() de San Ángel no explota en ningún punto del paseo (pan 0/1000/2000/3260)', saDrawOk);
+  // El cameo se DISPARA por cámara: con el paseo al inicio aún
+  // no aparece; al superar la cámara ~900 px entra por el borde
+  // derecho y cruza a la izquierda, una sola vez por visita.
+  // (Se re-asienta cámara y activo al inicio: el muestreo de
+  // draw() de arriba dejó pan en 3260.)
+  const ACT = AF.chars[AF.active];
+  ACT.x = 210; ACT.y = ang.groundY; ang.pan = 0;
+  for (let i = 0; i < 5; i++) ang.update(0.05);
+  check('el cameo aún NO se ha disparado con la cámara al inicio del paseo (ni triggered ni done)',
+    ang.cameo.triggered === false && ang.cameo.done === false && ang.pan < 900, 'pan=' + ang.pan.toFixed(0));
+  ACT.x = 1600; ACT.y = ang.groundY;
+  for (let i = 0; i < 60 && !ang.cameo.triggered; i++) ang.update(0.05);
+  check('al superar la cámara ~900 px el cameo se dispara y entra por el borde derecho de la pantalla',
+    ang.cameo.triggered === true && ang.pan > 900 && ang.cameo.manoloX > ang.pan + 500,
+    `pan=${ang.pan.toFixed(0)}, manoloX=${ang.cameo.manoloX.toFixed(0)}`);
+  // Manolo y María caminan juntos a la izquierda y Chuy
+  // acompaña a María; las distancias entre ellos no varían.
   const cm0 = { m: ang.cameo.manoloX, ma: ang.cameo.mariaX, ch: ang.cameo.chuyX };
   for (let i = 0; i < 40; i++) ang.update(0.05);
   check('el cameo de Manolo y María camina hacia la izquierda a velocidad de paseo (~55 px/s)',
@@ -468,6 +553,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('María acompaña a Manolo a distancia fija y Chuy trota junto a María (sin separarse)',
     Math.abs((ang.cameo.mariaX - ang.cameo.manoloX) - (cm0.ma - cm0.m)) < 0.01 &&
     Math.abs((ang.cameo.chuyX - ang.cameo.mariaX) - (cm0.ch - cm0.ma)) < 0.01);
+  // La pasada termina saliendo por la izquierda del encuadre…
+  for (let i = 0; i < 500 && !ang.cameo.done; i++) ang.update(0.05);
+  check('el cameo termina su pasada saliendo por la izquierda del encuadre (done)', ang.cameo.done === true);
+  // …y NO se repite si el jugador retrocede y vuelve a avanzar.
+  const cmDoneX = ang.cameo.manoloX;
+  ACT.x = 210; ACT.y = ang.groundY;
+  for (let i = 0; i < 60; i++) ang.update(0.05);
+  ACT.x = 1600; ACT.y = ang.groundY;
+  for (let i = 0; i < 60; i++) ang.update(0.05);
+  check('la pasada NO se repite al retroceder y re-avanzar más allá del umbral (una por visita)',
+    ang.cameo.done === true && ang.cameo.manoloX === cmDoneX && ang.pan > 900,
+    `pan=${ang.pan.toFixed(0)}, manoloX=${ang.cameo.manoloX.toFixed(0)}`);
   // Las velas: decenas en el camino al árbol y parpadeo real.
   check('hay decenas de velas camino al árbol (26–40 instancias)', ang.candles.length >= 26 && ang.candles.length <= 40, 'n=' + ang.candles.length);
   const g0 = ang.candleGlowAt(0, 0), g1 = ang.candleGlowAt(0.7, 0), g2 = ang.candleGlowAt(3.1, 5);

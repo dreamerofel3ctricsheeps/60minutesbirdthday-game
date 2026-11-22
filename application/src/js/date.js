@@ -3,7 +3,7 @@
    Modo secreto: se controla a XIMENA en el departamento con
    todos escondidos, sale por la puerta principal y llega a la
    plaza de CDMX (capas parallax + recorte de foto real).
-   Parte 2: la Puerta de salida de la plaza (mundo x=1900, donde
+   Parte 2: la Puerta de salida de la plaza (mundo x=4250, donde
    ancla la vista lejana) cruza a la escena de SAN ÁNGEL, una
    segunda franja libre construida con recortes de las imágenes
    de El Libro de la Vida que aportó Jose (assets SOLO-LOCALES
@@ -88,14 +88,27 @@
   function verifyCode(txt) { return sha256hex(normalizeCode(txt)) === CODE_HASH; }
 
   // ---------- Tabla maestra de escenas (documento §11) ----------
+  // REGLA DE DISTANCIAS (documento §5): cada franja caminable se
+  // dimensiona para que recorrerla a ritmo de paseo dure lo que
+  // dura su bloque de la canción. El ritmo es PACE = 150 px/s (la
+  // velocidad del modo libre en las franjas), así que el ancho de
+  // cada escena de franja es w = (t1 − t0) × PACE:
+  //   plaza 29 s → 4350 · sanangel 26 s → 3900 · aero 24 s → 3600
+  //   · castillo 29 s → 4350.
+  // Apertura y cita son el departamento real (sin franja): no
+  // llevan w. Las escenas existentes toman su worldW de esta
+  // tabla (sceneOf) y el humo (sección A) verifica la regla, para
+  // que tiempos, distancias y escenas no se desincronicen.
+  const PACE = 150;
   const DATE_SCENES = [
     { id: 'apertura', t0: 0, t1: 12 },
-    { id: 'plaza', t0: 12, t1: 41, suckFx: 'polvo', suckAt: 39.2 },
-    { id: 'sanangel', t0: 41, t1: 67, suckFx: 'petalos', suckAt: 65.2 },
-    { id: 'aero', t0: 67, t1: 91, suckFx: 'boletos', suckAt: 89.2 },
-    { id: 'castillo', t0: 91, t1: 120, suckFx: 'estrellas', suckAt: 118.2 },
+    { id: 'plaza', t0: 12, t1: 41, w: 4350, suckFx: 'polvo', suckAt: 39.2 },
+    { id: 'sanangel', t0: 41, t1: 67, w: 3900, suckFx: 'petalos', suckAt: 65.2 },
+    { id: 'aero', t0: 67, t1: 91, w: 3600, suckFx: 'boletos', suckAt: 89.2 },
+    { id: 'castillo', t0: 91, t1: 120, w: 4350, suckFx: 'estrellas', suckAt: 118.2 },
     { id: 'cita', t0: 120, t1: 149, finaleAt: 137 },
   ];
+  const sceneOf = (id) => DATE_SCENES.find((s) => s.id === id);
   const SUCK_DUR = 1.8, DOOR_CALL_T = 5, DOOR_OPEN_T = 2, JOSE_LAG = 0.15;
   const MAIN_DOOR = { x: 510, y: 566 }; // puerta principal: borde sur del pasillo
 
@@ -305,27 +318,31 @@
 
   // Geometría y ciclos de los complementos. Las x de los elementos
   // fijos viven en el espacio de SU capa (pantalla con pan=0): la
-  // franja mide 2000 px de mundo y la cámara recorre pan 0..1360.
+  // franja mide 4350 px de mundo (29 s × PACE, la regla de la
+  // tabla maestra) y la cámara recorre pan 0..3710.
   // Reparto a lo largo del paseo (centros en pantalla, pan 0 →
-  // pan 1360): Catedral 268 → −72 (el recibimiento, se aleja),
-  // tacos 1080 → 400 (zona media, protagonista de la 2ª mitad),
-  // Parroquia 1062 → 722 (zona media-derecha, entra desde
-  // pan≈1044) y la vista 812 → 540, que con la cámara al fondo
-  // coincide con la Puerta de salida (mundo 1900 → pantalla 540):
-  // la Puerta se apoya justo delante de San Ángel. Ojo con la
-  // matemática de capas: un hito L1 (parallax 0,25) solo recorre
-  // 340 px de pantalla en todo el paseo, así que su x de capa no
-  // puede pasar de ~1140 sin quedar fuera de pantalla para
-  // siempre; 1062 la deja entrar por la derecha al final del
-  // paseo y a ≥250 px de capa de la Catedral y de la vista.
+  // pan 3710; el «momento protagonista» de cada hito es el pan en
+  // que su centro cruza el centro de la pantalla): Catedral
+  // 268 → −660 (el recibimiento: protagonista al llegar, pan 0),
+  // tacos 1155 → −700 (centrado a pan 1670, ~45% del paseo),
+  // Parroquia 970 → 43 (centrada a pan 2600, ~70%) y la vista
+  // 1282 → 540, que con la cámara al fondo coincide con la
+  // Puerta de salida (mundo 4250 → pantalla 540): la Puerta se
+  // apoya justo delante de San Ángel. Ojo con la matemática de
+  // capas: un hito L1 (parallax 0,25) recorre 928 px de pantalla
+  // en todo el paseo, así que un hito ancho se deja ver durante
+  // un trecho largo del recorrido; las x elegidas mantienen
+  // ≥250 px de capa entre vecinas (Catedral→Parroquia 702,
+  // Parroquia→vista 312) y los momentos protagonistas quedan
+  // separados por ≥900 px de cámara.
   const PLAZA_FX = {
     avion: { w: 138, y: 54, ciclo: 28, cruce: 14, desfase: 7, par: 0.15 },
     vocho: { w: 246, base: 351, ciclo: 32, cruce: 7, desfase: 11 },
     catedralX: 268,                       // L1 (parallax 0,25), con el asta en 96
-    tacosX: 1080, tacosW: 128,            // L2 (parallax 0,5)
-    parroquiaX: 1062, parroquiaW: 322,    // L1 (parallax 0,25)
-    vistaX: 812, vistaW: 352,             // capa lejana (parallax 0,2)
-    vistaWorldX: 1900,                    // su ancla en el mundo L4 (el final de la franja)
+    tacosX: 1155, tacosW: 128,            // L2 (parallax 0,5)
+    parroquiaX: 970, parroquiaW: 322,     // L1 (parallax 0,25)
+    vistaX: 1282, vistaW: 352,            // capa lejana (parallax 0,2)
+    vistaWorldX: 4250,                    // su ancla en el mundo L4 (el final de la franja)
     vistaSquash: 0.86,                    // aplana un pelo la vista para que las torres quepan en la banda del cielo
     // Ventanilla del conductor del vocho, en fracciones del
     // recorte (medidas sobre vocho.png: la ventana lateral
@@ -370,16 +387,22 @@
   const saArbol = loadDateImg('assets/date/sanangel/arbol.png');
   const saVelaA = loadDateImg('assets/date/sanangel/vela-a.png');
   const saVelaB = loadDateImg('assets/date/sanangel/vela-b.png');
-  // Geometría de la franja de San Ángel: 1500 px de mundo, la
-  // Puerta de entrada a la izquierda (x=90) y la de salida junto
-  // al árbol (x=1400). Las casas viven en su capa (parallax 0,4)
-  // como segmentos de x/h en ese espacio; el árbol ancla su
-  // centro en el espacio de la suya (parallax 0,25).
-  const SANANGEL = { worldW: 1500, entryDoorX: 90, exitDoorX: 1400, groundY: 316, horizon: 246 };
+  // Geometría de la franja de San Ángel: 3900 px de mundo (el
+  // w de su bloque en la tabla maestra: 26 s × PACE), la Puerta
+  // de entrada a la izquierda (x=90) y la de salida junto al
+  // árbol (x=3800). Las casas viven en su capa (parallax 0,4)
+  // como segmentos de x/h en ese espacio: con la cámara
+  // recorriendo pan 0..3260, la capa se desplaza 1304 px y los
+  // segmentos deben cubrir hasta x≈1950 de capa para que la
+  // calle no se quede sin casas en ningún punto del paseo; el
+  // árbol ancla su centro en el espacio de la suya (0,25).
+  const SANANGEL = { worldW: sceneOf('sanangel').w, entryDoorX: 90, exitDoorX: 3800, groundY: 316, horizon: 246 };
   const SA_HOUSES = [
     { img: saCasasA, x: -10, h: 112 }, { img: saCasasB, x: 176, h: 126 },
     { img: saCasasFull, x: 322, h: 126 }, { img: saCasasA, x: 640, h: 116 },
-    { img: saCasasB, x: 826, h: 122 },
+    { img: saCasasB, x: 826, h: 122 }, { img: saCasasFull, x: 962, h: 122 },
+    { img: saCasasA, x: 1232, h: 112 }, { img: saCasasB, x: 1418, h: 126 },
+    { img: saCasasFull, x: 1552, h: 126 }, { img: saCasasA, x: 1830, h: 116 },
   ];
   // Velitas colgando de la copa del árbol: fracciones (x, y)
   // sobre la caja en que se dibuja el recorte del árbol; el
@@ -577,22 +600,24 @@
       // compensateScale() y rawProjectedHeight().
       this.scaleRef = this.rawProjectedHeight(800, 470, { x: 800, y: 0, z: 440, dist: 560, pitch: 0.8 });
       // --- La plaza como mundo navegable (modo libre, ver
-      // updateFree): la franja mide 2000 px de mundo (Jose pidió
-      // un paseo más largo, con los hitos bien separados); la
-      // cámara (this.pan, en px de mundo a velocidad L4) se
-      // desplaza 0..(2000−640) = 0..1360. La Puerta queda FIJA
+      // updateFree): la franja mide lo que manda la tabla
+      // maestra (w de 'plaza' = 29 s × PACE = 4350 px de mundo);
+      // la cámara (this.pan, en px de mundo a velocidad L4) se
+      // desplaza 0..(4350−640) = 0..3710. La Puerta queda FIJA
       // donde quedó al llegar (mundo x=174) y los personajes
       // parten de sus posiciones de mundo del revelado (al final
       // del paneo, cámara=90: Ximena en pantalla 168 → mundo
-      // 258; Jose 238 → 328). A 150 u/s, cruzar la franja entera
-      // caminando toma ~13 s: es la intención, un paseo largo.
-      this.worldW = 2000; this.doorX = 174; this.groundY = 316;
+      // 258; Jose 238 → 328). A 150 u/s (PACE), cruzar la franja
+      // entera caminando toma los 29 s de su bloque de la
+      // canción: esa es la regla de distancias (ver DATE_SCENES).
+      this.worldW = sceneOf('plaza').w; this.doorX = 174; this.groundY = 316;
       this.free = makeStripChars(258, 328, 316);
       // La Puerta de SALIDA de la plaza: la misma Puerta de
-      // siempre, al final de la franja (mundo x=1900), justo
-      // donde ancla la vista lejana de San Ángel que se ve en el
-      // fondo (PLAZA_FX.vistaWorldX). Cruzarla lleva a la escena
-      // de San Ángel; su Puerta del árbol devuelve aquí.
+      // siempre, al final de la franja (mundo x=4250, ~100 px de
+      // margen al borde), justo donde ancla la vista lejana de
+      // San Ángel que se ve en el fondo (PLAZA_FX.vistaWorldX).
+      // Cruzarla lleva a la escena de San Ángel; su Puerta del
+      // árbol devuelve aquí.
       this.exitDoorX = PLAZA_FX.vistaWorldX; this.nearExit = false;
     }
     // Altura en pantalla (px lógicos) de un segmento vertical con
@@ -965,15 +990,22 @@
       this.entryDoorX = SANANGEL.entryDoorX; this.exitDoorX = SANANGEL.exitDoorX;
       this.pan = 0; this.joseExpr = 'happy';
       this.nearDoor = false; this.nearDoorX = this.entryDoorX; this.usedDoorX = this.entryDoorX;
-      this.piletaX = 750; this.piletaBaseY = 286; this.piletaW = 235;
-      this.treeLayerCx = 685; // centro del árbol en el espacio de su capa (parallax 0,25)
+      this.piletaX = 1950; this.piletaBaseY = 286; this.piletaW = 235;
+      // Centro del árbol en el espacio de su capa (parallax
+      // 0,25): con la cámara al fondo (pan 3260) su centro cae a
+      // pantalla ~470, tras la Puerta de salida (540) — la misma
+      // composición final que tenía la franja corta.
+      this.treeLayerCx = 1285;
       this.free = makeStripChars(210, 280, this.groundY);
       // Las velas del suelo: dos filas curvas que convergen
       // hacia la Puerta del árbol formando el camino de la
-      // pintura, más un arco de velas frente a la Puerta.
+      // pintura, más un arco de velas frente a la Puerta. Las
+      // filas arrancan ~395 px antes de la Puerta y cierran a
+      // ~65 px de ella (las mismas distancias de siempre,
+      // ancladas a la nueva posición de la Puerta, x=3800).
       this.candles = [];
       for (let i = 0; i < 15; i++) {
-        const s = i / 14, cx = 1005 + s * 330, cy = 340 - s * 22, off = 17 - s * 7;
+        const s = i / 14, cx = 3405 + s * 330, cy = 340 - s * 22, off = 17 - s * 7;
         this.candles.push({ x: cx, y: cy - off, size: 11 + (i % 3) * 3, v: i % 2 });
         this.candles.push({ x: cx + 9, y: cy + off, size: 12 + ((i + 1) % 3) * 3, v: (i + 1) % 2 });
       }
@@ -986,7 +1018,10 @@
     resetCameo() {
       // Manolo y María vienen del lado del árbol caminando
       // juntos hacia la izquierda; Chuy trota junto a María.
-      this.cameo = { x: 1010, y: 322, dist: 0, done: false, manoloX: 1010, mariaX: 1064, chuyX: 1098 };
+      // Con la franja larga su pasada no nace en una posición
+      // fija: se DISPARA por cámara (ver updateCameo) y ocurre
+      // una sola vez por visita.
+      this.cameo = { triggered: false, done: false, x: 0, y: 322, dist: 0, manoloX: 0, mariaX: 54, chuyX: 88 };
     }
     candleGlowAt(t, i) { return candleGlow(t, i); }
     switchActive() {
@@ -1040,9 +1075,19 @@
     updateCameo(dt) {
       const cm = this.cameo;
       if (cm.done) return;
+      if (!cm.triggered) {
+        // Disparo por cámara: cuando el paseo ya avanzó (la
+        // cámara supera ~900 px), la pareja aparece por el borde
+        // derecho de la pantalla y cruza hacia la izquierda.
+        // Una sola pasada por visita: si el jugador retrocede y
+        // vuelve a avanzar, NO se repite (triggered queda puesto
+        // y, al terminar, done también).
+        if (this.pan > 900) { cm.triggered = true; cm.x = this.pan + 640 + 60; }
+        else return;
+      }
       cm.x -= 55 * dt; cm.dist += 55 * dt; // velocidad de paseo
       cm.manoloX = cm.x; cm.mariaX = cm.x + 54; cm.chuyX = cm.x + 88;
-      if (cm.x < -170) cm.done = true; // una sola pasada por visita
+      if (cm.x < this.pan - 220) cm.done = true; // salió del encuadre por la izquierda
     }
     draw(dt) {
       const c = G.ovCtx; if (!c) return;
@@ -1082,9 +1127,10 @@
       const tileOff = -(pan % 34);
       for (let x = tileOff; x < 640; x += 34) { c.beginPath(); c.moveTo(x, horizon + 4); c.lineTo(x - 9, 360); c.stroke(); }
       for (let y = horizon + 15; y < 360; y += 17) { c.beginPath(); c.moveTo(0, y); c.lineTo(640, y); c.stroke(); }
-      // velo de anochecer: la zona del árbol oscurece de forma
-      // progresiva según x de mundo (anclado, no a la pantalla)
-      const veil = c.createLinearGradient(860 - pan, 0, 1400 - pan, 0);
+      // velo de anochecer: el último tercio del paseo oscurece
+      // de forma progresiva según x de mundo (anclado, no a la
+      // pantalla): empieza a ~2600 y es pleno al llegar al árbol
+      const veil = c.createLinearGradient(2600 - pan, 0, 3550 - pan, 0);
       veil.addColorStop(0, 'rgba(24,18,50,0)'); veil.addColorStop(1, 'rgba(24,18,50,0.58)');
       c.fillStyle = veil; c.fillRect(0, 0, 640, 360);
       // resplandor cálido de las velas junto a la Puerta del árbol
@@ -1123,7 +1169,7 @@
           c.drawImage(saPileta, this.piletaX - pan - w / 2, this.piletaBaseY - h, w, h);
         },
       });
-      if (!this.cameo.done) items.push({ y: this.cameo.y, fn: () => this.drawCameo(c, pan) });
+      if (this.cameo.triggered && !this.cameo.done) items.push({ y: this.cameo.y, fn: () => this.drawCameo(c, pan) });
       const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
       for (const ch of chars) {
         items.push({
@@ -1230,7 +1276,7 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, candleGlow, travelTo,
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, candleGlow, travelTo, PACE,
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.
