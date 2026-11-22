@@ -3294,6 +3294,30 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('solo-cabeza: elegir desde la tarjeta sigue resolviendo al roomie tocado', pickedZ === G.PLAYABLE[0], 'picked=' + pickedZ);
   }
 
+  // --- Sección AA: el «filtro raro» del posproceso queda NEUTRO ---
+  // Playtest de Jose (2026-11-22): «cuando inicia el juego noto que
+  // hay un filtro raro que sube la nitidez de los colores y se ve
+  // raro». El filtro es la corrección de color de la pasada final
+  // de gl3d.js (FS_P): saturación 1.14 + curva S de contraste al
+  // 0.55 + tinte cálido (1.03, 1.00, 0.97), aplicada SIEMPRE que el
+  // 3D renderiza — los menús son DOM sin filtrar, por eso el salto
+  // se nota al empezar a jugar (no hay rampa: uFx solo escala
+  // blur/bloom/viñeta y ninguna cámara lo baja de 1). Ahora las
+  // tres palancas viven en constantes nombradas y NEUTRAS; el
+  // resto de la pasada (tilt-shift, bloom, viñeta) sigue intacto.
+  {
+    console.log('\nAA) Posproceso — corrección de color neutra (el «filtro raro» de Jose)');
+    const glTxt = fs.readFileSync(path.join(SRC, 'gl3d.js'), 'utf8');
+    check('filtro: las tres palancas de color viven en constantes nombradas y NEUTRAS (POST_SAT 1.0, POST_CONTRASTE 0.0, POST_TINTE 0.0)',
+      glTxt.includes('const POST_SAT = 1.0;') && glTxt.includes('const POST_CONTRASTE = 0.0;') && glTxt.includes('const POST_TINTE = 0.0;'), '');
+    check('filtro: el shader interpola las constantes (una sola fuente de verdad para pedir «la mitad» después)',
+      glTxt.includes('${POST_SAT.toFixed(3)}') && glTxt.includes('${POST_CONTRASTE.toFixed(3)}') && glTxt.includes('${POST_TINTE.toFixed(3)}'), '');
+    check('filtro: el realce anterior desapareció del shader (nada de saturación 1.14 ni tinte directo)',
+      !glTxt.includes('c, 1.14)') && !glTxt.includes('c *= vec3(1.03,1.0,0.97);') && !glTxt.includes('*0.55 + c*0.45'), '');
+    check('filtro: la pasada de posproceso SIGUE existiendo con lo que no es color (tilt-shift de 9 taps, bloom y viñeta por uFx, pasada final al FBO)',
+      glTxt.includes('c /= 9.;') && glTxt.includes('b/12.*1.5*uFx') && glTxt.includes('dot(d,d)*0.75*uFx') && glTxt.includes('pasada final a pantalla'), '');
+  }
+
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR FATAL en la prueba:', e); process.exit(2); });
