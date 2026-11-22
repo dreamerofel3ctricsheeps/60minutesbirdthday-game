@@ -350,6 +350,19 @@
   // cargó (imgOk): sin el archivo, ni el aeropuerto ni las
   // praderas lo muestran y ambas escenas se juegan igual.
   const castilloImg = loadDateImg('assets/date/castillo.png');
+  // CALCIFER y MONONOKE: dos recortes más de película
+  // aportados por Jose para las praderas (pedido suyo: la
+  // escena se veía muy vacía) — Calcifer es el fuego de la
+  // película del castillo ambulante y hace de OBSTÁCULO de la
+  // vereda; San y la loba Moro (La princesa Mononoke) observan
+  // desde la arboleda del fondo. Como el castillo y la vista
+  // de San Ángel: SOLO-LOCALES, fuera de git (ver
+  // FUENTES.md), SIN borde blanco, y se dibujan SOLO si
+  // cargaron (imgOk): Calcifer tiene respaldo dibujado por
+  // código para que el obstáculo nunca sea invisible, y la
+  // arboleda se dibuja igual sin el recorte de Mononoke.
+  const calciferImg = loadDateImg('assets/date/calcifer.png');
+  const mononokeImg = loadDateImg('assets/date/mononoke.png');
 
   // Geometría y ciclos de los complementos. Las x de los elementos
   // fijos viven en el espacio de SU capa (pantalla con pan=0): la
@@ -1832,7 +1845,116 @@
     // caja (x desde la izquierda, y desde arriba): de ahí
     // sale el humo dibujado por código.
     humo: [[0.448, 0.02], [0.565, 0.08], [0.615, 0.10]],
+    // --- Enriquecimiento de las praderas (pedido de Jose: la
+    // escena se veía MUY VACÍA, también el cielo) ---
+    // Los CALCIFER de la vereda: el obstáculo de fuego de
+    // esta escena (patrón de las bolas de paja: chocar solo
+    // frena, ×frenoK durante frenoT). ESTÁTICOS sobre su
+    // tronquito, repartidos por el trecho medio de la franja
+    // (fuera del arranque y de la zona de la Puerta del
+    // castillo), cada uno a una altura distinta de la banda
+    // caminable (yOff sobre groundY, ±26) para obligar a
+    // esquivar también en vertical. Tamaños 46–60 px de alto
+    // (el recorte es ancho por los brazos: ~2,45× el alto).
+    calciferes: [
+      { x: 720, yOff: -18, size: 52 }, { x: 1150, yOff: 16, size: 58 },
+      { x: 1560, yOff: -4, size: 48 }, { x: 1980, yOff: 20, size: 55 },
+      { x: 2430, yOff: -16, size: 50 }, { x: 2890, yOff: 10, size: 60 },
+      { x: 3320, yOff: -8, size: 46 },
+    ],
+    // frenoK/frenoT: el trastabilleo de siempre. offT: tras
+    // el fogonazo el Calcifer queda «apagado» (tenue y sin
+    // colisión) esos segundos y se reaviva — no puede frenar
+    // dos veces seguidas al mismo paso. rBase: el radio de
+    // peligro, que pulsa con el parpadeo (rBase × flick da
+    // ~24–28 px).
+    calcifer: { frenoK: 0.4, frenoT: 0.7, offT: 3, rBase: 26 },
+    // La ARBOLEDA del fondo (dibujada por código) y MONONOKE
+    // observando desde ella: viven en una capa de fondo
+    // (parallax 0,45, la de la colina lejana). Su centro de
+    // capa (1450) cruza el centro de pantalla a pan 2511, el
+    // ~68% del paseo (segunda mitad), y acompaña en pantalla
+    // la zona de mundo 2800–3300 del caminante (pan
+    // 2480–2980). baseY: las copas se apoyan tras la línea
+    // de la colina y el suelo de la pradera tapa la base.
+    arboleda: { par: 0.45, layerCx: 1450, baseY: 292 },
+    mononoke: { h: 218 }, // alto del recorte al dibujarlo (ancho según su aspecto 760×839)
+    // El SOL de la tarde: disco con halo en la capa más
+    // lejana (parallax 0,06): acompaña todo el paseo (su
+    // centro pasa de pantalla 500 a pan 0 a ~277 a pan 3710).
+    sol: { par: 0.06, layerCx: 500, y: 66, r: 17 },
+    // El DIRIGIBLE dibujado que cruza el cielo: ciclo largo
+    // de 120 s (cruza en 75 s a ~15 px/s y espera fuera de
+    // escena), como el avión de la plaza pero mucho más lento.
+    dirigible: { ciclo: 120, cruce: 75, desfase: 20, y: 58, par: 0.05 },
+    // Anclas de las MARIPOSAS dibujadas (vuelo errático por
+    // senos junto a las flores, en la capa de personajes).
+    mariposas: [{ x: 1250, dy: -54 }, { x: 2350, dy: -44 }, { x: 3050, dy: -60 }],
   };
+  // Las TRES profundidades de nubes de las praderas (Jose:
+  // «veo muy vacío el cielo»): bancos lejanos grandes y bajos
+  // sobre las montañas (capa 0, se dibujan ENTRE las dos
+  // cordilleras) y dos capas de nubes viajeras (1 y 2, la
+  // media más grande que antes). praderaClouds(t, pan) da la
+  // lista en pantalla para que el dibujo y el humo compartan
+  // la misma verdad: en cualquier pan hay varias masas
+  // visibles a la vez.
+  const PR_NUBES = [
+    { n: 4, paso: 460, span: 1150, off: 255, vel: 1.2, par: 0.05, y0: 176, yVar: 26, s0: 2.0, sVar: 0.6, a: 0.55 },
+    { n: 6, paso: 320, span: 940, off: 150, vel: 2.2, par: 0.08, y0: 34, yVar: 44, s0: 0.75, sVar: 0.4, a: 0.75 },
+    { n: 5, paso: 430, span: 980, off: 170, vel: 4.5, par: 0.18, y0: 62, yVar: 54, s0: 1.45, sVar: 0.55, a: 0.92 },
+  ];
+  function praderaClouds(t, pan) {
+    const out = [];
+    PR_NUBES.forEach((L, capa) => {
+      for (let i = 0; i < L.n; i++) {
+        const lx = i * L.paso + hashN(i * 3.3 + capa * 13.7) * 130;
+        const x = (((lx + t * L.vel - pan * L.par) % L.span) + L.span) % L.span - L.off;
+        out.push({
+          x, y: L.y0 + hashN(i * 7.1 + capa * 7.9) * L.yVar,
+          s: L.s0 + hashN(i * 5.7 + capa * 3.1) * L.sVar, a: L.a, capa,
+        });
+      }
+    });
+    return out;
+  }
+  // Centro del dirigible (px de pantalla, SIN parallax) en el
+  // tiempo t: cruza de izquierda a derecha durante `cruce` s
+  // y el resto del ciclo espera fuera de escena (−9999).
+  function dirigibleXAt(t) {
+    const f = PRADERA.dirigible, ph = (((t + f.desfase) % f.ciclo) + f.ciclo) % f.ciclo;
+    if (ph >= f.cruce) return -9999;
+    return -240 + (ph / f.cruce) * 1140;
+  }
+  // Una bandada de pájaros dibujados (3–5 por grupo): cruza
+  // el cielo en ~26 s dentro de su ciclo de 71 s (cada grupo
+  // k con su desfase y su altura) y fuera de la ventana no
+  // existe (null). `flap` es la fase del aleteo de cada pájaro.
+  function bandadaAt(t, k) {
+    const ciclo = 71, cruce = 26, ph = (((t + k * 23) % ciclo) + ciclo) % ciclo;
+    if (ph > cruce) return null;
+    const base = [[0, 0], [24, 9], [48, -3], [70, 7]];
+    return {
+      x: -90 + (ph / cruce) * 820,
+      y: 46 + k * 30 + Math.sin(t * 0.9 + k * 2.0) * 5,
+      pts: base.map(([dx, dy], i) => ({ dx, dy, flap: Math.sin(t * 9 + i * 1.3 + k * 2.2) })),
+    };
+  }
+  // El parpadeo de un Calcifer: dos senos desfasados por
+  // instancia; escala 1 ± 0,06 como mucho. Su radio de
+  // peligro pulsa con el mismo factor (rBase × flick).
+  function calciferFlick(t, i) {
+    return 1 + 0.04 * Math.sin(t * 7 + i * 1.93) + 0.02 * Math.sin(t * 11.3 + i * 0.71);
+  }
+  // Posición de una mariposa en el tiempo t: vuelo errático
+  // por senos alrededor de su ancla (junto a las flores).
+  function mariposaAt(t, i) {
+    const an = PRADERA.mariposas[i % PRADERA.mariposas.length];
+    return {
+      x: an.x + Math.sin(t * 0.31 + i * 2.1) * 38 + Math.sin(t * 0.83 + i) * 9,
+      y: PRADERA.groundY + an.dy + Math.sin(t * 0.97 + i * 1.7) * 9,
+    };
+  }
   // Cresta de montaña determinista (suma de senos): el mismo
   // perfil para cualquier pan, sin memoria ni azar por frame.
   function ridgeY(x, seed) {
@@ -1850,6 +1972,18 @@
       this.pan = 0; this.joseExpr = 'happy';
       this.nearDoor = false; this.nearDoorX = this.entryDoorX; this.usedDoorX = this.entryDoorX;
       this.free = makeStripChars(210, 280, this.groundY);
+      // El freno de los Calcifer (patrón de las bolas de paja
+      // de San Ángel): frenoT = segundos que le quedan y
+      // speedK es el gancho que lee updateStripFree. Las
+      // chispas son las brasas del último fogonazo.
+      this.frenoT = 0; this.speedK = 1;
+      this.resetCalcifers();
+    }
+    // Los Calcifer parten encendidos y sin brasas sueltas:
+    // al construir la escena y en cada entrada.
+    resetCalcifers() {
+      this.calciferes = PRADERA.calciferes.map((d, i) => ({ x: d.x, yOff: d.yOff, size: d.size, i, offT: 0, popT: 0 }));
+      this.chispas = [];
     }
     switchActive() {
       if (this.phase !== 'free') return;
@@ -1865,6 +1999,7 @@
       A.x = this.entryDoorX + 120; A.y = this.groundY;
       B.x = this.entryDoorX + 190; B.y = this.groundY; B.follow = false;
       this.pan = 0; this.nearDoor = false;
+      this.frenoT = 0; this.speedK = 1; this.resetCalcifers();
     }
     beginExit() {
       if (this.phase !== 'free') return;
@@ -1899,7 +2034,45 @@
       this.nearDoor = Math.min(dE, dX) < 58 && Math.abs(A.y - this.groundY) < 40;
       this.nearDoorX = dE <= dX ? this.entryDoorX : this.exitDoorX;
       if (this.nearDoor && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
+      // El freno de los Calcifer corre ANTES del movimiento:
+      // speedK es el gancho que updateStripFree aplica a la
+      // velocidad del controlado (el seguidor va a su aire).
+      if (this.frenoT > 0) this.frenoT = Math.max(0, this.frenoT - dt);
+      this.speedK = this.frenoT > 0 ? PRADERA.calcifer.frenoK : 1;
       updateStripFree(this, dt);
+      this.updateCalcifers(dt);
+    }
+    // Los Calcifer de la vereda: quietos sobre su tronquito,
+    // parpadeando. SOLO el personaje CONTROLADO puede
+    // quemarse (círculo contra círculo: su radio de peligro
+    // pulsa con el parpadeo); el seguidor los atraviesa sin
+    // efecto, como a las bolas de paja. Al tocar uno: fogonazo
+    // (popT, con sus chispas) + el trastabilleo de siempre
+    // (frenoT), y ese Calcifer queda APAGADO offT segundos
+    // (tenue y sin colisión) antes de reavivarse.
+    updateCalcifers(dt) {
+      const F = this.free, A = F.chars[F.active], CFG = PRADERA.calcifer;
+      for (const cal of this.calciferes) {
+        if (cal.offT > 0) cal.offT = Math.max(0, cal.offT - dt);
+        if (cal.popT > 0) cal.popT = Math.max(0, cal.popT - dt);
+        if (cal.offT > 0) continue;
+        const r = CFG.rBase * calciferFlick(this.t, cal.i);
+        const cx = cal.x, cy = this.groundY + cal.yOff - cal.size / 2;
+        const dx = cx - A.x, dy = cy - (A.y - 48);
+        if (dx * dx + dy * dy < (r + 24) * (r + 24)) {
+          cal.offT = CFG.offT; cal.popT = 0.28;
+          for (let i = 0; i < 8; i++) {
+            const ang = Math.random() * 6.283, sp = 26 + Math.random() * 60;
+            this.chispas.push({ x: cx, y: cy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 34, t: 0, life: 0.4 + Math.random() * 0.25, warm: Math.random() });
+          }
+          this.frenoT = CFG.frenoT;
+          G.sfx('bump');
+        }
+      }
+      // Las brasas del fogonazo: salen disparadas, suben un
+      // poco por el calor y se apagan.
+      for (const s of this.chispas) { s.t += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 26 * dt; }
+      this.chispas = this.chispas.filter(s => s.t < s.life);
     }
     draw(dt) {
       const c = G.ovCtx; if (!c) return;
@@ -1910,8 +2083,20 @@
       const sky = c.createLinearGradient(0, 0, 0, horizon + 30);
       sky.addColorStop(0, '#6f9fd0'); sky.addColorStop(0.6, '#bcd9ea'); sky.addColorStop(1, '#f6e2b4');
       c.fillStyle = sky; c.fillRect(0, 0, 640, horizon + 30);
-      // nubes algodonosas a dos profundidades, derivando lento
-      // con el viento (como las del póster: blancas y redondas)
+      // el SOL de la tarde en la capa más lejana: disco cálido
+      // con su halo radial, fijo a su capa (parallax 0,06)
+      {
+        const so = PRADERA.sol, sx = so.layerCx - pan * so.par, sy = so.y;
+        const halo = c.createRadialGradient(sx, sy, 4, sx, sy, 62);
+        halo.addColorStop(0, 'rgba(255,238,186,0.55)'); halo.addColorStop(1, 'rgba(255,238,186,0)');
+        c.fillStyle = halo; c.beginPath(); c.arc(sx, sy, 62, 0, 6.3); c.fill();
+        c.fillStyle = '#fff3c4'; c.beginPath(); c.arc(sx, sy, so.r, 0, 6.3); c.fill();
+      }
+      // nubes algodonosas derivando con el viento (como las
+      // del póster: blancas y redondas). Las da praderaClouds
+      // en TRES profundidades: aquí van las dos viajeras (1 y
+      // 2, la media más grande que antes); los bancos lejanos
+      // (capa 0) se pintan entre las dos cordilleras, más abajo.
       const cloud = (x, y, s, a) => {
         c.fillStyle = `rgba(255,252,246,${a})`;
         c.beginPath();
@@ -1920,15 +2105,25 @@
         c.ellipse(x - 21 * s, y + 2 * s, 16 * s, 5.5 * s, 0, 0, 6.3);
         c.fill();
       };
-      for (let i = 0; i < 5; i++) {
-        const lx = i * 340 + hashN(i * 3.3) * 120;
-        const sx = (((lx + t * 2.2 - pan * 0.08) % 900) + 900) % 900 - 130;
-        cloud(sx, 34 + hashN(i * 7.1) * 44, 0.75 + hashN(i * 5.7) * 0.4, 0.75);
+      const nubes = praderaClouds(t, pan);
+      for (const nb of nubes) if (nb.capa > 0) cloud(nb.x, nb.y, nb.s, nb.a);
+      // el DIRIGIBLE que cruza el cielo, pequeño y lejano
+      {
+        const dx = dirigibleXAt(t);
+        if (dx > -999) this.drawDirigible(c, dx - pan * PRADERA.dirigible.par, PRADERA.dirigible.y + Math.sin(t * 0.7) * 2);
       }
-      for (let i = 0; i < 4; i++) {
-        const lx = i * 430 + 140 + hashN(i * 4.9) * 130;
-        const sx = (((lx + t * 4.5 - pan * 0.18) % 980) + 980) % 980 - 170;
-        cloud(sx, 66 + hashN(i * 9.3) * 52, 1.15 + hashN(i * 6.1) * 0.5, 0.92);
+      // las BANDADAS de pájaros que cruzan de cuando en cuando
+      for (let k = 0; k < 2; k++) {
+        const bd = bandadaAt(t, k);
+        if (!bd) continue;
+        c.strokeStyle = 'rgba(40,50,60,0.8)'; c.lineWidth = 1.4; c.lineCap = 'round';
+        for (const p of bd.pts) {
+          const bx = bd.x + p.dx - pan * 0.07, by = bd.y + p.dy, w = p.flap * 2.6;
+          c.beginPath();
+          c.moveTo(bx - 5.5, by + 1.6 - w * 0.4); c.quadraticCurveTo(bx - 2.4, by - 2.6 - w, bx, by);
+          c.quadraticCurveTo(bx + 2.4, by - 2.6 - w, bx + 5.5, by + 1.6 - w * 0.4);
+          c.stroke();
+        }
       }
       // ===== montañas al fondo, en dos capas =====
       const ridgePts = (par, baseOff, amp, seed) => {
@@ -1951,6 +2146,10 @@
         c.lineTo(x + 3, y + 4); c.lineTo(x, y + 7); c.lineTo(x - 3, y + 4);
         c.closePath(); c.fill();
       }
+      // los BANCOS de nubes lejanos (capa 0): grandes y bajos,
+      // flotando sobre la cordillera lejana y detrás de la
+      // cercana — el cielo nunca queda vacío sobre las montañas
+      for (const nb of nubes) if (nb.capa === 0) cloud(nb.x, nb.y, nb.s, nb.a);
       // la cercana (parallax 0,22): verdosa y más baja
       pts = ridgePts(0.22, -14, 0.7, 7.3);
       c.fillStyle = '#74917c';
@@ -1966,6 +2165,10 @@
         c.lineTo(sx, horizon + 6 + Math.sin(lx * 0.013 + 1.2) * 5 + Math.sin(lx * 0.031) * 3);
       }
       c.lineTo(648, horizon + 34); c.closePath(); c.fill();
+      // la ARBOLEDA del fondo con MONONOKE observando (solo si
+      // su recorte solo-local cargó): se dibuja aquí, tras la
+      // colina, y el suelo de la pradera le tapa la base
+      this.drawArboleda(c, pan);
       // el suelo de la pradera (la capa de la vereda)
       const gr = c.createLinearGradient(0, horizon + 20, 0, 360);
       gr.addColorStop(0, '#93c168'); gr.addColorStop(1, '#679c46');
@@ -1981,12 +2184,31 @@
         if (h1 < 0.4) continue;
         c.beginPath(); c.ellipse(wx - pan + h1 * 14, groundY - 10 + hashN(wx * 1.13) * 24, 2.6, 1.4, 0, 0, 6.3); c.fill();
       }
+      // algunas ROCAS dibujadas repartidas por la pradera
+      // (nunca sobre la vereda), con su cara iluminada
+      for (let wx = Math.floor(pan / 150) * 150; wx < pan + 700; wx += 150) {
+        const h1 = hashN(wx * 0.53);
+        if (h1 < 0.45) continue;
+        const bx = wx - pan + h1 * 30, by = groundY - 36 + hashN(wx * 0.97) * 86;
+        if (by > groundY - 20 && by < groundY + 24) continue;
+        const rw = 6 + h1 * 6;
+        c.fillStyle = '#8d9291';
+        c.beginPath();
+        c.moveTo(bx - rw, by); c.lineTo(bx - rw * 0.4, by - rw * 0.62); c.lineTo(bx + rw * 0.5, by - rw * 0.7); c.lineTo(bx + rw, by);
+        c.closePath(); c.fill();
+        c.fillStyle = 'rgba(255,255,255,0.28)';
+        c.beginPath();
+        c.moveTo(bx - rw * 0.4, by - rw * 0.62); c.lineTo(bx + rw * 0.5, by - rw * 0.7); c.lineTo(bx + rw * 0.1, by - rw * 0.3); c.lineTo(bx - rw * 0.2, by - rw * 0.28);
+        c.closePath(); c.fill();
+      }
       // matas de pasto y florecitas, con el VIENTO recorriendo
       // la pradera: la inclinación de cada mata es un seno
       // viajero (fase = t·2,2 − x·0,02) y la mata se dobla con él
-      for (let wx = Math.floor(pan / 26) * 26; wx < pan + 666; wx += 26) {
+      // (paso más fino y menos huecos que antes: la pradera se
+      // veía rala)
+      for (let wx = Math.floor(pan / 22) * 22; wx < pan + 666; wx += 22) {
         const h1 = hashN(wx * 0.37);
-        if (h1 < 0.35) continue;
+        if (h1 < 0.22) continue;
         const bx = wx - pan + h1 * 12, by = groundY - 34 + hashN(wx * 0.83) * 84;
         if (by > groundY - 20 && by < groundY + 24) continue; // la vereda va pelada
         const lean = Math.sin(t * 2.2 - wx * 0.02) * 2.6, hh = 6 + h1 * 5;
@@ -1996,7 +2218,7 @@
         c.moveTo(bx, by); c.quadraticCurveTo(bx + lean * 0.5, by - hh * 0.7, bx + lean, by - hh - 1.5);
         c.moveTo(bx + 2.5, by); c.quadraticCurveTo(bx + 2 + lean * 0.5, by - hh * 0.6, bx + 3 + lean, by - hh);
         c.stroke();
-        if (h1 > 0.86) { // una florecita sobre la mata
+        if (h1 > 0.80) { // una florecita sobre la mata
           const fc = ['#ffffff', '#ffd94d', '#f2a7c3'][Math.floor(hashN(wx * 2.9) * 3) % 3];
           const fx2 = bx + lean, fy2 = by - hh - 2;
           c.fillStyle = fc;
@@ -2036,6 +2258,12 @@
           c.fillStyle = fog; c.fillRect(ccx - cw2 * 0.64, cf.baseY - 15, cw2 * 1.28, 24);
         }
       }
+      // los ÁRBOLES solitarios del plano medio (dibujados,
+      // distintos de la arboleda del fondo): de pie sobre el
+      // pasto, justo detrás de la vereda; sin colisión
+      this.drawArbolSolo(c, 1000 - pan, groundY - 24, 118, 1);
+      this.drawArbolSolo(c, 1900 - pan, groundY - 24, 138, 2);
+      this.drawArbolSolo(c, 3450 - pan, groundY - 24, 124, 3);
       // el espantapájaros Cabeza de Nabo, junto a la vereda
       this.drawNabo(c, PRADERA.naboX - pan, groundY - 30);
       // las dos Puertas de la franja (la misma Puerta de siempre)
@@ -2043,14 +2271,42 @@
       const entryOpen = this.phase === 'light' && this.phaseT < 0.9 ? 1 - this.phaseT / 0.9 : (this.usedDoorX === this.entryDoorX ? usedOpen : 0);
       drawDoor2DAt(c, this.entryDoorX - pan, groundY, entryOpen);
       drawDoor2DAt(c, this.exitDoorX - pan, groundY, this.usedDoorX === this.exitDoorX ? usedOpen : 0);
-      // los personajes, ordenados por Y, con su sombra suave
-      const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
-      for (const ch of chars) {
-        c.fillStyle = 'rgba(20,40,18,0.20)';
-        c.beginPath(); c.ellipse(ch.x - pan, ch.y + 3, 19, 4.5, 0, 0, 6.3); c.fill();
-        let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
-        if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = walkIdxFor(ch.id, ch.dist); bobY = 0; }
-        drawChar2DAt(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
+      // los personajes y los Calcifer, ordenados por Y (cada
+      // Calcifer entra en el orden por la base de su
+      // tronquito), con su sombra suave
+      const items = [];
+      for (const ch of [this.free.chars.ximena, this.free.chars.jose]) {
+        items.push({
+          y: ch.y, fn: () => {
+            c.fillStyle = 'rgba(20,40,18,0.20)';
+            c.beginPath(); c.ellipse(ch.x - pan, ch.y + 3, 19, 4.5, 0, 0, 6.3); c.fill();
+            let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
+            if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = walkIdxFor(ch.id, ch.dist); bobY = 0; }
+            drawChar2DAt(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
+          },
+        });
+      }
+      for (const cal of this.calciferes) items.push({ y: groundY + cal.yOff, fn: () => this.drawCalcifer(c, cal) });
+      items.sort((a, b) => a.y - b.y);
+      for (const it of items) it.fn();
+      // las brasas del último fogonazo, por encima de todos
+      for (const s of this.chispas) {
+        const k = 1 - s.t / s.life;
+        c.fillStyle = s.warm > 0.5 ? `rgba(255,120,40,${(0.85 * k).toFixed(3)})` : `rgba(255,196,64,${(0.85 * k).toFixed(3)})`;
+        c.beginPath(); c.arc(s.x - pan, s.y, 1.1 + s.warm * 1.1, 0, 6.3); c.fill();
+      }
+      // las MARIPOSAS junto a las flores, en la capa de
+      // personajes: dos alitas que aletean rápido y el cuerpito
+      for (let i = 0; i < PRADERA.mariposas.length; i++) {
+        const mp = mariposaAt(t, i), mx2 = mp.x - pan;
+        if (mx2 < -20 || mx2 > 660) continue;
+        const flap = Math.sin(t * 13 + i * 2.0) * 0.65, wc = ['#ffffff', '#f2a541', '#b48ce0'][i % 3];
+        c.save(); c.translate(mx2, mp.y);
+        c.fillStyle = wc;
+        c.save(); c.rotate(-0.5 - flap * 0.5); c.beginPath(); c.ellipse(-3.4, 0, 3.6, 2.1, 0, 0, 6.3); c.fill(); c.restore();
+        c.save(); c.rotate(0.5 + flap * 0.5); c.beginPath(); c.ellipse(3.4, 0, 3.6, 2.1, 0, 0, 6.3); c.fill(); c.restore();
+        c.fillStyle = '#3a3230'; c.fillRect(-0.7, -2.2, 1.4, 4.4);
+        c.restore();
       }
       if (this.phase === 'free' && this.nearDoor) G.prompt(c, 'ESPACIO: cruzar la Puerta', this.nearDoorX - pan, groundY - 96);
       // luz de la Puerta: se disipa al llegar, crece al salir
@@ -2099,6 +2355,147 @@
       c.fillRect(x - 17, baseY - 86, 34, 3.6);
       c.fillRect(x - 10, baseY - 99, 20, 13.5);
       c.fillStyle = '#8a2f35'; c.fillRect(x - 10, baseY - 89.5, 20, 3);
+    }
+    // Un Calcifer de la vereda: el tronquito dibujado, el
+    // resplandor cálido sobre el pasto y la llama encima,
+    // parpadeando (su escala la da calciferFlick; el fogonazo
+    // la infla con popT). Apagado (offT) se ve tenue y más
+    // bajo. Sin el recorte solo-local, la llamita de respaldo
+    // dibujada ocupa su lugar: el obstáculo nunca es invisible.
+    drawCalcifer(c, cal) {
+      const x = cal.x - this.pan; if (x < -170 || x > 810) return;
+      const baseY = this.groundY + cal.yOff, t = this.t;
+      const off = cal.offT > 0;
+      const pop = cal.popT > 0 ? 1 + 0.45 * (cal.popT / 0.28) : 1;
+      const s = cal.size * calciferFlick(t, cal.i) * pop * (off ? 0.8 : 1);
+      if (!off) { // el resplandor cálido bajo la llama
+        const gl = c.createRadialGradient(x, baseY - 3, 2, x, baseY - 3, s * 0.85);
+        gl.addColorStop(0, 'rgba(255,150,50,0.20)'); gl.addColorStop(1, 'rgba(255,150,50,0)');
+        c.fillStyle = gl; c.beginPath(); c.ellipse(x, baseY - 3, s * 0.85, s * 0.30, 0, 0, 6.3); c.fill();
+      }
+      // el tronquito: el leño acostado donde se sienta
+      c.fillStyle = '#7a4a2b';
+      c.beginPath();
+      if (c.roundRect) c.roundRect(x - s * 0.34, baseY - 5.5, s * 0.68, 6, 3); else c.rect(x - s * 0.34, baseY - 5.5, s * 0.68, 6);
+      c.fill();
+      c.fillStyle = '#a9743f'; c.beginPath(); c.ellipse(x - s * 0.34, baseY - 2.5, 2.6, 3, 0, 0, 6.3); c.fill();
+      c.fillStyle = '#5d3a20'; c.beginPath(); c.ellipse(x - s * 0.34, baseY - 2.5, 1.2, 1.6, 0, 0, 6.3); c.fill();
+      if (imgOk(calciferImg)) {
+        const w = s * calciferImg.naturalWidth / calciferImg.naturalHeight;
+        c.save();
+        c.globalAlpha = off ? 0.35 : 1;
+        c.drawImage(calciferImg, x - w / 2, baseY - 4 - s, w, s);
+        c.restore();
+      } else {
+        this.drawCalciferFallback(c, x, baseY - 4, s, off);
+      }
+    }
+    // La llamita de respaldo (cuando calcifer.png no cargó):
+    // gota de fuego naranja con su corazón amarillo y dos
+    // ojitos — se lee como «fuego» a cualquier distancia.
+    drawCalciferFallback(c, x, baseY, s, off) {
+      c.save();
+      c.globalAlpha = off ? 0.35 : 1;
+      c.translate(x, baseY);
+      c.fillStyle = '#e86a17';
+      c.beginPath();
+      c.moveTo(0, -s);
+      c.bezierCurveTo(s * 0.34, -s * 0.62, s * 0.38, -s * 0.30, s * 0.30, -s * 0.14);
+      c.quadraticCurveTo(s * 0.22, 0, 0, 0);
+      c.quadraticCurveTo(-s * 0.22, 0, -s * 0.30, -s * 0.14);
+      c.bezierCurveTo(-s * 0.38, -s * 0.30, -s * 0.34, -s * 0.62, 0, -s);
+      c.fill();
+      c.fillStyle = '#f7b731';
+      c.beginPath();
+      c.moveTo(0, -s * 0.62);
+      c.bezierCurveTo(s * 0.20, -s * 0.38, s * 0.22, -s * 0.18, s * 0.15, -s * 0.08);
+      c.quadraticCurveTo(s * 0.1, 0, 0, 0);
+      c.quadraticCurveTo(-s * 0.1, 0, -s * 0.15, -s * 0.08);
+      c.bezierCurveTo(-s * 0.22, -s * 0.18, -s * 0.20, -s * 0.38, 0, -s * 0.62);
+      c.fill();
+      c.fillStyle = '#fff6e8';
+      c.beginPath(); c.arc(-s * 0.11, -s * 0.34, s * 0.075, 0, 6.3); c.arc(s * 0.11, -s * 0.34, s * 0.075, 0, 6.3); c.fill();
+      c.fillStyle = '#40260e';
+      c.beginPath(); c.arc(-s * 0.11, -s * 0.33, s * 0.038, 0, 6.3); c.arc(s * 0.11, -s * 0.33, s * 0.038, 0, 6.3); c.fill();
+      c.restore();
+    }
+    // La ARBOLEDA del fondo y MONONOKE observando desde ella.
+    // Fila trasera de árboles de copas verdes oscuras, el
+    // recorte asomando entre ellos (solo si cargó) con su velo
+    // de distancia, y una fila frontal de copas y arbustos que
+    // le tapa el borde inferior: San y Moro quedan «entre los
+    // árboles», quietos, mirando el paseo. Sin el recorte, la
+    // arboleda se dibuja igual.
+    drawArboleda(c, pan) {
+      const AR = PRADERA.arboleda, cx = AR.layerCx - pan * AR.par, baseY = AR.baseY;
+      if (cx + 300 < -20 || cx - 300 > 660) return;
+      const tree = (lx, h, dark) => {
+        const x = cx + lx;
+        c.fillStyle = '#5d4128'; c.fillRect(x - 3, baseY - h * 0.30, 6, h * 0.30 + 4);
+        c.fillStyle = dark;
+        c.beginPath();
+        c.ellipse(x, baseY - h * 0.62, h * 0.34, h * 0.40, 0, 0, 6.3);
+        c.ellipse(x - h * 0.26, baseY - h * 0.48, h * 0.24, h * 0.28, 0, 0, 6.3);
+        c.ellipse(x + h * 0.27, baseY - h * 0.50, h * 0.25, h * 0.30, 0, 0, 6.3);
+        c.fill();
+      };
+      // la fila trasera
+      tree(-205, 128, '#356b38'); tree(-128, 148, '#2f5d33'); tree(-48, 118, '#356b38');
+      tree(58, 142, '#2f5d33'); tree(152, 124, '#356b38'); tree(228, 108, '#2f5d33');
+      // MONONOKE entre los árboles (su base la tapan el suelo
+      // de la pradera, que se pinta después, y la fila frontal)
+      if (imgOk(mononokeImg)) {
+        const mh = PRADERA.mononoke.h, mw = mh * mononokeImg.naturalWidth / mononokeImg.naturalHeight;
+        c.drawImage(mononokeImg, cx - mw / 2, baseY + 6 - mh, mw, mh);
+        c.fillStyle = 'rgba(174,200,226,0.13)'; // el velo de la distancia
+        c.fillRect(cx - mw / 2, baseY + 6 - mh, mw, mh);
+      }
+      // la fila frontal: copas más bajas y oscuras, que le
+      // tapan los costados y el borde inferior al recorte
+      // (la base misma la tapa el suelo de la pradera, que se
+      // pinta justo después)
+      tree(-238, 84, '#274d2a'); tree(20, 76, '#274d2a'); tree(238, 88, '#274d2a');
+    }
+    // Un árbol solitario del plano medio: tronco con una
+    // rama y copa de tres copas verdes medias. Sin colisión.
+    drawArbolSolo(c, x, baseY, h, seed) {
+      if (x < -90 || x > 730) return;
+      c.fillStyle = 'rgba(20,40,18,0.18)';
+      c.beginPath(); c.ellipse(x, baseY + 3, h * 0.20, 4, 0, 0, 6.3); c.fill();
+      c.fillStyle = '#6d4c2f';
+      c.beginPath();
+      c.moveTo(x - 4.5, baseY); c.lineTo(x - 2, baseY - h * 0.52); c.lineTo(x + 2, baseY - h * 0.52); c.lineTo(x + 4.5, baseY);
+      c.closePath(); c.fill();
+      c.strokeStyle = '#6d4c2f'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(x, baseY - h * 0.44); c.quadraticCurveTo(x + h * 0.10, baseY - h * 0.55, x + h * 0.17, baseY - h * 0.60); c.stroke();
+      const j = (hashN(seed * 3.7) - 0.5) * 8;
+      c.fillStyle = '#4a7d3a';
+      c.beginPath();
+      c.ellipse(x + j, baseY - h * 0.80, h * 0.30, h * 0.27, 0, 0, 6.3);
+      c.ellipse(x - h * 0.20 + j, baseY - h * 0.64, h * 0.21, h * 0.19, 0, 0, 6.3);
+      c.ellipse(x + h * 0.21 + j, baseY - h * 0.65, h * 0.22, h * 0.20, 0, 0, 6.3);
+      c.fill();
+      c.fillStyle = '#548a41';
+      c.beginPath(); c.ellipse(x - h * 0.06 + j, baseY - h * 0.86, h * 0.19, h * 0.15, 0, 0, 6.3); c.fill();
+    }
+    // El dirigible dibujado: globo alargado crema con franjas
+    // rojas, aletas de cola y su góndola colgando. Pequeño y
+    // lejano, estilo cuento.
+    drawDirigible(c, x, y) {
+      if (x < -90 || x > 730) return;
+      c.fillStyle = '#efe0bd';
+      c.beginPath(); c.ellipse(x, y, 30, 11.5, 0, 0, 6.3); c.fill();
+      c.fillStyle = '#c65b4e';
+      c.beginPath(); c.ellipse(x - 10, y, 4.5, 11.2, 0, 0, 6.3); c.fill();
+      c.beginPath(); c.ellipse(x + 12, y, 4.5, 11.2, 0, 0, 6.3); c.fill();
+      c.fillStyle = '#efe0bd';
+      c.beginPath(); // las aletas de la cola
+      c.moveTo(x - 28, y - 2); c.lineTo(x - 38, y - 10); c.lineTo(x - 36, y + 1); c.lineTo(x - 38, y + 9); c.lineTo(x - 28, y + 3);
+      c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(90,70,50,0.7)'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(x - 5, y + 10); c.lineTo(x - 4, y + 15); c.moveTo(x + 5, y + 10); c.lineTo(x + 4, y + 15); c.stroke();
+      c.fillStyle = '#7a4a2b'; c.fillRect(x - 8, y + 14.5, 16, 5.5);
+      c.fillStyle = '#a9743f'; c.fillRect(x - 8, y + 14.5, 16, 1.8);
     }
   }
 
@@ -2169,7 +2566,7 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY,
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY, praderaClouds, dirigibleXAt, bandadaAt, calciferFlick, mariposaAt,
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.

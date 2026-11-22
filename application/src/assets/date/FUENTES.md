@@ -182,3 +182,53 @@
   salida frente a él. Si el archivo no está en la copia
   local, ninguna de las dos escenas lo dibuja y ambas se
   juegan igual.
+
+## calcifer.png — Calcifer, el obstáculo de fuego de las praderas (NO versionado)
+- Calcifer, el demonio de fuego de la película del castillo
+  ambulante, en su chimenea — imagen aportada por Jose, uso
+  personal, **asset solo-local no incluido en el
+  repositorio** (protegido en `.gitignore`, como el
+  castillo: es arte de una película con derechos).
+- **Procesado local:** recorte SOLO de Calcifer (el cuerpo
+  de llama con su cara y sus dos brazos de fuego; SIN las
+  figurillas de piedra ni la chimenea de la imagen). Las
+  llamas son luminosas, así que la máscara se construyó por
+  puntuación de fuego por color (calidez y brillo) sobre
+  rembg, con exclusiones medidas para los ojos brillantes
+  de la cara de piedra del fondo y fundido suave en la
+  base. SIN borde blanco. Salida: 800 × 326. Verificado
+  sobre magenta y sobre verde oscuro: el borde de la llama
+  se lee sobre ambos, sin halo oscuro ni cuadrado.
+- **Uso:** es el obstáculo de la escena 4: ~7 Calcifers
+  estáticos sentados sobre tronquitos dibujados, repartidos
+  por la vereda, parpadeando. Chocar con uno (solo el
+  personaje controlado) da un fogonazo con chispas y frena
+  un instante (×0,4 por 0,7 s), y ese Calcifer queda
+  apagado unos segundos antes de reavivarse. Si el archivo
+  no está en la copia local, cada Calcifer se dibuja por
+  código (una llamita con ojos) y el obstáculo funciona
+  igual.
+
+## mononoke.png — San y la loba Moro observando desde la arboleda (NO versionado)
+- San junto a la cabeza de la loba Moro, de La princesa
+  Mononoke — imagen aportada por Jose, uso personal,
+  **asset solo-local no incluido en el repositorio**
+  (protegido en `.gitignore`, como el castillo: es arte de
+  una película con derechos).
+- **Procesado local:** recorte de San + la cabeza de Moro
+  como una sola composición (con parte del pelaje del
+  cuello; SIN el bosque de fondo ni el arbusto del primer
+  plano, salvo lo que el propio encuadre mezcla con el
+  vestido de San). La máscara une rembg (que solo
+  segmentaba a San) con una máscara de color «claro y
+  desaturado» para el pelaje gris de Moro, con relleno de
+  huecos entre mechones, limpieza de las hojas verdes del
+  arbusto en la parte baja y fundido suave en la base.
+  SIN borde blanco: es una presencia lejana, no un sticker.
+  Salida: 760 × 839.
+- **Uso:** observa desde el fondo de la escena 4, dentro
+  de una arboleda dibujada por código (copas verdes oscuras)
+  en el tramo del paseo hacia el castillo: asoma entre los
+  árboles a ~218 px de alto, con velo de distancia, quieta,
+  sin colisión ni interacción. Si el archivo no está en la
+  copia local, la arboleda se dibuja igual, sin el recorte.

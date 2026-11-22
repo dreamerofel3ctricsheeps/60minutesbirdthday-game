@@ -69,6 +69,19 @@
       vivas (3), y al chocar SOLO con el controlado estallan
       en pajitas y lo frenan de verdad (×0,4 por 0,7 s, medido
       en desplazamiento); el seguidor las atraviesa.
+   Ñ) Las praderas enriquecidas (pedido de Jose: la escena 4
+     se veía MUY VACÍA, también el cielo): Calcifer como
+     obstáculo de fuego (recorte solo-local de película, ~7
+     sobre la vereda; el choque da fogonazo con chispas,
+     frena ×0,4 por 0,7 s medido en desplazamiento y lo deja
+     apagado unos segundos; el seguidor lo atraviesa),
+     Mononoke observando desde la arboleda dibujada del fondo
+     (protagonista en la segunda mitad del paseo), y el cielo
+     y la pradera llenos por código: 3 profundidades de nubes
+     (praderaClouds), sol en la capa lejana, dirigible de
+     ciclo ~120 s, bandadas con aleteo, árboles solitarios,
+     rocas y mariposas. calcifer.png y mononoke.png quedan
+     solo-locales (gitignore + FUENTES.md), como castillo.png.
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -1128,6 +1141,117 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     G.scene === ae2 && DM.state.state === 'aero' &&
     Math.abs(ae2.free.chars[ae2.free.active].x - ae2.exitDoorX) < 220,
     'state=' + DM.state.state);
+  DM.stop();
+
+  console.log('\nÑ) Praderas enriquecidas: Calcifer (obstáculo de fuego), Mononoke en la arboleda y el cielo vivo');
+  // Los dos recortes nuevos son material de película
+  // aportado por Jose: viven solo en la copia local, como
+  // castillo.png y la canción.
+  const noVersionado = (f) => {
+    try {
+      const out = require('child_process').execSync(
+        'git ls-files application/src/assets/date/' + f,
+        { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+      return out.trim().length === 0;
+    } catch (e) { return false; } // sin git a la vista: fallar cerrado
+  };
+  check('calcifer.png y mononoke.png existen en la copia local y NO están versionados (material de película de Jose, como castillo.png)',
+    fs.existsSync(path.join(DATE_DIR, 'calcifer.png')) && fs.existsSync(path.join(DATE_DIR, 'mononoke.png')) &&
+    noVersionado('calcifer.png') && noVersionado('mononoke.png'));
+  check('.gitignore protege calcifer.png y mononoke.png, y FUENTES.md registra ambos recortes',
+    gitignore.includes('calcifer.png') && gitignore.includes('mononoke.png') &&
+    fuentes.includes('calcifer.png') && fuentes.includes('mononoke.png'));
+  check('date.js carga ambos recortes con guarda imgOk (sin ellos: llamita dibujada de respaldo y la arboleda igual)',
+    dateSrc.includes("loadDateImg('assets/date/calcifer.png')") && dateSrc.includes('imgOk(calciferImg)') &&
+    dateSrc.includes("loadDateImg('assets/date/mononoke.png')") && dateSrc.includes('imgOk(mononokeImg)') &&
+    dateSrc.includes('drawCalciferFallback') && dateSrc.includes('drawArboleda'));
+  // Se re-entra a la cita y se salta a las praderas. OJO:
+  // start() anula las escenas guardadas, así que la
+  // instancia válida es la nueva de G.scene, no la de la
+  // sección N.
+  DM.start(() => {});
+  DM.debug.travelTo('castillo');
+  const pr3 = G.scene;
+  for (let i = 0; i < 25 && pr3.phase !== 'free'; i++) pr3.update(0.05);
+  if (pr3.free.active !== 'ximena') pr3.switchActive();
+  const A3 = pr3.free.chars[pr3.free.active], B3 = pr3.free.chars[pr3.free.active === 'ximena' ? 'jose' : 'ximena'];
+  const PCF = PR.calcifer, PCS = PR.calciferes;
+  check('hay 7 Calcifers repartidos por la vereda (x 650–3450, tamaño 46–60, altura dentro de la banda ±26) y ninguno junto a la Puerta del castillo',
+    PCS.length === 7 && PCS.every((cc) => cc.x >= 650 && cc.x <= 3450 && cc.size >= 46 && cc.size <= 60 && Math.abs(cc.yOff) <= 26) &&
+    PCS.every((cc) => Math.abs(cc.x - pr3.exitDoorX) > 300),
+    'xs=' + PCS.map((cc) => cc.x).join(','));
+  check('el parpadeo varía la escala (calciferFlick oscila con el tiempo) y el radio de peligro queda en ~24–28 px',
+    DM.debug.calciferFlick(1.3, 0) !== DM.debug.calciferFlick(1.45, 0) &&
+    (() => { let mn = 99, mx = 0; for (let tt = 0; tt < 3; tt += 0.05) { const r = PCF.rBase * DM.debug.calciferFlick(tt, 2); if (r < mn) mn = r; if (r > mx) mx = r; } return mn >= 23.5 && mx <= 28.5; })());
+  // El choque: el controlado se planta sobre el primer
+  // Calcifer (su centro = la llama).
+  pr3.resetCalcifers(); pr3.frenoT = 0;
+  const C0 = pr3.calciferes[0];
+  A3.x = C0.x; A3.y = pr3.groundY + C0.yOff - C0.size / 2 + 48; B3.x = 300; B3.y = pr3.groundY;
+  pr3.update(0.05);
+  check('al tocar un Calcifer: fogonazo (popT + chispas), freno armado (~0,7 s) y ese Calcifer queda APAGADO unos segundos',
+    pr3.frenoT > 0.5 && pr3.chispas.length >= 4 && C0.offT > 2 && C0.popT > 0.15,
+    `frenoT=${pr3.frenoT.toFixed(2)}, chispas=${pr3.chispas.length}, offT=${C0.offT.toFixed(1)}, popT=${C0.popT.toFixed(2)}`);
+  pr3.frenoT = 0;
+  pr3.update(0.05); pr3.update(0.05);
+  check('el Calcifer apagado no puede frenar dos veces seguidas (sin nuevo choque mientras offT > 0)',
+    pr3.frenoT === 0 && C0.offT > 0, `frenoT=${pr3.frenoT}, offT=${C0.offT.toFixed(1)}`);
+  // El freno se MIDE en desplazamiento (como las bolas de
+  // paja en la sección M): con todos los Calcifer apagados a
+  // mano para que no interfieran, 0,5 s a la derecha libre
+  // contra 0,5 s con el freno recién armado.
+  pr3.calciferes.forEach((cc) => { cc.offT = 999; });
+  A3.x = 800; A3.y = pr3.groundY; B3.x = 700; B3.y = pr3.groundY; pr3.frenoT = 0;
+  let xAnt = A3.x;
+  key('ArrowRight', true);
+  for (let i = 0; i < 10; i++) pr3.update(0.05);
+  key('ArrowRight', false);
+  const dispLibrePr = A3.x - xAnt;
+  A3.x = 800; pr3.frenoT = PCF.frenoT;
+  xAnt = A3.x;
+  key('ArrowRight', true);
+  for (let i = 0; i < 10; i++) pr3.update(0.05);
+  key('ArrowRight', false);
+  const dispFrenoPr = A3.x - xAnt;
+  check('el freno del Calcifer se mide en el desplazamiento: ~0,4× del libre (el mismo trastabilleo de las bolas de paja)',
+    dispLibrePr > 60 && dispFrenoPr > 0.3 * dispLibrePr && dispFrenoPr < 0.52 * dispLibrePr,
+    `libre=${dispLibrePr.toFixed(0)}, freno=${dispFrenoPr.toFixed(0)}`);
+  // El seguidor lo atraviesa sin efecto.
+  pr3.resetCalcifers(); pr3.frenoT = 0;
+  const C1 = pr3.calciferes[1];
+  B3.x = C1.x; B3.y = pr3.groundY + C1.yOff - C1.size / 2 + 48;
+  A3.x = 300; A3.y = pr3.groundY;
+  pr3.update(0.05);
+  check('el SEGUIDOR atraviesa los Calcifer sin efecto (ni freno ni apagado: el choque es solo del controlado)',
+    pr3.frenoT === 0 && C1.offT === 0, `frenoT=${pr3.frenoT}, offT=${C1.offT}`);
+  // Mononoke y la arboleda del fondo.
+  const ARB = PR.arboleda, protMo = (ARB.layerCx - 320) / ARB.par;
+  check('Mononoke observa desde la arboleda: su protagonista cae en la segunda mitad del paseo (55–75% de pan 0..3710) y mide 200–240 px de alto',
+    protMo / 3710 >= 0.55 && protMo / 3710 <= 0.75 && PR.mononoke.h >= 200 && PR.mononoke.h <= 240 &&
+    typeof pr3.drawArboleda === 'function',
+    `protagonista=${(100 * protMo / 3710).toFixed(0)}% (pan ${protMo.toFixed(0)}), h=${PR.mononoke.h}`);
+  check('la arboleda acompaña el tramo de mundo 2800–3300: Mononoke está en pantalla con pan 2480 y con pan 2980',
+    (ARB.layerCx - 2480 * ARB.par) > -100 && (ARB.layerCx - 2480 * ARB.par) < 740 &&
+    (ARB.layerCx - 2980 * ARB.par) > -100 && (ARB.layerCx - 2980 * ARB.par) < 740,
+    `centros=${(ARB.layerCx - 2480 * ARB.par).toFixed(0)}/${(ARB.layerCx - 2980 * ARB.par).toFixed(0)}`);
+  // El cielo vivo.
+  const nubesEn = (pan) => DM.debug.praderaClouds(30, pan).filter((nb) => nb.x > -80 && nb.x < 720);
+  check('el cielo nunca va vacío: en los pans muestreados siempre hay ≥4 masas de nubes visibles, y existen las 3 profundidades',
+    [0, 900, 1800, 2700, 3710].every((p) => nubesEn(p).length >= 4) &&
+    [0, 1, 2].every((cp) => DM.debug.praderaClouds(30, 900).some((nb) => nb.capa === cp)),
+    'visibles=' + [0, 900, 1800, 2700, 3710].map((p) => nubesEn(p).length).join(','));
+  check('el dirigible cruza el cielo en un ciclo largo (~120 s): entra en su ventana y el resto del ciclo está fuera de escena',
+    (() => { let vis = false, fuera = false; for (let tt = 0; tt < 120; tt += 2) { const x = DM.debug.dirigibleXAt(tt); if (x > -100 && x < 740) vis = true; if (x === -9999) fuera = true; } return vis && fuera && PR.dirigible.ciclo === 120; })());
+  check('las bandadas cruzan el cielo: hay ventanas con 3–5 pájaros y el aleteo cambia con el tiempo',
+    (() => { for (let tt = 0; tt < 90; tt += 0.5) { const b = DM.debug.bandadaAt(tt, 0); if (b && b.pts.length >= 3 && b.pts.length <= 5) { const b2 = DM.debug.bandadaAt(tt + 0.18, 0); if (b2 && b2.pts.some((p, i) => Math.abs(p.flap - b.pts[i].flap) > 0.5)) return true; } } return false; })());
+  check('el sol vive en la capa lejana (parallax ≤ 0,1) y acompaña todo el paseo (en pantalla a pan 0 y a pan 3710)',
+    PR.sol.par <= 0.1 && PR.sol.layerCx < 640 && (PR.sol.layerCx - 3710 * PR.sol.par) > 0,
+    `centro al fondo=${(PR.sol.layerCx - 3710 * PR.sol.par).toFixed(0)}`);
+  check('las mariposas revolotean junto a las flores (mariposaAt varía con el tiempo y queda dentro de la franja)',
+    (() => { const m0 = DM.debug.mariposaAt(5, 0), m1 = DM.debug.mariposaAt(6.5, 0); return !!m0 && !!m1 && (Math.abs(m0.x - m1.x) > 1 || Math.abs(m0.y - m1.y) > 1) && m0.x > 0 && m0.x < 4350; })());
+  let prDrawOk2 = true;
+  for (const p of [0, 1500, 2511, 3710]) { pr3.pan = p; try { pr3.draw(0.016); } catch (e) { prDrawOk2 = false; } }
+  check('draw() de las praderas enriquecidas no explota (pan 0/1500/2511/3710; sin los recortes locales cargados, mandan las guardas imgOk)', prDrawOk2);
   DM.stop();
 
   DM.debug.setHash(realHash); // el hash real queda como estaba

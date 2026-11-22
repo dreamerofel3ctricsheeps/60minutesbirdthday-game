@@ -8,3 +8,12 @@ application/src/assets/audio/*.mp3
 # aportado por Jose: SOLO-LOCAL, como la canción — nunca se
 # sube al repo. El código lo dibuja solo si el archivo está.
 application/src/assets/date/castillo.png
+
+# Calcifer (calcifer.png) y Mononoke (mononoke.png): dos
+# recortes más de películas aportados por Jose para las
+# praderas del castillo — SOLO-LOCALES, con la misma regla
+# que el castillo: nunca se suben al repo y el código los
+# dibuja solo si el archivo está (Calcifer tiene respaldo
+# dibujado y la arboleda se dibuja sin Mononoke).
+application/src/assets/date/calcifer.png
+application/src/assets/date/mononoke.png
