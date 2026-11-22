@@ -3429,6 +3429,80 @@ const tick = () => new Promise((r) => setImmediate(r));
       glTxt.includes('c /= 9.;') && glTxt.includes('b/12.*1.5*uFx') && glTxt.includes('dot(d,d)*0.75*uFx') && glTxt.includes('pasada final a pantalla'), '');
   }
 
+  // --- Sección AB: etiquetas de nombre por proximidad (SOLO la
+  // recolección) — pedido de Jose (2026-11-22): un jugador nuevo no
+  // distingue a los roomies en el minuto inicial. Pastilla translúcida
+  // sobre la cabeza que solo aparece al acercarse (radio NAME_TAG_R
+  // con fundido en el 40% exterior), pintada en la capa 2D con el
+  // anclaje de los globos (Actor.head): es canvas, jamás un nodo DOM,
+  // así que no intercepta toques ni deja residuos al cambiar de fase.
+  {
+    console.log('\nAB) Etiquetas de nombre por proximidad — solo en la recolección');
+    const scTxt = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+    const wTxt = fs.readFileSync(path.join(SRC, 'world.js'), 'utf8');
+    const gTxt = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    check('etiquetas: el radio vive en una constante nombrada (NAME_TAG_R = 110) y la pastilla es translúcida (rgba(20,16,32,.55))',
+      scTxt.includes('const NAME_TAG_R = 110;') && scTxt.includes("c.fillStyle = 'rgba(20,16,32,.55)';"), '');
+    const colBody = scTxt.slice(scTxt.indexOf('class CollectScene'), scTxt.indexOf('class HomeScene'));
+    check('etiquetas: el pintado vive SOLO en CollectScene (ni el motor World ni game.js conocen el mecanismo; HomeScene no lo hereda)',
+      colBody.includes('nameTagTargets().forEach') && colBody.includes('nameTagTargets()')
+      && !wTxt.includes('nameTag') && !gTxt.includes('nameTag')
+      && Sc.HomeScene.prototype.nameTagTargets === undefined && typeof Sc.CollectScene.prototype.nameTagTargets === 'function', '');
+    check('etiquetas: las exclusiones están en la fuente (al hombro, dentro del armario, oculto, globo/emote activo)',
+      colBody.includes("o.state === 'carried'") && colBody.includes("o.state === 'inside'") && colBody.includes('o.hidden') && colBody.includes('o.bubble || o.emote'), '');
+
+    // Comportamiento: draw real de la escena con el render y la
+    // proyección sustituidos (mismo patrón que la prueba de draw de la
+    // sección G), registrando textos y rellenos de la capa 2D.
+    const realRender = W.render, realProject = G.R.project;
+    const mkRec = () => {
+      const ctx = new FakeCtx(), log = { texts: [], fills: [] };
+      ctx.fillText = (s) => { log.texts.push(String(s)); };
+      ctx.fill = () => { log.fills.push({ alpha: ctx.globalAlpha, style: ctx.fillStyle }); };
+      return { ctx, log };
+    };
+    W.render = (opts) => { if (opts.boxes) opts.boxes(new G.R.MB(), 0); if (opts.sprites) opts.sprites(0); if (opts.over) opts.over(cur.ctx, 0); };
+    G.R.project = (x, y, z) => ({ x, y: z, ok: true });
+    let cur = mkRec();
+    try {
+      const esc = new Sc.CollectScene('natalia', () => {});
+      esc.count = 0;
+      const roomie = esc.others[0], rName = G.CHARS[roomie.id].name;
+      esc.others.forEach((o, i) => { o.x = 60 + i * 12; o.y = 560; o.bubble = null; o.emote = null; });
+      esc.cat.x = 950; esc.cat.y = 60; esc.cat.bubble = null; esc.cat.emote = null;
+      roomie.x = 500; roomie.y = 350;
+      const tagsOf = () => cur.log.fills.filter((f) => f.style === 'rgba(20,16,32,.55)');
+      esc.p.x = 500; esc.p.y = 300; // a 50 u del roomie: dentro, alfa pleno
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: a 50 u la pastilla se pinta con el nombre y opacidad plena (y el controlado nunca se etiqueta)',
+        cur.log.texts.includes(rName) && tagsOf().length === 1 && Math.abs(tagsOf()[0].alpha - 1) < 0.01 && !cur.log.texts.includes('Natalia'),
+        'texts=' + cur.log.texts.join('|'));
+      esc.p.y = 260; // a 90 u: en la banda de fundido (66–110)
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: a 90 u la pastilla se pinta FUNDIDA (alfa ≈ (110−90)/44 ≈ 0,45, sin corte seco)',
+        tagsOf().length === 1 && Math.abs(tagsOf()[0].alpha - (110 - 90) / 44) < 0.02, 'alfa=' + (tagsOf()[0] && tagsOf()[0].alpha));
+      esc.p.y = 220; // a 130 u: fuera del radio
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: a 130 u (fuera del radio) no se pinta nada', tagsOf().length === 0 && !cur.log.texts.includes(rName), '');
+      esc.p.y = 300; roomie.state = 'carried';
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: el roomie al hombro NO se etiqueta', tagsOf().length === 0 && !cur.log.texts.includes(rName), '');
+      roomie.state = 'inside'; roomie.hidden = true;
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: el roomie guardado dentro del armario NO se etiqueta', tagsOf().length === 0 && !cur.log.texts.includes(rName), '');
+      roomie.state = 'free'; roomie.hidden = false; roomie.say('¡Apúrate!', 2.2);
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: con un globo activo la cabeza ya está ocupada: sin pastilla', tagsOf().length === 0 && !cur.log.texts.includes(rName), '');
+      roomie.bubble = null; roomie.x = 60; roomie.y = 560; // el roomie se va lejos…
+      esc.cat.x = 500; esc.cat.y = 350; // …y Pollito queda a 50 u del jugador
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: el mecanismo es genérico sobre los actores con nombre (Pollito también se etiqueta)',
+        cur.log.texts.includes('Pollito') && tagsOf().length === 1, 'texts=' + cur.log.texts.join('|'));
+    } catch (e) {
+      check('etiquetas: draw sin errores (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
+    } finally { W.render = realRender; G.R.project = realProject; }
+  }
+
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR FATAL en la prueba:', e); process.exit(2); });

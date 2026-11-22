@@ -23,6 +23,33 @@
     c.fillText(cur, x, ly);
   }
 
+  // ---------- Etiquetas de nombre por proximidad (SOLO recolección) ----
+  // Pedido de Jose (2026-11-22): un jugador nuevo no distingue a los
+  // roomies durante el minuto de recolección. Cada personaje con nombre
+  // lleva una pastilla translúcida sobre la cabeza que SOLO aparece
+  // cuando el jugador se acerca, con fundido en vez de corte seco.
+  // Radio: NAME_TAG_R = 110 u. Las habitaciones miden 290×250 (cocina,
+  // cuarto) a 610×250 (sala) y el interact de cargar salta a 42 u: con
+  // 110 la etiqueta se lee al entrar en la zona del roomie —aún a ~0,8 s
+  // de caminata de distancia— sin verse desde la habitación de al lado.
+  // El fundido ocupa el 40% exterior del radio (de ~66 u a 110 u la
+  // opacidad baja de 1 a 0). Se pinta en la capa 2D con el anclaje de
+  // los globos (Actor.head → R.project): es canvas, nunca un nodo DOM,
+  // así que jamás intercepta un toque del joystick o de la acción, y al
+  // cambiar de fase no queda residuo (la capa 2D se limpia cada cuadro
+  // y las etiquetas se calculan al vuelo, sin estado propio).
+  const NAME_TAG_R = 110;
+  const nameTagAlpha = (d) => Math.max(0, Math.min(1, (NAME_TAG_R - d) / (NAME_TAG_R * 0.4)));
+  function drawNameTag(c, name, x, y, a) {
+    c.save(); c.globalAlpha = a;
+    c.font = `bold 8px ${G.FONT}`;
+    const w = c.measureText(name).width + 12;
+    c.fillStyle = 'rgba(20,16,32,.55)';
+    c.beginPath(); c.roundRect(x - w / 2, y - 6.5, w, 13, 6.5); c.fill();
+    G.text(c, name, x, y + 0.5, { size: 8, color: '#fff', stroke: false });
+    c.restore();
+  }
+
   // Validación de spawns: ningún actor de una escena con muebles puede
   // nacer dentro de uno sólido (quedaría atrapado: ver World.nearestFree).
   // Se aplica al construir la escena y al recolocar actores por ronda.
@@ -71,6 +98,29 @@
       this.cam = { x: 510, y: 0, z: 440, dist: 560, pitch: 0.78, fov: 34 };
     }
     slotsUsed() { return this.p.carry.reduce((n, id) => n + G.ITEMS[id].slots, 0); }
+    // Etiquetas de nombre visibles en este cuadro: los actores con
+    // nombre presentes en el mundo (los roomies libres o ya en la cola
+    // del armario, y Pollito), cada una con su opacidad por proximidad
+    // al personaje controlado. Quedan FUERA: el controlado (la distancia
+    // se mide desde él; no está en estas listas), el que va al hombro
+    // ('carried'), los guardados dentro del armario ('inside' u
+    // ocultos), quien tenga un globo o un emote activo (su cabeza ya
+    // está ocupada) y el roomie del prompt de ESPACIO (ese prompt ya lo
+    // nombra). Sin nadie dentro del radio, la lista sale vacía y no se
+    // pinta nada.
+    nameTagTargets() {
+      const p = this.p, out = [];
+      for (const o of [...this.others, this.cat]) {
+        if (o.hidden || o.state === 'carried' || o.state === 'inside') continue;
+        if (o.bubble || o.emote || this.nearRoomie === o) continue;
+        const a = nameTagAlpha(dist(p, o));
+        if (a <= 0) continue;
+        const h = o.head(6);
+        if (!h.ok || h.x < -24 || h.x > 664 || h.y < -8 || h.y > 368) continue;
+        out.push({ name: G.CHARS[o.id].name, x: h.x, y: h.y - 7, a });
+      }
+      return out;
+    }
     // --- Partners: cargar al hombro, bajar y reclutar -------------------
     // CONVIVENCIA CARGA DE ROOMIE / ÍTEMS (regla original adaptada a la
     // v3.1): la capacidad total es 5 espacios = 3 del roomie al hombro +
@@ -271,6 +321,10 @@
             else if (this.near && (!this.nearRoomie || dist(p, this.near) <= dist(p, this.nearRoomie))) { const q = R.project(this.near.x, 46, this.near.y); G.prompt(c, 'ESPACIO: ' + G.ITEMS[this.near.id].name, q.x, q.y); }
             else if (this.carrying) { const h = p.head(40); G.prompt(c, 'Al ARMARIO con tu partner · ESPACIO: bajarlo', h.x, h.y); }
             else if (this.nearRoomie) { const h = this.nearRoomie.head(6); G.prompt(c, this.partners.length >= 3 ? 'Ya tienes 3 partners' : `ESPACIO: cargar a ${G.CHARS[this.nearRoomie.id].name}`, h.x, h.y); }
+            // etiquetas de nombre por proximidad (pedido de Jose):
+            // pastillas translúcidas sobre la cabeza de los personajes
+            // cercanos, solo con el minuto corriendo.
+            this.nameTagTargets().forEach((tg) => drawNameTag(c, tg.name, tg.x, tg.y, tg.a));
           }
           // indicador del armario
           const s = R.project(W.STASH.x, 110, W.STASH.y), on = s.x > 20 && s.x < 620 && s.y > 50 && s.y < 340;
