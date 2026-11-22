@@ -110,6 +110,16 @@
       el deck que suena), sobre G.sfx (la lee en cada disparo) y
       sobre el audio de La Cita (date.js la consulta y recibe
       applySoundSettings).
+   W) Playtest móvil de Jose (2026-11-22): en HORIZONTAL el chat
+      flotante deja de aparecer/desaparecer solo — control manual
+      con el botón del teléfono (más notorio), insignia que
+      acumula no leídos y pasa a alerta «!» con una decisión
+      pendiente —; el chat ya NO salta solo al último mensaje si
+      el jugador está leyendo más arriba (solo sigue si ya estaba
+      casi al final, CHAT_STICK_PX); y en VERTICAL el joystick y
+      el botón de acción bajan a una banda inferior en flujo
+      (bajo el chat, a la altura de los pulgares) en vez de ir
+      superpuestos sobre la escena.
    U) Sonido por la RUTA REAL (bug de Jose, 2026-11-22): el
       nivel audible de la música vive en un GainNode de
       WebAudio, no en el.volume del <audio> (que iOS/WebKit
@@ -2916,6 +2926,113 @@ const tick = () => new Promise((r) => setImmediate(r));
     cromo.active = false; cromo.hideMs = 3500; cromo.reset();
     check('inmersivo: al salir del modo las clases se quitan y el layout vuelve a ser el de siempre',
       !hudFake.classList.contains('chrome-off') && !invFake.classList.contains('chrome-off'), '');
+  }
+
+  // --- Sección W: playtest de Jose — chat flotante MANUAL con
+  // insignia, scroll que respeta la lectura y banda táctil
+  // inferior en vertical (2026-11-22, sobre la rama develop) ---
+  // En horizontal el panel del chat flota (position:absolute del
+  // bloque compacto) y a Jose no le gusta que aparezca y
+  // desaparezca según el juego: pasa a control manual con el
+  // botón del teléfono, con insignia de no leídos y alerta de
+  // decisión pendiente. El scroll del chat ya no salta al final
+  // si el jugador está leyendo arriba. Y en vertical los
+  // controles táctiles bajan a una banda en flujo bajo el chat.
+  // El arnés no tiene getComputedStyle ni matchMedia: el modo
+  // flotante se fija a mano (phone.floatMode, como cromo.active)
+  // y la banda se fuerza con G.touchBandSync(true/false).
+  {
+    console.log('\nW) Chat flotante manual con insignia, scroll sin saltos y banda táctil en vertical');
+    const waitW = (ms) => new Promise((r) => setTimeout(r, ms));
+    const cssW = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameW = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const iPortraitW = cssW.indexOf('@media (max-width: 760px)');
+    const portraitW = iPortraitW >= 0 ? cssW.slice(iPortraitW, cssW.indexOf('/* Controles táctiles PROPORCIONALES')) : '';
+    const iCompactW = cssW.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const compactW = iCompactW >= 0 ? cssW.slice(iCompactW) : '';
+
+    // --- Fuente: detección, insignia, botón notorio ---
+    check('flotante: el modo se detecta desde la fuente de verdad del CSS (la posición calculada del panel), no con media queries duplicadas en JS',
+      gameW.includes("getComputedStyle(phoneEl).position === 'absolute'") && gameW.includes('floatMode'), '');
+    check('flotante: la insignia tiene estado de ALERTA para la decisión pendiente (pulso suave persistente) y el botón pulsa al llegar algo nuevo',
+      cssW.includes('#phonebadge.alert') && cssW.includes('@keyframes badgepulse') && cssW.includes('#phonebtn.ping') && cssW.includes('@keyframes phoneping'), '');
+    check('flotante: en el modo compacto el botón del teléfono es MÁS notorio (objetivo táctil de 38px, borde amarillo, pictograma mayor)',
+      compactW.includes('#phonebtn { padding: 6px 12px; font-size: 12px; min-height: 38px;') && compactW.includes('#phonebtn .pic-phone { width: 13px; height: 20px; }'), '');
+
+    // --- Fuente: scroll y banda ---
+    check('scroll: la regla de seguimiento es una constante nombrada (CHAT_STICK_PX = 48) aplicada en el punto común (ui.scroll y raw, midiendo ANTES de añadir)',
+      gameW.includes('const CHAT_STICK_PX = 48') && gameW.includes('msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight <= CHAT_STICK_PX')
+      && gameW.includes('const stick = msgs.scrollHeight'), '');
+    check('banda: en vertical la capa dentro de main es una banda EN FLUJO pegada al fondo de la columna (margin-top:auto) que solo se muestra con la capa táctil activa',
+      portraitW.includes('main > #touchpad { position: static; margin-top: auto; }') && portraitW.includes('body.touch-on main > #touchpad { display: flex;'), '');
+    check('banda: dentro de la banda los controles dejan de posicionarse sobre la escena (relativos, joystick izquierda / acción derecha por space-between)',
+      portraitW.includes('main > #touchpad #joystick { position: relative;') && portraitW.includes('main > #touchpad .taction { position: relative;') && portraitW.includes('justify-content: space-between'), '');
+    check('banda: con un modal abierto la banda se oculta, salvo el carrusel (.nav-open) donde el joystick navega el menú',
+      portraitW.includes('main:has(#overlay.show) > #touchpad') && portraitW.includes('main:has(#pauseov.show) > #touchpad') && portraitW.includes('main:has(#overlay.show) > #touchpad.nav-open { display: flex !important; }'), '');
+    check('banda: el JS espeja el retrato ACOTADO a orientación vertical (no pisa el horizontal compacto) y en horizontal el calcado/márgenes del letterbox sigue intacto',
+      gameW.includes("window.matchMedia('(max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait)')") && gameW.includes('G.touchBandSync = syncBand')
+      && gameW.includes('G.input.touchLayout') && gameW.includes("pad.classList.toggle('joy-margin'") && gameW.includes("pad.classList.toggle('act-margin'"), '');
+
+    // --- Comportamiento: el teléfono en modo flotante ---
+    const phW = G.ui.phone, badgeFake = documentFake.querySelector('#phonebadge'), phoneFake = documentFake.querySelector('#phone'), actsFake = documentFake.querySelector('#actions');
+    phW.floatMode = true; // sin getComputedStyle en el arnés: el modo se fija a mano
+    phW.reset();
+    await G.ui.post({ who: 'sistema', text: 'Mensaje flotante uno' });
+    await G.ui.post({ who: 'sistema', text: 'Mensaje flotante dos' });
+    check('flotante: con mensajes nuevos el panel NO se abre solo y la insignia ACUMULA los no leídos',
+      phW.state().visible === false && phoneFake.classList.contains('ph-off') && phW.state().unread === 2
+      && badgeFake.textContent === '2' && badgeFake.style.display === 'grid' && !badgeFake.classList.contains('alert'),
+      JSON.stringify(phW.state()) + ' badge=' + badgeFake.textContent);
+    let chosenW = -1;
+    const pChooseW = G.ui.choose([{ label: 'Ir' }, { label: 'Quedarse' }]).then((i) => { chosenW = i; });
+    check('flotante: una decisión pendiente TAMPOCO abre el panel; la insignia pasa a alerta «!» (el juego espera esa elección)',
+      phW.state().visible === false && phW.state().pending === true && badgeFake.textContent === '!' && badgeFake.classList.contains('alert'),
+      JSON.stringify(phW.state()) + ' badge=' + badgeFake.textContent);
+    const optBtnW = actsFake.children.find((c) => c.onclick);
+    if (optBtnW) optBtnW.onclick();
+    await pChooseW;
+    check('flotante: al responder la decisión la alerta se apaga (la insignia vuelve a ser contador)',
+      chosenW === 0 && phW.state().pending === false && !badgeFake.classList.contains('alert') && badgeFake.textContent !== '!',
+      JSON.stringify(phW.state()) + ' badge=' + badgeFake.textContent);
+    phW.toggle(); // abrir a mano con el botón
+    const openedOk = phW.state().visible === true && phW.state().unread === 0 && badgeFake.style.display === 'none';
+    phW.graceMs = 50; // si hubiera auto-ocultado en flotante, 150 ms bastan para cazarlo
+    await waitW(150);
+    check('flotante: abierto a mano la insignia se limpia y el panel NO se auto-oculta jamás (sin gracia que lo cierre)',
+      openedOk && phW.state().visible === true && !phoneFake.classList.contains('ph-off'), JSON.stringify(phW.state()));
+    phW.toggle(); // cerrar a mano
+    check('flotante: cerrado a mano queda cerrado (control manual pleno)',
+      phW.state().visible === false && phoneFake.classList.contains('ph-off'), JSON.stringify(phW.state()));
+    phW.floatMode = false; phW.graceMs = 4000; phW.reset();
+
+    // --- Comportamiento: el scroll respeta la lectura ---
+    const msgsFake = documentFake.querySelector('#msgs');
+    msgsFake.scrollHeight = 1000; msgsFake.clientHeight = 300; msgsFake.scrollTop = 0; // leyendo arriba del todo (quedan 700px)
+    G.ui.raw('<div class="sys">Mensaje con el lector arriba</div>');
+    check('scroll: leyendo más arriba, un mensaje nuevo CONSERVA la posición intacta (no salta al último mensaje)',
+      msgsFake.scrollTop === 0, 'scrollTop=' + msgsFake.scrollTop);
+    msgsFake.scrollTop = 670; // casi al final: quedan 30px ≤ CHAT_STICK_PX
+    G.ui.raw('<div class="sys">Mensaje con el lector al final</div>');
+    check('scroll: estando (casi) al final, el chat SÍ sigue al mensaje nuevo',
+      msgsFake.scrollTop === 1000, 'scrollTop=' + msgsFake.scrollTop);
+    msgsFake.scrollTop = 100; G.ui.scroll();
+    const upStaysW = msgsFake.scrollTop === 100;
+    msgsFake.scrollTop = 690; G.ui.scroll();
+    check('scroll: ui.scroll (el punto común que también llaman choose/assign) aplica la misma regla',
+      upStaysW && msgsFake.scrollTop === 1000, 'scrollTop=' + msgsFake.scrollTop);
+    phW.reset();
+
+    // --- Comportamiento: la banda vertical muda la capa en el DOM ---
+    const padFake = documentFake.querySelector('#touchpad'), wrapFake = documentFake.querySelector('#stagewrap'), mainFake = documentFake.querySelector('main');
+    check('banda: sin matchMedia la banda nace INACTIVA y la capa no está en main (el layout de siempre no se toca)',
+      typeof G.touchBandSync === 'function' && G.touchBandSync() === false && padFake.parent !== mainFake, '');
+    padFake.style.left = '33px'; // resto del calcado superpuesto: al entrar en la banda debe limpiarse
+    const bandOnW = G.touchBandSync(true);
+    check('banda: en vertical la capa se muda a main (la banda bajo el chat) y se limpian los estilos en línea del calcado/márgenes',
+      bandOnW === true && padFake.parent === mainFake && padFake.style.left === '', '');
+    const bandOffW = G.touchBandSync(false);
+    check('banda: al salir de vertical la capa vuelve a #stagewrap (vuelve el modo superpuesto/márgenes intacto)',
+      bandOffW === false && padFake.parent === wrapFake, '');
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

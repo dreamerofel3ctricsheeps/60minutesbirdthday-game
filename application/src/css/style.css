@@ -207,6 +207,27 @@ body.touch-on #stage:has(> #overlay.show) ~ #touchpad.nav-open { display: block 
   #joystick { width: 128px; height: 128px; }
   .joy-knob { width: 50px; height: 50px; }
   .taction { width: 66px; height: 66px; right: 4%; bottom: 8%; }
+  /* Banda inferior de controles (pedido de Jose, 2026-11-22):
+     en vertical, game.js muda #touchpad fuera de #stagewrap y lo
+     deja como último hijo de main (bajo el chat). Aquí la capa
+     pasa a ser una BANDA EN FLUJO pegada al fondo de la columna
+     con margin-top:auto — ocupa el hueco que sobraba bajo el
+     teléfono, a la altura natural de los pulgares — con el
+     joystick a la izquierda y el botón de acción a la derecha;
+     la escena queda sin controles superpuestos. Sin capa táctil
+     (body sin .touch-on) la banda no se muestra ni reserva
+     espacio: el chat aprovecha la columna como siempre. */
+  main > #touchpad { position: static; margin-top: auto; }
+  body.touch-on main > #touchpad { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px 6px; }
+  main > #touchpad #joystick { position: relative; left: auto; bottom: auto; }
+  main > #touchpad .taction { position: relative; left: auto; right: auto; bottom: auto; }
+  /* Con un modal sobre la escena la banda se oculta, como la
+     capa superpuesta (su regla con ~ deja de aplicar al mudar el
+     nodo: esta es su equivalente en la banda), SALVO con el
+     carrusel de selección abierto (.nav-open), donde el joystick
+     navega el menú y debe seguir visible. */
+  main:has(#overlay.show) > #touchpad, main:has(#pauseov.show) > #touchpad { display: none !important; }
+  body.touch-on main:has(#overlay.show) > #touchpad.nav-open { display: flex !important; }
 }
 /* Controles táctiles PROPORCIONALES al escenario (corrección
    2026-11-22): con tamaño fijo (148px) el joystick y el botón de
@@ -335,6 +356,17 @@ body.touch-on .cnav { width: 52px; height: 52px; }
 #phonebtn { position: relative; background: var(--panel2); color: var(--ink); border: 2px solid #120f1b; border-radius: 8px; padding: 5px 10px; font-weight: bold; font-size: 13px; }
 #phonebtn:hover { border-color: var(--yellow); }
 #phonebadge { position: absolute; top: -8px; right: -8px; min-width: 20px; height: 20px; padding: 0 5px; display: none; place-items: center; background: var(--red); color: #fff; border: 2px solid #120f1b; border-radius: 999px; font-size: 11px; font-weight: bold; line-height: 1; }
+/* Insignia en ALERTA (pedido de Jose, 2026-11-22): hay una
+   DECISIÓN pendiente con el chat cerrado — el juego no avanza
+   sin esa elección, así que la insignia muestra «!» en amarillo
+   con un pulso suave persistente hasta que se responda. */
+#phonebadge.alert { background: var(--yellow); color: #120f1b; animation: badgepulse 1.1s ease-in-out infinite; }
+@keyframes badgepulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.22); } }
+/* Pulso breve de atención del botón cuando llega algo nuevo con
+   el chat cerrado en modo flotante (la clase .ping la pone y la
+   quita la máquina del teléfono; el panel NUNCA se abre solo). */
+#phonebtn.ping { animation: phoneping .55s ease; }
+@keyframes phoneping { 0% { transform: scale(1); } 30% { transform: scale(1.13); } 100% { transform: scale(1); } }
 .pic-phone { display: inline-block; width: 11px; height: 17px; border: 2.5px solid currentColor; border-radius: 3.5px; position: relative; vertical-align: -3px; box-sizing: content-box; }
 .pic-phone i { position: absolute; left: 50%; bottom: 1.5px; transform: translateX(-50%); width: 3.5px; height: 3.5px; border-radius: 50%; background: currentColor; }
 #phoneclose { margin-left: 4px; background: none; border: none; color: var(--dim); font-size: 18px; line-height: 1; padding: 2px 5px; border-radius: 6px; }
@@ -500,6 +532,14 @@ body.date-mode #dateMuteBtn { display: flex; }
   .segs { gap: 2px; }
   .seg { width: 8px; height: 8px; }
   #pausebtn, #settingsbtn, #phonebtn { padding: 3px 7px; font-size: 11px; }
+  /* El botón del teléfono MANDA en el modo flotante (pedido de
+     Jose, 2026-11-22): el chat ya no se abre solo, así que su
+     botón es la única puerta de entrada — crece como objetivo
+     táctil (38px de alto mínimo), se distingue de Ajustes con
+     el borde amarillo y su pictograma crece con él. Sigue
+     siempre visible: la regla de .chrome-off no lo apaga. */
+  #phonebtn { padding: 6px 12px; font-size: 12px; min-height: 38px; border-color: rgba(255, 210, 63, .65); }
+  #phonebtn .pic-phone { width: 13px; height: 20px; }
   .pic { margin-right: 4px; }
   /* Escenario: contenedor y doble tope como en la regla base.
      Con el modo inmersivo el cromo ya NO reserva alto (HUD e
