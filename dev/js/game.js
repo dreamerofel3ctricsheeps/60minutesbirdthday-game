@@ -480,6 +480,16 @@
   // hay una viva (las decisiones viven DENTRO de los eventos, y el
   // bloque .decision ya se desmontó y dejó su eco en el historial),
   // así que el chat guardado jamás contiene un bloque inerte.
+  // El ESTADO DE NOTIFICACIONES del teléfono viaja también en el
+  // guardado (corrección de Jose, 2026-11-22: al continuar, «las
+  // notificaciones es como si nunca hubieran sido vistas»):
+  // saveCheckpoint fotografía { unread, pending, muted } de la
+  // máquina y applySave lo reaplica tras el reset — si al guardar
+  // había 0 no leídos, al continuar hay 0; si había N (llegaron
+  // con el panel cerrado), se conservan N. El historial restaurado
+  // en sí jamás cuenta como no leído por el hecho de restaurarse:
+  // son mensajes que el jugador ya tenía, no llegadas nuevas. Los
+  // guardados sin el campo (anteriores a esta corrección) valen 0.
   // Al llegar a CUALQUIER final, showEnding BORRA el guardado: la
   // partida terminó. Y si desde la pausa se lanza un duelo de
   // práctica, la partida en curso se abandona (enterPractice) y su
@@ -511,7 +521,8 @@
   function saveCheckpoint(at, extra) {
     try {
       const packed = packChat(msgs.innerHTML);
-      const sv = { v: SAVE_V, at, state: JSON.parse(JSON.stringify(S)), chat: packed.html, dict: packed.dict };
+      const sv = { v: SAVE_V, at, state: JSON.parse(JSON.stringify(S)), chat: packed.html, dict: packed.dict,
+        phone: { unread: phone.unread || 0, pending: !!phone.pending, muted: !!phone.muted } };
       if (extra) Object.assign(sv, extra);
       lastSaveJSON = JSON.stringify(sv);
       try { localStorage.setItem(SAVE_KEY, lastSaveJSON); } catch (e) { /* cuota llena o modo privado: se sigue jugando sin guardar */ }
@@ -540,6 +551,15 @@
     Object.assign(S, JSON.parse(JSON.stringify(S_INIT)), JSON.parse(JSON.stringify(sv.state)));
     unmountDecision(); // en un punto de control no hay decisión viva; por si acaso, un bloque restaurado sería inerte
     phone.reset();
+    // …y encima del reset se reaplica el estado de notificaciones
+    // fotografiado en el punto de control: la insignia vuelve
+    // EXACTAMENTE como estaba al guardar (0 si ya se había leído
+    // todo; N si habían llegado mensajes con el panel cerrado).
+    const phSv = sv.phone || {};
+    phone.unread = (typeof phSv.unread === 'number' && phSv.unread > 0) ? Math.floor(phSv.unread) : 0;
+    phone.pending = !!phSv.pending;
+    phone.muted = !!phSv.muted;
+    phone.paint();
     msgs.innerHTML = unpackChat(sv.chat, sv.dict);
     ui.refreshInv(); recalc();
   }
