@@ -3329,6 +3329,59 @@ const tick = () => new Promise((r) => setImmediate(r));
     ph4.portraitMode = false; ph4.reset();
   }
 
+  // --- Sección W5: el botón de cerrar la ventana del chat,
+  // grande en móvil (pedido de Jose, 2026-11-22) ---
+  // «El botón de cerrar la ventana del chat debería ser más
+  // grande porque en dispositivos móviles no se ve nada.» El
+  // «×» de la cabecera (.ptop) era un glifo atenuado sin fondo
+  // de ~20×22px en TODOS los modos. Ahora la base es una
+  // pastilla visible de 32px y en los dos modos móviles
+  // (flotante horizontal y retrato en flujo) crece a objetivo
+  // táctil pleno de 44×44 con fondo, borde y ✕ blanca de 24px;
+  // la cabecera compensa el alto con menos padding vertical.
+  // La LÓGICA no cambia: el botón sigue invocando el toggle
+  // normal de la máquina del teléfono (game.js intacto), con
+  // insignia y estado como estén. El arnés no puebla los hijos
+  // de #phone, así que el cableado se fija por fuente y el
+  // comportamiento se ejercita sobre la máquina (toggle).
+  {
+    console.log('\nW5) Botón de cerrar la ventana del chat: objetivo táctil de 44px en móvil');
+    const cssW5 = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameW5 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const htmlW5 = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'index.html'), 'utf8');
+    const iCompactW5 = cssW5.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const compactW5 = iCompactW5 >= 0 ? cssW5.slice(iCompactW5) : '';
+    const iPortraitW5 = cssW5.indexOf('@media (max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait)');
+    const portraitW5 = iPortraitW5 >= 0 ? cssW5.slice(iPortraitW5) : '';
+
+    // --- Fuente: el botón vive en la cabecera del panel ---
+    const iAsideW5 = htmlW5.indexOf('<aside id="phone"');
+    check('cerrar: la ventana del chat trae su propio botón de cerrar (#phoneclose) dentro de la cabecera .ptop del panel',
+      iAsideW5 >= 0 && htmlW5.slice(iAsideW5).includes('id="phoneclose"') && htmlW5.includes('<div class="ptop">'), '');
+
+    // --- Fuente: tamaño y presencia en cada modo ---
+    check('cerrar: la regla base ya es una pastilla visible de 32px con fondo (no el glifo atenuado sin fondo de ~20×22px)',
+      cssW5.includes('#phoneclose { flex: none;') && cssW5.includes('min-width: 32px; min-height: 32px') && cssW5.includes('background: rgba(255, 255, 255, .08)'), '');
+    check('cerrar: en el modo FLOTANTE horizontal el botón es un objetivo táctil pleno de 44×44 con pastilla y ✕ de 24px, y la cabecera compensa el alto',
+      compactW5.includes('#phoneclose { width: 44px; height: 44px; min-width: 44px; min-height: 44px;') && compactW5.includes('font-size: 24px') && compactW5.includes('.ptop { padding: 6px 10px; }'), '');
+    check('cerrar: en RETRATO el botón tiene el mismo objetivo táctil pleno de 44×44 y la misma compensación de cabecera',
+      portraitW5.includes('#phoneclose { width: 44px; height: 44px; min-width: 44px; min-height: 44px;') && portraitW5.includes('font-size: 24px') && portraitW5.includes('.ptop { padding: 6px 10px; }'), '');
+
+    // --- Fuente: el cierre sigue siendo el camino normal ---
+    check('cerrar: el botón sigue cableado al cierre normal de la máquina (toggle con el panel visible; insignia y estado intactos)',
+      gameW5.includes("querySelector('#phoneclose')") && gameW5.includes('if (phoneClose) phoneClose.onclick = () => { if (phone.visible) { phone.toggle(); syncDecisionPill(); } };'), '');
+
+    // --- Comportamiento: la máquina cierra como siempre ---
+    const ph5 = G.ui.phone, phoneEl5 = documentFake.querySelector('#phone');
+    ph5.portraitMode = true; ph5.floatMode = false; ph5.reset();
+    ph5.toggle(); // abrir a mano
+    const openW5 = ph5.state().visible === true && !phoneEl5.classList.contains('ph-off');
+    ph5.toggle(); // cerrar, lo que hace el botón
+    check('cerrar: en modo manual el cierre deja el panel oculto (.ph-off) por el camino de siempre',
+      openW5 && ph5.state().visible === false && phoneEl5.classList.contains('ph-off'), JSON.stringify(ph5.state()));
+    ph5.portraitMode = false; ph5.reset();
+  }
+
   // --- Sección X: botón de pruebas «Borrar caché y datos» ---
   // Pedido de Jose (2026-11-22): dejar de depender de la ventana
   // de incógnito para ver la versión fresca y para resetear el

@@ -378,8 +378,16 @@ body.touch-on .cnav { width: 52px; height: 52px; }
 @keyframes phoneping { 0% { transform: scale(1); } 30% { transform: scale(1.13); } 100% { transform: scale(1); } }
 .pic-phone { display: inline-block; width: 11px; height: 17px; border: 2.5px solid currentColor; border-radius: 3.5px; position: relative; vertical-align: -3px; box-sizing: content-box; }
 .pic-phone i { position: absolute; left: 50%; bottom: 1.5px; transform: translateX(-50%); width: 3.5px; height: 3.5px; border-radius: 50%; background: currentColor; }
-#phoneclose { margin-left: 4px; background: none; border: none; color: var(--dim); font-size: 18px; line-height: 1; padding: 2px 5px; border-radius: 6px; }
-#phoneclose:hover { color: #fff; background: rgba(255, 255, 255, .08); }
+/* Botón de cerrar la ventana del chat: pastilla con fondo y la
+   ✕ clara encima (antes era un glifo atenuado sin fondo de
+   ~20×22px: en el teléfono no se veía — pedido de Jose,
+   2026-11-22). Aquí en escritorio mide 32px; en los modos
+   móviles crece a objetivo táctil pleno de 44×44 (ver los
+   bloques compacto horizontal y de retrato). El cierre sigue
+   siendo el de siempre: el toggle normal de la máquina del
+   teléfono (game.js), sin tocar insignia ni estado. */
+#phoneclose { flex: none; margin-left: 4px; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; padding: 4px 8px; background: rgba(255, 255, 255, .08); border: 2px solid rgba(255, 255, 255, .16); border-radius: 9px; color: var(--ink); font-size: 19px; line-height: 1; }
+#phoneclose:hover { color: #fff; background: rgba(255, 255, 255, .16); }
 .ptop { background: #3a2f57; padding: 10px 14px; font-weight: bold; display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .ptop small { margin-left: auto; color: var(--dim); font-weight: normal; font-size: 11px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
@@ -558,6 +566,18 @@ body.date-mode #dateMuteBtn { display: flex; }
      siempre visible: la regla de .chrome-off no lo apaga. */
   #phonebtn { padding: 6px 12px; font-size: 12px; min-height: 38px; border-color: rgba(255, 210, 63, .65); }
   #phonebtn .pic-phone { width: 13px; height: 20px; }
+  /* El botón de CERRAR la ventana del chat (pedido de Jose,
+     2026-11-22): con el panel flotante abierto, su única salida
+     visible era el «×» atenuado de ~20×22px de la cabecera y en
+     el teléfono «no se ve nada». Crece a objetivo táctil pleno
+     (44×44) y se lee como botón — pastilla con fondo y borde,
+     ✕ blanca de 24px — sin comerse el título: la cabecera
+     compensa el alto con menos padding vertical y el «N
+     participantes» puede encogerse con ellipsis antes que
+     empujar al botón fuera del panel. */
+  .ptop { padding: 6px 10px; }
+  .ptop small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #phoneclose { width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; margin-left: 2px; background: rgba(255, 255, 255, .13); border: 2px solid rgba(255, 255, 255, .3); border-radius: 12px; color: #fff; font-size: 24px; }
   .pic { margin-right: 4px; }
   /* Escenario: contenedor y doble tope como en la regla base.
      Con el modo inmersivo el cromo ya NO reserva alto (HUD e
@@ -692,6 +712,14 @@ body.date-mode #dateMuteBtn { display: flex; }
   .brand b { font-size: 12px; letter-spacing: .5px; }
   .brandico { width: 19px; height: 19px; }
   #pausebtn, #settingsbtn, #phonebtn { padding: 5px 9px; font-size: 12px; }
+  /* Botón de cerrar la ventana del chat: el mismo objetivo
+     táctil pleno (44×44) y la misma pastilla que en el
+     horizontal flotante (pedido de Jose, 2026-11-22) — en
+     vertical el panel va en flujo y su cabecera también
+     compensa el alto con menos padding vertical. */
+  .ptop { padding: 6px 10px; }
+  .ptop small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #phoneclose { width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; margin-left: 2px; background: rgba(255, 255, 255, .13); border: 2px solid rgba(255, 255, 255, .3); border-radius: 12px; color: #fff; font-size: 24px; }
   #hud .meter { flex: 1 0 47%; grid-template-columns: auto 1fr auto; gap: 5px; min-width: 0; }
   .meter label { font-size: 10px; letter-spacing: 0; }
   .meter .val { min-width: 0; font-size: 11px; }
