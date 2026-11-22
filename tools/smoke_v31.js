@@ -177,6 +177,8 @@ const load = (file, patch) => {
 };
 load('defined-sheets.js');
 load('rocket-sheets.js');
+load('belt-sheets.js');
+load('alebrije-sheets.js');
 load('sprites.js');
 load('data.js');
 load('gl3d.js');
@@ -1500,7 +1502,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('J1407b sin Pollito en pista: la instancia de 1A no tiene Actor Pollito y la clase ni lo crea ni lo renderiza',
       dSinCat.cat === undefined && !ringSrc.includes('this.cat') && !ringSrc.includes("new Actor('pollito'"),
       'cat=' + dSinCat.cat);
-    check('J1407b 1B intacto: Pollito SÍ flota libre en el Cinturón (su Actor sigue en 1B)',
+    check('J1407b 1B intacto: Pollito SÍ flota libre en el Cinturón (su lógica sigue en 1B; se dibuja con su sprite con traje)',
       !!dB0.cat && dB0.cat.id === 'pollito', 'cat=' + (dB0.cat && dB0.cat.id));
     const OPQ = Sc.RingRaceDuel.OPAQUE;
     check('J1407b anchos opacos: los PNG traseros miden fracción 1,00 (sin relleno: ROCKET_W ya es el ancho opaco)',
@@ -1508,6 +1510,46 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('J1407b anchos opacos: la roca compensa su relleno — dibujada a meteorDrawW(seed), su silueta opaca mide METEOR_W = 50',
       OPQ.rockFracW.every((f, s) => f > 0.6 && f < 0.85 && Math.abs(OPQ.meteorDrawW[s] * f - Sc.RingRaceDuel.METEOR_W) < 0.01),
       'frac=' + OPQ.rockFracW.map((f) => f.toFixed(3)).join(',') + ' drawW=' + OPQ.meteorDrawW.map((w) => w.toFixed(1)).join(','));
+    // --- Cuarta ronda del playtest de Jose (2026-11-21) sobre 1B:
+    // cámara lejos, hitbox desde lo opaco, impacto corto y sprites
+    // DISEÑADOS con traje (nada de casco dibujado encima) + meta
+    // diseñada, cargados como data URIs (G.BELT_DATA) ---
+    const beltFiles = ['espacio-natalia', 'espacio-saulo', 'espacio-itzel', 'espacio-fatima', 'espacio-samantha', 'espacio-majo', 'espacio-alan', 'espacio-jose', 'espacio-pollito', 'meta-cinturon'];
+    check('J1407b 1B imágenes: los 9 sprites con traje y la meta existen en application/src/assets/img/',
+      beltFiles.every((n) => fs.existsSync(path.join(imgDir, n + '.png'))));
+    check('J1407b 1B imágenes: G.BELT_DATA trae las 10 claves como data URIs PNG',
+      !!G.BELT_DATA && beltFiles.every((n) => typeof G.BELT_DATA[n] === 'string' && G.BELT_DATA[n].startsWith('data:image/png;base64,')),
+      G.BELT_DATA ? Object.keys(G.BELT_DATA).join(',') : 'sin BELT_DATA');
+    check('J1407b 1B imágenes: index.html incluye js/belt-sheets.js ANTES que js/scenes.js',
+      htmlTxt2.includes('js/belt-sheets.js') && htmlTxt2.indexOf('js/belt-sheets.js') < htmlTxt2.indexOf('js/scenes.js'));
+    const beltSrc = scenesTxt2.slice(scenesTxt2.indexOf('class AsteroidBeltDuel'), scenesTxt2.indexOf('class SpaceLaunchScene'));
+    check('J1407b 1B sin casco por código: la clase ya no llama a drawHelmet ni al aro por código, y dibuja la meta diseñada',
+      !beltSrc.includes('drawHelmet(') && !beltSrc.includes("ringGoalCv('cuadros')") && beltSrc.includes("beltImg('meta-cinturon')") && beltSrc.includes("beltImg('espacio-' + this.who)"),
+      '');
+    check('J1407b 1B cámara lejos: dist 640 (el jugador se proyecta a ≈89 px de 360)',
+      dB0.cam.dist === 640 && Sc.AsteroidBeltDuel.CAM.dist === 640 && Math.abs(dB0.cam.pitch - 0.3) < 1e-9, JSON.stringify(dB0.cam));
+    check('J1407b 1B impacto corto: aturdimiento 0,85 s, empuje 105 y cooldown 0,9 (el hint ya no cita 1,5)',
+      Sc.AsteroidBeltDuel.STUN === 0.85 && Sc.AsteroidBeltDuel.PUSH === 105 && Sc.AsteroidBeltDuel.CD === 0.9 && dB0.hint.includes('0,85') && !dB0.hint.includes('1,5'),
+      `STUN=${Sc.AsteroidBeltDuel.STUN} hint=${dB0.hint}`);
+    check('J1407b 1B radios opacos medidos: rock 0,76 · pastel 0,64 · globo 0,65 · regalo 0,62 (× r)',
+      Math.abs(Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'rock' }) - 28 * 0.76) < 0.01 && Math.abs(Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'pastel' }) - 28 * 0.64) < 0.01 && Math.abs(Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'globo' }) - 28 * 0.65) < 0.01 && Math.abs(Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'regalo' }) - 28 * 0.62) < 0.01,
+      JSON.stringify(Sc.AsteroidBeltDuel.ROCK_OPAQUE));
+    {
+      // Comportamiento: sin contacto visual NO hay golpe; tocando la
+      // silueta opaca (contra el núcleo del personaje) SÍ lo hay.
+      const dCol = new Sc.AsteroidBeltDuel('natalia', () => {});
+      dCol.st = 'play';
+      const cyC = dCol.P.y + Sc.AsteroidBeltDuel.CHAR_H / 2, rrC = Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'rock' }) + Sc.AsteroidBeltDuel.CORE_R;
+      const mkRock = (x) => ({ x, y: cyC, r: 28, vx: 0, vy: 0, rot: 0, vr: 0, kind: 'rock', seed: 0, cdP: 0, cdB: 0 });
+      dCol.rocks = [mkRock(dCol.P.x + rrC + 30)]; // la silueta queda a 30 u del núcleo: sin contacto
+      dCol.collide(dCol.P, dCol.p, 'cdP');
+      check('J1407b 1B hitbox: un asteroide cuya silueta NO toca al personaje no lo golpea',
+        dCol.P.stun === 0 && dCol.P.hits === 0, `stun=${dCol.P.stun} hits=${dCol.P.hits}`);
+      dCol.rocks = [mkRock(dCol.P.x + rrC - 6)]; // la silueta ya invade el núcleo: contacto
+      dCol.collide(dCol.P, dCol.p, 'cdP');
+      check('J1407b 1B hitbox: tocando la silueta SÍ golpea, y el aturdimiento aplicado es 0,85 s',
+        dCol.P.hits === 1 && Math.abs(dCol.P.stun - 0.85) < 1e-9, `stun=${dCol.P.stun} hits=${dCol.P.hits}`);
+    }
   }
 
   // ================= M) Final LEYENDAS (LEYENDAS_MOVIE_ENDING) =============

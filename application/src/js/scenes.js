@@ -3305,14 +3305,68 @@
   // VENTAJA CRUZADA: BELT_ADV = cuánto más cerca del aro empiezas si
   // ganaste 1A (salida adelantada, la forma simple elegida).
   const BELT_GOAL = 2500, BELT_ADV = 150, BELT_H = 196;
+  // Sprites con traje espacial y meta de este duelo: IMÁGENES
+  // DISEÑADAS (assets/img/espacio-<id>.png y meta-cinturon.png)
+  // incrustadas como data URIs en G.BELT_DATA por tools/mkbelt.py —
+  // el mismo patrón que los cohetes de 1A (lección del contador 4:
+  // nada de archivos externos a WebGL). Mientras una imagen no haya
+  // cargado NO se pinta (nada de sustituto por código).
+  const BELT_FILES = ['espacio-natalia', 'espacio-saulo', 'espacio-itzel', 'espacio-fatima', 'espacio-samantha', 'espacio-majo', 'espacio-alan', 'espacio-jose', 'espacio-pollito', 'meta-cinturon'];
+  const beltImgs = {};
+  function beltImg(name) {
+    if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
+    if (!G.BELT_DATA || !G.BELT_DATA[name]) return null; // sin belt-sheets.js cargado: no reventar
+    if (!beltImgs[name]) { const im = new Image(); im.src = G.BELT_DATA[name]; beltImgs[name] = im; }
+    return beltImgs[name];
+  }
+  function beltPreload() { for (const n of BELT_FILES) beltImg(n); }
+  // Dibuja un volador del cinturón por su ALTO de mundo, conservando
+  // el aspect real del PNG. Si la imagen aún no cargó, no pinta nada.
+  function drawBeltH(im, x, y, z, hWorld, o) {
+    if (!rocketReady(im)) return false;
+    R.sprite(im, x, y, z, Object.assign({}, o, { w: hWorld * (im.naturalWidth / im.naturalHeight), h: hWorld, nostretch: true }));
+    return true;
+  }
+  // CÁMARA DEL CINTURÓN (corrección de Jose, 2026-11-21: se veía
+  // demasiado cerca): dist 400 → 640, pitch 0,3 igual. Verificado
+  // con la proyección real del renderer (perspective/lookAt de
+  // gl3d.js; fov efectivo 26°, D = dist × 1,324): el sprite del
+  // jugador (BELT_CHAR_H = 92 u de alto) se proyecta a ≈ 90 px en el
+  // canvas 640×360 (objetivo 85–105) y una roca grande (r = 28) a
+  // +300 u se lee a ≈ 57 px: todos completos y con aire.
+  const BELT_CAM_DIST = 640;
+  const BELT_CHAR_H = 92; // alto de mundo del sprite humano con traje
+  const BELT_CAT_H = 23; // Pollito: 0,25 × el humano, como en todo el juego
+  // IMPACTO DEL CHOQUE (corrección de Jose, 2026-11-21: el letargo
+  // duraba mucho): aturdimiento 1,5 → 0,85 s, empuje 150 → 105 y
+  // cooldown anti-repetición 1,2 → 0,9 s.
+  const BELT_STUN = 0.85, BELT_PUSH = 105, BELT_CD = 0.9;
+  // HITBOX DESDE LO OPACO REAL (corrección de Jose, 2026-11-21: el
+  // golpe se cobraba ANTES de tocar el asteroide, con centros
+  // desalineados — pies del personaje contra centro de la roca — y
+  // radio nominal r + 15). Radios opacos MEDIDOS replicando rockCv
+  // con PIL (radio efectivo = semisuma de semiejes del cuerpo opaco,
+  // filas/columnas con ≥ 6 px, sobre el lienzo de r × 2,15):
+  //   rock ≈ 0,76·r · pastel ≈ 0,64·r · globo ≈ 0,65·r · regalo ≈ 0,62·r
+  // El punto de colisión del personaje es su CENTRO visual (x, pies +
+  // BELT_CHAR_H/2) con radio núcleo ≈ 70% de su semiancho opaco
+  // (semiancho medido de los espacio-*.png ≈ 29–34 u según personaje;
+  // constante única 21): los brazos abiertos no cobran golpe, el
+  // torso sí — ese es el perdón deliberado, como el núcleo de 1A.
+  // Choque solo si dist(centros) < radioOpacoRoca + núcleo: sin
+  // contacto visual no hay golpe, y tocando la silueta sí lo hay.
+  const BELT_ROCK_OPAQUE = { rock: 0.76, pastel: 0.64, globo: 0.65, regalo: 0.62 };
+  const beltRockR = (r) => r.r * (BELT_ROCK_OPAQUE[r.kind] || 0.76);
+  const BELT_CORE_R = 21;
   class AsteroidBeltDuel extends Duel {
     constructor(who, done, o) {
-      super(who, 'jose', done, { rounds: 1, need: 1, label: 'CARRERA', title: 'CINTURÓN DE ASTEROIDES', hint: 'Flechas o WASD: impulso de mochila · Chocar aturde 1,5 s · Cruza primero el aro a cuadros', rendT: 1.6 });
+      super(who, 'jose', done, { rounds: 1, need: 1, label: 'CARRERA', title: 'CINTURÓN DE ASTEROIDES', hint: 'Flechas o WASD: impulso de mochila · Chocar aturde 0,85 s · Cruza primero el aro', rendT: 1.6 });
       this.isBelt = true; this.quietRend = true;
       this.adv = !!(o && o.adv);
       this.p = new Actor(who, 0, 0); this.jose = new Actor('jose', 0, 0); this.cat = new Actor('pollito', 0, 6);
       this.p.dir = 'right'; this.jose.dir = 'right'; this.cat.dir = 'down';
-      this.cam = { x: 40, y: 66, z: 0, dist: 400, pitch: 0.3, fov: 42 };
+      this.cam = { x: 40, y: 66, z: 0, dist: BELT_CAM_DIST, pitch: 0.3, fov: 42 };
+      beltPreload(); // los voladores y la meta son imágenes diseñadas
       this.begin();
     }
     setup() {
@@ -3334,13 +3388,14 @@
     }
     collide(d, a, cdKey) {
       if (d.stun > 0) return;
+      const cy = d.y + BELT_CHAR_H / 2; // CENTRO visual del sprite con traje (no los pies)
       for (const r of this.rocks) {
         if (r[cdKey] > 0) continue;
-        const dx = d.x - r.x, dy = d.y - r.y, rr = r.r + 15;
+        const dx = d.x - r.x, dy = cy - r.y, rr = beltRockR(r) + BELT_CORE_R;
         if (dx * dx + dy * dy < rr * rr) {
-          r[cdKey] = 1.2; d.stun = 1.5; d.hits++;
+          r[cdKey] = BELT_CD; d.stun = BELT_STUN; d.hits++;
           const L = Math.max(12, Math.hypot(dx, dy)), ux = dx / L, uy = dy / L;
-          d.vx = ux * 150; d.vy = uy * 150; r.vx = -ux * 55; r.vy = -uy * 55; // el choque APARTA el asteroide
+          d.vx = ux * BELT_PUSH; d.vy = uy * BELT_PUSH; r.vx = -ux * 55; r.vy = -uy * 55; // el choque APARTA el asteroide
           a.emo('!!', 0.9); a.flash = 0.6; W.puff(d.x, 0, 5, true); G.sfx('bad');
           if (a === this.p) this.say('¡Aturdido!', '#ff6b7a', 0.9);
           break;
@@ -3362,14 +3417,18 @@
       const ax = (G.input.held('right') ? 1 : 0) - (G.input.held('left') ? 1 : 0);
       const ay = (G.input.held('up') ? 1 : 0) - (G.input.held('down') ? 1 : 0);
       P.thrust = !!(ax || ay) && P.stun <= 0;
+      P.tx = ax; P.ty = ay; // dirección del impulso (para la llamita de la mochila)
       if (P.stun > 0) P.stun -= dt; else { P.vx += ax * 165 * dt; P.vy += ay * 165 * dt; }
       // IA de José: empuje hacia el aro, esquivando lo que tenga delante.
       B.thrust = B.stun <= 0;
+      B.tx = 1; B.ty = 0;
       if (B.stun > 0) B.stun -= dt;
       else {
         let ty = 104 + Math.sin(this.elapsed * 0.6) * 34;
-        const danger = this.rocks.filter((r) => r.x > B.x && r.x < B.x + 190 && Math.abs(r.y - B.y) < r.r + 26).sort((a, b) => a.x - b.x)[0];
-        if (danger) ty = danger.y + (B.y <= danger.y ? -1 : 1) * (danger.r + 44);
+        // esquiva con los MISMOS radios opacos del golpe real
+        const Bc = B.y + BELT_CHAR_H / 2;
+        const danger = this.rocks.filter((r) => r.x > B.x && r.x < B.x + 190 && Math.abs(r.y - Bc) < beltRockR(r) + BELT_CORE_R + 16).sort((a, b) => a.x - b.x)[0];
+        if (danger) ty = danger.y + (Bc <= danger.y ? -1 : 1) * (beltRockR(danger) + BELT_CORE_R + 26) - BELT_CHAR_H / 2;
         B.vx += Math.max(-150 * dt, Math.min(150 * dt, (126 - B.vx) * dt * 3));
         const wantVy = Math.max(-92, Math.min(92, (ty - B.y) * 1.7));
         B.vy += Math.max(-175 * dt, Math.min(175 * dt, (wantVy - B.vy) * dt * 3.4));
@@ -3388,7 +3447,7 @@
       this.C.x += 46 * dt; this.C.y = 102 + Math.sin(this.elapsed * 0.8) * 52;
       if (this.C.x > Math.max(P.x, B.x) + 320) this.C.x = Math.min(P.x, B.x) - 160;
       if ((this.catCd -= dt) <= 0) {
-        const r = this.rocks.find((rk) => Math.hypot(rk.x - this.C.x, rk.y - this.C.y) < rk.r + 26);
+        const r = this.rocks.find((rk) => Math.hypot(rk.x - this.C.x, rk.y - (this.C.y + BELT_CAT_H / 2)) < beltRockR(rk) + 8);
         if (r) { r.vx += rnd(30, 70) * (Math.random() < 0.5 ? -1 : 1); r.vy += rnd(-40, 40); this.catCd = 2.5; cat.hop(150); }
       }
       for (const r of this.rocks) {
@@ -3407,7 +3466,23 @@
       if (B.x >= BELT_GOAL) return this.finish('b');
       if (this.elapsed > 110) return this.finish(P.x > B.x + 25 ? 'p' : B.x > P.x + 25 ? 'b' : 'tie');
     }
-    stunStars(c, a) { const h = a.head(10); for (let i = 0; i < 3; i++) { const ang = this.T * 5 + i * 2.1; imgStar(c, h.x + Math.cos(ang) * 17, h.y - 8 + Math.sin(ang) * 5, 5, '#ffe58a'); } }
+    // Estrellitas del aturdido sobre la cabeza del sprite con traje
+    // (efecto, no traje: se quedan tras quitar el casco por código).
+    stunStars(c, d) { const h = R.project(d.x, d.y + BELT_CHAR_H + 8, 0); if (!h.ok) return; for (let i = 0; i < 3; i++) { const ang = this.T * 5 + i * 2.1; imgStar(c, h.x + Math.cos(ang) * 17, h.y - 8 + Math.sin(ang) * 5, 5, '#ffe58a'); } }
+    // Un volador del cinturón como billboard con su sprite diseñado:
+    // inclinación según la velocidad horizontal y giro completo
+    // mientras dura el aturdido; con impulso, la llamita de la
+    // mochila (flameCv) sale en contra de la dirección de empuje.
+    drawFlyer(im, d, hWorld, t, bob) {
+      const y = d.y + (bob || 0);
+      const roll = d.stun > 0 ? (BELT_STUN - d.stun) * 11 : Math.max(-0.3, Math.min(0.3, -(d.vx || 0) * 0.0011));
+      if (d.thrust) {
+        const tx = d.tx || 1, ty = d.ty || 0, tl = Math.max(1, Math.hypot(tx, ty));
+        const fl = 0.8 + Math.sin(t * 40 + d.x) * 0.25, cx = d.x - (tx / tl) * hWorld * 0.3, cy = y + hWorld / 2 - (ty / tl) * hWorld * 0.3;
+        R.sprite(flameCv(), cx, cy - 13 * fl, 0, { w: 15, h: 26 * fl, nostretch: true, lit: 0, roll: Math.atan2(-tx / tl, ty / tl) });
+      }
+      drawBeltH(im, d.x, y, 0, hWorld, { lit: 0.55, roll });
+    }
     endOverlay(c) {
       const w = this.result.win;
       c.fillStyle = 'rgba(16,12,26,.85)'; c.fillRect(0, 0, 640, 360);
@@ -3419,7 +3494,14 @@
     draw(dt) {
       const P = this.P, B = this.B;
       W.render({
-        cam: this.cam, dt, mesh: null, actors: [this.p, this.cat, this.jose], noApartment: true,
+        // SIN actores en el render (corrección de Jose, 2026-11-21):
+        // lo que se VE en el cinturón son los sprites diseñados con
+        // el traje integrado (drawFlyer), no el Actor definido con el
+        // casco burbuja dibujado encima (drawHelmet ya no se llama en
+        // este duelo; sigue vivo en la transición y la fiesta). Los
+        // Actor this.p/this.jose/this.cat quedan solo como lógica
+        // (emo/sfx/animación interna), fuera de la lista de render.
+        cam: this.cam, dt, mesh: null, actors: [], noApartment: true,
         light: { amb: [0.42, 0.44, 0.62], sun: [0.3, 0.3, 0.42], sky: '#081026', points: [{ x: this.cam.x, y: 130, z: -200, r: 800, c: [0.3, 0.3, 0.25] }] },
         boxes: (mb) => { // la superficie del anillo mayor, muy por debajo del cinturón
           const x0 = Math.floor((this.cam.x - 800) / 200) * 200;
@@ -3430,8 +3512,13 @@
           drawSpaceSky(t, this.cam.x);
           R.sprite(planetCv(), this.cam.x + 460, -120, -1250, { w: 700, h: 700, nostretch: true, lit: 0 });
           for (const r of this.rocks) { if (Math.abs(r.x - this.cam.x) > 620) continue; R.sprite(rockCv(r.kind, r.seed), r.x, r.y - r.r * 1.05, 0, { w: r.r * 2.15, h: r.r * 2.15, roll: r.rot, lit: 0.55 }); }
-          R.sprite(ringGoalCv('cuadros'), BELT_GOAL + 26, 22, 0, { w: 190, h: 190, nostretch: true, lit: 0 });
+          // la META es la imagen diseñada (meta-cinturon.png), no el aro por código
+          drawBeltH(beltImg('meta-cinturon'), BELT_GOAL + 26, 22, 0, 190, { lit: 0 });
           R.flat(R.glowTex, BELT_GOAL + 26, 104, -6, 105, { tint: [1, 0.95, 0.6], alpha: 0.16 + Math.sin(t * 3) * 0.05 });
+          // los tres voladores con su traje integrado en el arte
+          this.drawFlyer(beltImg('espacio-jose'), B, BELT_CHAR_H, t, Math.sin(t * 2 + 2) * 2);
+          this.drawFlyer(beltImg('espacio-pollito'), { x: this.C.x, y: this.C.y, vx: 0, stun: 0, thrust: false }, BELT_CAT_H, t, Math.sin(t * 2.6) * 3);
+          this.drawFlyer(beltImg('espacio-' + this.who), P, BELT_CHAR_H, t, Math.sin(t * 2) * 2);
         },
         over: (c, t) => {
           if (this.st === 'over') { this.endOverlay(c); return; }
@@ -3441,14 +3528,24 @@
           c.fillStyle = '#2fa8a0'; c.beginPath(); c.roundRect(192, 58, 256 * Math.min(1, Math.max(0, P.x) / BELT_GOAL), 6, 3); c.fill();
           c.fillStyle = '#ff6b7a'; c.beginPath(); c.arc(192 + 256 * Math.min(1, Math.max(0, B.x) / BELT_GOAL), 61, 4.5, 0, 6.3); c.fill();
           c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(192 + 256 * Math.min(1, Math.max(0, P.x) / BELT_GOAL), 61, 4.5, 0, 6.3); c.fill();
-          drawHelmet(c, this.p, P.thrust); drawHelmet(c, this.jose, B.thrust); drawHelmet(c, this.cat, false);
-          if (P.stun > 0) this.stunStars(c, this.p);
-          if (B.stun > 0) this.stunStars(c, this.jose);
+          if (P.stun > 0) this.stunStars(c, P);
+          if (B.stun > 0) this.stunStars(c, B);
           if (this.st === 'play' && this.adv && this.elapsed < 4.5) G.text(c, 'Ventaja de los Anillos: sales más cerca del aro', 320, 322, { size: 10, color: '#7dff8a' });
         },
       });
     }
   }
+
+  AsteroidBeltDuel.CAM = { dist: BELT_CAM_DIST, pitch: 0.3 };
+  AsteroidBeltDuel.CHAR_H = BELT_CHAR_H;
+  AsteroidBeltDuel.CAT_H = BELT_CAT_H;
+  AsteroidBeltDuel.STUN = BELT_STUN;
+  AsteroidBeltDuel.PUSH = BELT_PUSH;
+  AsteroidBeltDuel.CD = BELT_CD;
+  AsteroidBeltDuel.ROCK_OPAQUE = BELT_ROCK_OPAQUE;
+  AsteroidBeltDuel.CORE_R = BELT_CORE_R;
+  AsteroidBeltDuel.rockR = beltRockR;
+  AsteroidBeltDuel.FILES = BELT_FILES;
 
   // ---------- Cinemática de despegue (azotea 3D, skippable) ----------
   class SpaceLaunchScene {
@@ -3460,6 +3557,7 @@
       this.cam = { x: 0, y: 0, z: 0, dist: 430, pitch: 0.42, fov: 38 };
       this.phase = 'walk'; this.phT = 0; this.rkY = 0; this.rkV = 0;
       rocketPreload(); // el cohete de esta cinemática es imagen diseñada
+      beltPreload(); // y los trajes/meta del cinturón (1B) se precargan ya
     }
     finish() { if (!this.sent) { this.sent = true; this.done(); } }
     update(dt) {
