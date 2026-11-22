@@ -110,6 +110,26 @@
       el deck que suena), sobre G.sfx (la lee en cada disparo) y
       sobre el audio de La Cita (date.js la consulta y recibe
       applySoundSettings).
+   W) Playtest móvil de Jose (2026-11-22): en HORIZONTAL el chat
+      flotante deja de aparecer/desaparecer solo — control manual
+      con el botón del teléfono (más notorio), insignia que
+      acumula no leídos y pasa a alerta «!» con una decisión
+      pendiente —; el chat ya NO salta solo al último mensaje si
+      el jugador está leyendo más arriba (solo sigue si ya estaba
+      casi al final, CHAT_STICK_PX); y en VERTICAL el joystick y
+      el botón de acción bajan a una banda inferior en flujo
+      (bajo el chat, a la altura de los pulgares) en vez de ir
+      superpuestos sobre la escena.
+   W3) Decisiones en el FLUJO (propuesta de Jose, 2026-11-22):
+      las opciones de choose/assign dejan la zona fija #actions
+      (retirada) y pasan a ser el último mensaje del chat: se
+      van con el historial al deslizar hacia arriba y aparecen
+      al deslizar hasta abajo; su llegada no mueve scrollTop en
+      ningún caso. Si el bloque queda bajo el pliegue con la
+      decisión pendiente, avisa la pastilla «Decisión pendiente
+      ↓» — sin mover nada por sí sola: solo su toque baja la
+      vista hasta el bloque — y al responder el bloque sale del
+      flujo y queda el eco de siempre.
    U) Sonido por la RUTA REAL (bug de Jose, 2026-11-22): el
       nivel audible de la música vive en un GainNode de
       WebAudio, no en el.volume del <audio> (que iOS/WebKit
@@ -119,6 +139,17 @@
       menú sonando (la llamada exacta de main) y afirma que
       el nivel baja al esperado y SE MANTIENE tras los ticks
       de los fades, y que el silencio lo deja en cero fijo.
+   X) Borrar caché y datos (pedido de Jose, 2026-11-22): el
+      panel de Ajustes gana la acción de PRUEBAS «Borrar caché
+      y datos del juego», la alternativa a la ventana de
+      incógnito: confirmación en dos pasos dentro del propio
+      botón (sin confirm() nativo), y al confirmar limpia el
+      almacenamiento del origen, purga la Cache Storage si
+      existe (sin desregistrar workers) y recarga la misma
+      ruta con cache-bust. La sección la ejercita con el panel
+      REAL: sin confirmar no se borra nada; confirmando, el
+      almacenamiento falso queda vacío y la recarga lleva el
+      parámetro ?v=.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -261,11 +292,18 @@ load('scenes.js');
 // suma showMinigames/showEnding (el candado de Minijuegos) y un reset
 // del respaldo en memoria del candado (mgSession), para poder simular
 // una sesión sin desbloqueo tras haberlo abierto. La sección T suma
-// saveSettings/applySoundSettings (los controles de sonido).
+// saveSettings/applySoundSettings (los controles de sonido). La
+// sección V suma cromo (la máquina del modo inmersivo). La sección AC
+// suma titleScreen y las piezas del autoguardado (saveCheckpoint,
+// readSave, applySave, clearSave) para el viaje de ida y vuelta del
+// guardado y los botones del título. La extensión de alcance de la
+// sección AC suma repersistSave y enterPractice: fijan que el
+// guardado es SOLO del modo historia (ni la práctica ni «La Cita»
+// lo crean, lo tocan ni lo resucitan tras borrarlo).
 load('game.js', (code) => {
   const from = 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect };';
   if (!code.includes(from)) throw new Error('no se encontró G.debug en game.js');
-  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings, settingsScreen };');
+  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings, settingsScreen, cromo, titleScreen, saveCheckpoint, readSave, applySave, clearSave, repersistSave, enterPractice };');
 });
 
 const G = sandbox.G, Sc = G.Scenes, W = G.World;
@@ -501,8 +539,8 @@ const tick = () => new Promise((r) => setImmediate(r));
     let it = 0;
     while (!settled && it++ < 6000) {
       await tick();
-      const actions = documentFake.querySelector('#actions');
-      const card = actions && queryWithin(actions, '.card', true).find((b) => b.onclick && !b.disabled);
+      const msgsD = documentFake.querySelector('#msgs');
+      const card = msgsD && queryWithin(msgsD, '.card', true).find((b) => b.onclick && !b.disabled);
       if (card) card.onclick();
       const mok = idRegistry.get('mok');
       if (mok && mok.onclick) { const f = mok.onclick; mok.onclick = null; f(); }
@@ -894,8 +932,8 @@ const tick = () => new Promise((r) => setImmediate(r));
   let itw = 0;
   while (!settledW && itw++ < 2000) {
     await tick();
-    const actions = documentFake.querySelector('#actions');
-    const cards = actions ? queryWithin(actions, '.card', true).filter((b) => b.onclick) : [];
+    const msgsG = documentFake.querySelector('#msgs');
+    const cards = msgsG ? queryWithin(msgsG, '.card', true).filter((b) => b.onclick) : [];
     if (cards.length) { if (cardCount < 0) cardCount = cards.length; const b = cards.find((x) => !x.disabled); if (b) b.onclick(); }
   }
   await pw;
@@ -1440,8 +1478,8 @@ const tick = () => new Promise((r) => setImmediate(r));
       let it = 0;
       while (!settled && it++ < 30000) {
         await tick();
-        const actions = documentFake.querySelector('#actions');
-        const card = actions && queryWithin(actions, '.card', true).find((b) => b.onclick && !b.disabled);
+        const msgsEv = documentFake.querySelector('#msgs');
+        const card = msgsEv && queryWithin(msgsEv, '.card', true).find((b) => b.onclick && !b.disabled);
         if (card) card.onclick();
         const mok = idRegistry.get('mok');
         if (mok && mok.onclick) { const f = mok.onclick; mok.onclick = null; f(); }
@@ -2405,7 +2443,8 @@ const tick = () => new Promise((r) => setImmediate(r));
   }
   // --- Chat: máquina de estados (con la gracia acortada para la prueba) ---
   {
-    const ph = G.ui.phone, phoneElO = documentFake.querySelector('#phone'), actsElO = documentFake.querySelector('#actions');
+    const ph = G.ui.phone, phoneElO = documentFake.querySelector('#phone'), msgsElO = documentFake.querySelector('#msgs');
+    const optBtnInFlow = () => queryWithin(msgsElO, '.opt', true).find((c) => c.onclick); // las opciones viven en el flujo de mensajes (sección W3)
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ph.graceMs = 60; // la gracia real es 4000 ms (PHONE_GRACE_MS en game.js)
     ph.reset();
@@ -2420,7 +2459,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('chat: una decisión pendiente lo muestra y lo marca pendiente', ph.state().visible === true && ph.state().pending === true, JSON.stringify(ph.state()));
     await sleep(160);
     check('chat: con la decisión pendiente NO se auto-oculta aunque pase la gracia', ph.state().visible === true && ph.state().pending === true, JSON.stringify(ph.state()));
-    const optBtn = actsElO.children.find((c) => c.onclick);
+    const optBtn = optBtnInFlow();
     if (optBtn) optBtn.onclick();
     await pChoose;
     check('chat: al decidir, la promesa se resuelve y el pendiente se libera', chosen === 0 && ph.state().pending === false, 'chosen=' + chosen);
@@ -2438,7 +2477,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     const pChoose2 = G.ui.choose([{ label: 'Sí' }, { label: 'No' }]).then((i) => { chosen2 = i; });
     check('chat: una decisión pendiente rompe el silencio manual y se muestra siempre',
       ph.state().visible === true && ph.state().pending === true && ph.state().unread === 0, JSON.stringify(ph.state()));
-    const optBtn2 = actsElO.children.find((c) => c.onclick);
+    const optBtn2 = optBtnInFlow();
     if (optBtn2) optBtn2.onclick();
     await pChoose2;
     ph.reset(); ph.graceMs = 4000;
@@ -2636,8 +2675,8 @@ const tick = () => new Promise((r) => setImmediate(r));
       iCompact >= 0 && cssS.includes('(orientation: landscape) and (max-height: 900px) and (pointer: coarse)'), '');
     check('horizontal: el HUD se compacta a UNA fila delgada (nowrap, sin segunda fila)',
       compact.includes('#hud { flex-wrap: nowrap'), '');
-    check('horizontal: el inventario se adelgaza (slots de 32px) y la reserva del escenario baja a 38px',
-      compact.includes('.slot { width: 32px; height: 32px; }') && compact.includes('width: min(100cqw, calc((100cqh - 38px) * 16 / 9))'), '');
+    check('horizontal: el inventario se adelgaza (slots de 32px) y el escenario usa el hueco completo (modo inmersivo, sección V: sin reserva de 38px)',
+      compact.includes('.slot { width: 32px; height: 32px; }') && compact.includes('width: min(100cqw, calc(100cqh * 16 / 9))') && !compact.includes('(100cqh - 38px)'), '');
     check('horizontal: el teléfono NO reserva columna en este modo: flota sobre el lateral de main',
       compact.includes('#phone { position: absolute') && compact.includes('main { position: relative'), '');
     check('modales: el ancho se topa en cqw (nada asoma por la derecha) en normal y wide',
@@ -2821,6 +2860,933 @@ const tick = () => new Promise((r) => setImmediate(r));
     if (back && back.onclick) back.onclick();
     await panelP;
     MU.stop();
+  }
+
+  // --- Sección V: modo inmersivo (Opción A de Jose, 2026-11-22) ---
+  // En el horizontal compacto el HUD y el inventario salen del
+  // flujo y flotan sobre la escena (la escena pasa al 100% del
+  // hueco), semitransparentes y auto-ocultables con la máquina
+  // `cromo` de game.js — la misma filosofía del chat. El arnés no
+  // tiene matchMedia (la máquina nace inactiva, como en un
+  // navegador sin ese modo), así que el comportamiento se
+  // ejercita activándola a mano (cromo.active) con una gracia
+  // corta, sobre los MISMOS elementos falsos que game.js capturó.
+  {
+    console.log('\nV) Modo inmersivo — escena al 100% y cromo flotante que se retira solo');
+    const waitV = (ms) => new Promise((r) => setTimeout(r, ms));
+    const cssV = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameV = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const iCompactV = cssV.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const compactV = iCompactV >= 0 ? cssV.slice(iCompactV) : '';
+
+    // --- Fuente CSS: todo vive SOLO dentro del bloque compacto ---
+    check('inmersivo: el HUD sale del flujo en el modo compacto (absoluto sobre el borde superior, con safe-area)',
+      compactV.includes('#hud { position: absolute') && compactV.includes('top: env(safe-area-inset-top, 0px)'), '');
+    check('inmersivo: el inventario sale del flujo en el modo compacto (absoluto y centrado sobre el borde inferior)',
+      compactV.includes('#inv { position: absolute') && compactV.includes('left: 50%') && compactV.includes('transform: translateX(-50%)'), '');
+    check('inmersivo: el escenario usa el hueco COMPLETO (la fórmula ya no resta la reserva del inventario)',
+      compactV.includes('width: min(100cqw, calc(100cqh * 16 / 9))') && !compactV.includes('(100cqh - 38px)'), '');
+    check('inmersivo: fuera del bloque compacto el HUD y el inventario NO son absolutos (retrato/escritorio intactos)',
+      !cssV.slice(0, iCompactV).includes('#hud { position: absolute') && !cssV.slice(0, iCompactV).includes('#inv { position: absolute'), '');
+    check('inmersivo: al retirarse solo se apagan marca, medidores y Ajustes — Pausa y Teléfono quedan SIEMPRE visibles y pulsables',
+      compactV.includes('#hud.chrome-off .brand, #hud.chrome-off .meter, #hud.chrome-off #settingsbtn { opacity: 0; pointer-events: none; }')
+      && compactV.includes('#hud.chrome-off #pausebtn, #hud.chrome-off #phonebtn { pointer-events: auto; }'), '');
+    check('inmersivo: el fondo del cromo flotante es semitransparente (se lee sin tapar la escena) y el retirado deja pasar los toques',
+      compactV.includes('rgba(46, 38, 68, .88)') && compactV.includes('rgba(23, 18, 38, .55)')
+      && compactV.includes('#hud.chrome-off { background: transparent;') && compactV.includes('#inv { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); z-index: 5; pointer-events: none;'), '');
+    check('defecto de la captura: el estado de sueño ya no se monta sobre RUIDO (min-width:128px anulado en compacto y etiqueta con ellipsis)',
+      compactV.includes('#m-sleep .val { font-size: 9px; min-width: 0;') && compactV.includes('text-overflow: ellipsis'), '');
+
+    // --- Fuente JS: máquina, constante y cableado ---
+    check('inmersivo: la máquina del cromo existe con su constante nombrada de auto-ocultado (3500 ms) y la media query espejo del CSS',
+      gameV.includes('const IMMERSIVE_HIDE_MS = 3500') && gameV.includes('ui.cromo = cromo')
+      && gameV.includes("window.matchMedia('(orientation: landscape) and (max-height: 700px), (orientation: landscape) and (max-height: 900px) and (pointer: coarse)')"), '');
+    check('inmersivo: disparadores cableados — setScene→kick, refreshHUD→watchHud, refreshInv→watchInv, bordes del escenario→edge, frame→frameSync',
+      gameV.includes('G.ui.cromo.kick()') && gameV.includes('G.ui.cromo.watchHud(S.sus, S.quality)') && gameV.includes('G.ui.cromo.watchInv()')
+      && gameV.includes("wrapEl.addEventListener('pointerdown', (e) => cromo.edge(e), true)") && gameV.includes('G.ui.cromo.frameSync()'), '');
+
+    // --- Comportamiento de la máquina (activada a mano, gracia corta) ---
+    const cromo = G.debug.cromo;
+    const hudFake = documentFake.querySelector('#hud'), invFake = documentFake.querySelector('#inv');
+    const ovFake = documentFake.querySelector('#overlay'), povFake = documentFake.querySelector('#pauseov');
+    ovFake.classList.remove('show'); povFake.classList.remove('show'); G.paused = false;
+    check('inmersivo: sin la media query compacta la máquina nace INACTIVA (no toca el layout de siempre)',
+      !!cromo && cromo.state().active === false && !hudFake.classList.contains('chrome-off') && !invFake.classList.contains('chrome-off'), '');
+    cromo.active = true; cromo.hideMs = 40; cromo.reset();
+    cromo.kick();
+    check('inmersivo: al arrancar la escena (kick) HUD e inventario están visibles',
+      cromo.state().hudVis === true && cromo.state().invVis === true && !hudFake.classList.contains('chrome-off') && !invFake.classList.contains('chrome-off'), '');
+    await waitV(110);
+    check('inmersivo: tras la gracia sin novedades AMBOS se retiran (clase chrome-off puesta)',
+      cromo.state().hudVis === false && cromo.state().invVis === false && hudFake.classList.contains('chrome-off') && invFake.classList.contains('chrome-off'), '');
+    cromo.reveal('top');
+    check('inmersivo: tocar el borde superior trae SOLO el HUD de vuelta (el inventario sigue retirado)',
+      cromo.state().hudVis === true && cromo.state().invVis === false && !hudFake.classList.contains('chrome-off') && invFake.classList.contains('chrome-off'), '');
+    await waitV(110);
+    cromo.reveal('bottom');
+    check('inmersivo: tocar el borde inferior trae SOLO el inventario de vuelta',
+      cromo.state().invVis === true && cromo.state().hudVis === false && !invFake.classList.contains('chrome-off'), '');
+    // Novedad relevante: sube la Sospecha → el HUD reaparece.
+    await waitV(110);
+    S.sus = 0; G.ui.refreshHUD(); // foto previa con la sospecha a cero (determinista)
+    S.sus = 10; G.ui.refreshHUD();
+    check('inmersivo: si SUBE la Sospecha el HUD reaparece solo',
+      cromo.state().hudVis === true && !hudFake.classList.contains('chrome-off'), '');
+    // Novedad en el inventario: recoger un ítem → el inventario reaparece.
+    await waitV(110);
+    G.ui.refreshInv(); // fija la firma previa
+    cromo.hideInv();   // y se parte de oculto: lo que se prueba es la REAPARICIÓN
+    const anyItem = Object.keys(G.ITEMS).find((id) => !S.inv[id]) || Object.keys(G.ITEMS)[0];
+    S.inv[anyItem] = true;
+    G.ui.refreshInv();
+    check('inmersivo: al recoger un ítem el inventario reaparece solo',
+      cromo.state().invVis === true && !invFake.classList.contains('chrome-off'), `item=${anyItem}`);
+    delete S.inv[anyItem]; G.ui.refreshInv();
+    // Con un modal abierto el cromo se retira; al cerrarse vuelve.
+    cromo.kick();
+    G.paused = true; cromo.frameSync();
+    check('inmersivo: con pausa/modal abierto el cromo se retira (el modal manda)',
+      cromo.state().hudVis === false && cromo.state().invVis === false, '');
+    G.paused = false; cromo.frameSync();
+    check('inmersivo: al cerrar la pausa/modal el cromo vuelve (kick de frameSync)',
+      cromo.state().hudVis === true && cromo.state().invVis === true, '');
+    // Limpieza: máquina inactiva y sin clases, como en un navegador sin el modo.
+    cromo.active = false; cromo.hideMs = 3500; cromo.reset();
+    check('inmersivo: al salir del modo las clases se quitan y el layout vuelve a ser el de siempre',
+      !hudFake.classList.contains('chrome-off') && !invFake.classList.contains('chrome-off'), '');
+  }
+
+  // --- Sección W: playtest de Jose — chat flotante MANUAL con
+  // insignia, scroll que respeta la lectura y banda táctil
+  // inferior en vertical (2026-11-22, sobre la rama develop) ---
+  // En horizontal el panel del chat flota (position:absolute del
+  // bloque compacto) y a Jose no le gusta que aparezca y
+  // desaparezca según el juego: pasa a control manual con el
+  // botón del teléfono, con insignia de no leídos y alerta de
+  // decisión pendiente. El scroll del chat ya no salta al final
+  // si el jugador está leyendo arriba. Y en vertical los
+  // controles táctiles bajan a una banda en flujo bajo el chat.
+  // El arnés no tiene getComputedStyle ni matchMedia: el modo
+  // flotante se fija a mano (phone.floatMode, como cromo.active)
+  // y la banda se fuerza con G.touchBandSync(true/false).
+  {
+    console.log('\nW) Chat flotante manual con insignia, scroll sin saltos y banda táctil en vertical');
+    const waitW = (ms) => new Promise((r) => setTimeout(r, ms));
+    const cssW = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameW = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const iPortraitW = cssW.indexOf('@media (max-width: 760px)');
+    const portraitW = iPortraitW >= 0 ? cssW.slice(iPortraitW, cssW.indexOf('/* Controles táctiles PROPORCIONALES')) : '';
+    const iCompactW = cssW.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const compactW = iCompactW >= 0 ? cssW.slice(iCompactW) : '';
+
+    // --- Fuente: detección, insignia, botón notorio ---
+    check('flotante: el modo se detecta desde la fuente de verdad del CSS (la posición calculada del panel), no con media queries duplicadas en JS',
+      gameW.includes("getComputedStyle(phoneEl).position === 'absolute'") && gameW.includes('floatMode'), '');
+    check('flotante: la insignia tiene estado de ALERTA para la decisión pendiente (pulso suave persistente) y el botón pulsa al llegar algo nuevo',
+      cssW.includes('#phonebadge.alert') && cssW.includes('@keyframes badgepulse') && cssW.includes('#phonebtn.ping') && cssW.includes('@keyframes phoneping'), '');
+    check('flotante: en el modo compacto el botón del teléfono es MÁS notorio (objetivo táctil de 38px, borde amarillo, pictograma mayor)',
+      compactW.includes('#phonebtn { padding: 6px 12px; font-size: 12px; min-height: 38px;') && compactW.includes('#phonebtn .pic-phone { width: 13px; height: 20px; }'), '');
+
+    // --- Fuente: scroll y banda ---
+    check('scroll: la regla de seguimiento es una constante nombrada (CHAT_STICK_PX = 48) aplicada en el punto común (ui.scroll y raw, midiendo ANTES de añadir)',
+      gameW.includes('const CHAT_STICK_PX = 48') && gameW.includes('msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight <= CHAT_STICK_PX')
+      && gameW.includes('const stick = msgs.scrollHeight'), '');
+    check('banda: en vertical la capa dentro de main es una banda EN FLUJO pegada al fondo de la columna (margin-top:auto) que solo se muestra con la capa táctil activa',
+      portraitW.includes('main > #touchpad { position: static; margin-top: auto; }') && portraitW.includes('body.touch-on main > #touchpad { display: flex;'), '');
+    check('banda: dentro de la banda los controles dejan de posicionarse sobre la escena (relativos, joystick izquierda / acción derecha por space-between)',
+      portraitW.includes('main > #touchpad #joystick { position: relative;') && portraitW.includes('main > #touchpad .taction { position: relative;') && portraitW.includes('justify-content: space-between'), '');
+    check('banda: con un modal abierto la banda se oculta, salvo el carrusel (.nav-open) donde el joystick navega el menú',
+      portraitW.includes('main:has(#overlay.show) > #touchpad') && portraitW.includes('main:has(#pauseov.show) > #touchpad') && portraitW.includes('main:has(#overlay.show) > #touchpad.nav-open { display: flex !important; }'), '');
+    check('banda: el JS espeja el retrato ACOTADO a orientación vertical (no pisa el horizontal compacto) y en horizontal el calcado/márgenes del letterbox sigue intacto',
+      gameW.includes("window.matchMedia('(max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait)')") && gameW.includes('G.touchBandSync = syncBand')
+      && gameW.includes('G.input.touchLayout') && gameW.includes("pad.classList.toggle('joy-margin'") && gameW.includes("pad.classList.toggle('act-margin'"), '');
+
+    // --- Comportamiento: el teléfono en modo flotante ---
+    const phW = G.ui.phone, badgeFake = documentFake.querySelector('#phonebadge'), phoneFake = documentFake.querySelector('#phone'), msgsW = documentFake.querySelector('#msgs');
+    phW.floatMode = true; // sin getComputedStyle en el arnés: el modo se fija a mano
+    phW.reset();
+    await G.ui.post({ who: 'sistema', text: 'Mensaje flotante uno' });
+    await G.ui.post({ who: 'sistema', text: 'Mensaje flotante dos' });
+    check('flotante: con mensajes nuevos el panel NO se abre solo y la insignia ACUMULA los no leídos',
+      phW.state().visible === false && phoneFake.classList.contains('ph-off') && phW.state().unread === 2
+      && badgeFake.textContent === '2' && badgeFake.style.display === 'grid' && !badgeFake.classList.contains('alert'),
+      JSON.stringify(phW.state()) + ' badge=' + badgeFake.textContent);
+    let chosenW = -1;
+    const pChooseW = G.ui.choose([{ label: 'Ir' }, { label: 'Quedarse' }]).then((i) => { chosenW = i; });
+    check('flotante: una decisión pendiente TAMPOCO abre el panel; la insignia pasa a alerta «!» (el juego espera esa elección)',
+      phW.state().visible === false && phW.state().pending === true && badgeFake.textContent === '!' && badgeFake.classList.contains('alert'),
+      JSON.stringify(phW.state()) + ' badge=' + badgeFake.textContent);
+    const optBtnW = queryWithin(msgsW, '.opt', true).find((c) => c.onclick);
+    if (optBtnW) optBtnW.onclick();
+    await pChooseW;
+    check('flotante: al responder la decisión la alerta se apaga (la insignia vuelve a ser contador)',
+      chosenW === 0 && phW.state().pending === false && !badgeFake.classList.contains('alert') && badgeFake.textContent !== '!',
+      JSON.stringify(phW.state()) + ' badge=' + badgeFake.textContent);
+    phW.toggle(); // abrir a mano con el botón
+    const openedOk = phW.state().visible === true && phW.state().unread === 0 && badgeFake.style.display === 'none';
+    phW.graceMs = 50; // si hubiera auto-ocultado en flotante, 150 ms bastan para cazarlo
+    await waitW(150);
+    check('flotante: abierto a mano la insignia se limpia y el panel NO se auto-oculta jamás (sin gracia que lo cierre)',
+      openedOk && phW.state().visible === true && !phoneFake.classList.contains('ph-off'), JSON.stringify(phW.state()));
+    phW.toggle(); // cerrar a mano
+    check('flotante: cerrado a mano queda cerrado (control manual pleno)',
+      phW.state().visible === false && phoneFake.classList.contains('ph-off'), JSON.stringify(phW.state()));
+    phW.floatMode = false; phW.graceMs = 4000; phW.reset();
+
+    // --- Comportamiento: el scroll respeta la lectura ---
+    const msgsFake = documentFake.querySelector('#msgs');
+    msgsFake.scrollHeight = 1000; msgsFake.clientHeight = 300; msgsFake.scrollTop = 0; // leyendo arriba del todo (quedan 700px)
+    G.ui.raw('<div class="sys">Mensaje con el lector arriba</div>');
+    check('scroll: leyendo más arriba, un mensaje nuevo CONSERVA la posición intacta (no salta al último mensaje)',
+      msgsFake.scrollTop === 0, 'scrollTop=' + msgsFake.scrollTop);
+    msgsFake.scrollTop = 670; // casi al final: quedan 30px ≤ CHAT_STICK_PX
+    G.ui.raw('<div class="sys">Mensaje con el lector al final</div>');
+    check('scroll: estando (casi) al final, el chat SÍ sigue al mensaje nuevo',
+      msgsFake.scrollTop === 1000, 'scrollTop=' + msgsFake.scrollTop);
+    msgsFake.scrollTop = 100; G.ui.scroll();
+    const upStaysW = msgsFake.scrollTop === 100;
+    msgsFake.scrollTop = 690; G.ui.scroll();
+    check('scroll: ui.scroll (el punto común de los MENSAJES) aplica la regla de seguimiento; las decisiones ya no lo invocan (sección W2)',
+      upStaysW && msgsFake.scrollTop === 1000, 'scrollTop=' + msgsFake.scrollTop);
+    phW.reset();
+
+    // --- Comportamiento: la banda vertical muda la capa en el DOM ---
+    const padFake = documentFake.querySelector('#touchpad'), wrapFake = documentFake.querySelector('#stagewrap'), mainFake = documentFake.querySelector('main');
+    check('banda: sin matchMedia la banda nace INACTIVA y la capa no está en main (el layout de siempre no se toca)',
+      typeof G.touchBandSync === 'function' && G.touchBandSync() === false && padFake.parent !== mainFake, '');
+    padFake.style.left = '33px'; // resto del calcado superpuesto: al entrar en la banda debe limpiarse
+    const bandOnW = G.touchBandSync(true);
+    check('banda: en vertical la capa se muda a main (la banda bajo el chat) y se limpian los estilos en línea del calcado/márgenes',
+      bandOnW === true && padFake.parent === mainFake && padFake.style.left === '', '');
+    const bandOffW = G.touchBandSync(false);
+    check('banda: al salir de vertical la capa vuelve a #stagewrap (vuelve el modo superpuesto/márgenes intacto)',
+      bandOffW === false && padFake.parent === wrapFake, '');
+  }
+
+  // --- Sección W2: el modelo manual manda también en VERTICAL
+  // (playtest de Jose, 2026-11-22, sobre develop) ---
+  // «El chat debería mostrarse o desaparecer cuando uno lo
+  // seleccione, porque pierdo el foco cuando aparece a mitad de
+  // un diálogo»: en retrato el panel vive en el flujo y seguía
+  // con la máquina automática de escritorio. Ahora el modo
+  // manual es flotante O retrato (la media query portraitMQ se
+  // comparte con la banda táctil; en el arnés, sin matchMedia,
+  // manda el campo portraitMode, como floatMode). En retrato el
+  // panel nace cerrado, al cerrarse colapsa en la columna (la
+  // regla base lo saca del layout) y la insignia es la campana.
+  // Y la llegada de una DECISIÓN ya no mueve el scroll ni
+  // estando el lector al final: la razón de la elección se lee
+  // al ritmo del jugador (los mensajes normales sí siguen).
+  {
+    console.log('\nW2) Chat manual también en vertical y decisiones que no roban el scroll');
+    const waitW2 = (ms) => new Promise((r) => setTimeout(r, ms));
+    const cssW2 = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameW2 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+
+    // --- Fuente: detección compartida y decisiones sin scroll ---
+    check('retrato: el modo manual del teléfono es flotante O retrato (manual() = floating() || portrait(), con syncPortrait sobre la media query)',
+      gameW2.includes('manual() { return this.floating() || this.portrait(); }') && gameW2.includes('syncPortrait()') && gameW2.includes('portraitMode'), '');
+    check('retrato: la media query de retrato se define UNA sola vez y la comparten el teléfono y la banda táctil (sin duplicar el criterio)',
+      (gameW2.split("window.matchMedia('(max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait)')").length - 1) === 1
+      && gameW2.includes('G.touchBandSync = syncBand'), '');
+    check('retrato: al cerrarse el panel COLAPSA su espacio en la columna (la regla base lo saca del layout: display none)',
+      cssW2.includes('#phone.ph-off { display: none; }'), '');
+    const iChooseW2 = gameW2.indexOf('choose(options, timer)');
+    const chooseTxtW2 = iChooseW2 >= 0 ? gameW2.slice(iChooseW2, gameW2.indexOf('assign(prompt, info)')) : '';
+    const iAssignW2 = gameW2.indexOf('assign(prompt, info)');
+    const assignTxtW2 = iAssignW2 >= 0 ? gameW2.slice(iAssignW2, gameW2.indexOf('modal(html, btn)')) : '';
+    check('decisiones: ni choose ni assign invocan el scroll al renderizarse (su llegada nunca mueve la lectura)',
+      iChooseW2 >= 0 && iAssignW2 >= 0 && !chooseTxtW2.includes('.scroll(') && !assignTxtW2.includes('.scroll(')
+      && !gameW2.includes('ui.scroll();'), '');
+
+    // --- Comportamiento: el teléfono en modo retrato ---
+    const ph2 = G.ui.phone, badge2 = documentFake.querySelector('#phonebadge'), phoneEl2 = documentFake.querySelector('#phone'),
+      msgs2 = documentFake.querySelector('#msgs');
+    ph2.floatMode = false; ph2.portraitMode = true; // sin matchMedia en el arnés: el modo se fija a mano, como floatMode
+    ph2.reset();
+    check('retrato: el panel NACE cerrado (la insignia es la campana) y el modo se reporta manual/retrato',
+      ph2.state().visible === false && phoneEl2.classList.contains('ph-off') && ph2.state().manual === true && ph2.state().portrait === true && ph2.state().floating === false,
+      JSON.stringify(ph2.state()));
+    await G.ui.post({ who: 'sistema', text: 'Mensaje vertical uno' });
+    await G.ui.post({ who: 'sistema', text: 'Mensaje vertical dos' });
+    check('retrato: con mensajes nuevos el panel NO se abre solo y la insignia ACUMULA los no leídos (el panel sigue colapsado en la columna)',
+      ph2.state().visible === false && phoneEl2.classList.contains('ph-off') && ph2.state().unread === 2
+      && badge2.textContent === '2' && badge2.style.display === 'grid' && !badge2.classList.contains('alert'),
+      JSON.stringify(ph2.state()) + ' badge=' + badge2.textContent);
+
+    // --- Comportamiento: la decisión no roba el scroll ---
+    msgs2.scrollHeight = 1000; msgs2.clientHeight = 300; msgs2.scrollTop = 700; // pegado al final (hueco 0 ≤ CHAT_STICK_PX)
+    let chosenW2 = -1;
+    const pChooseW2 = G.ui.choose([{ label: 'Ir' }, { label: 'Quedarse' }]).then((i) => { chosenW2 = i; });
+    check('retrato: una decisión pendiente TAMPOCO abre el panel; la insignia pasa a alerta «!»',
+      ph2.state().visible === false && ph2.state().pending === true && badge2.textContent === '!' && badge2.classList.contains('alert'),
+      JSON.stringify(ph2.state()) + ' badge=' + badge2.textContent);
+    check('decisiones: renderizada con el lector AL FINAL, el scroll NO se mueve (la razón de la elección queda en pantalla)',
+      msgs2.scrollTop === 700, 'scrollTop=' + msgs2.scrollTop);
+    const optBtnW2 = queryWithin(msgs2, '.opt', true).find((c) => c.onclick);
+    if (optBtnW2) optBtnW2.onclick();
+    await pChooseW2;
+    check('decisiones: al responderla, el eco de la elección es un MENSAJE normal y SÍ sigue la regla de seguimiento (salta al final)',
+      chosenW2 === 0 && ph2.state().pending === false && msgs2.scrollTop === 1000, 'scrollTop=' + msgs2.scrollTop);
+
+    // Apertura manual y no auto-ocultado en retrato
+    ph2.toggle(); // abrir a mano con el botón
+    const openedW2 = ph2.state().visible === true && ph2.state().unread === 0 && badge2.style.display === 'none';
+    ph2.graceMs = 50; // si en retrato hubiera auto-ocultado, 150 ms bastan para cazarlo
+    await waitW2(150);
+    check('retrato: abierto a mano la insignia se limpia, el panel ocupa su sitio en el flujo y NO se auto-oculta jamás',
+      openedW2 && ph2.state().visible === true && !phoneEl2.classList.contains('ph-off'), JSON.stringify(ph2.state()));
+    ph2.toggle(); // cerrar a mano: colapsa
+    check('retrato: cerrado a mano el panel colapsa (ph-off) y queda cerrado',
+      ph2.state().visible === false && phoneEl2.classList.contains('ph-off'), JSON.stringify(ph2.state()));
+
+    // Rotación: el estado abierto/cerrado se conserva al cambiar de modo
+    ph2.toggle(); // abierto en retrato…
+    ph2.portraitMode = false; ph2.floatMode = true; // …giro a horizontal flotante
+    const rotKeepsW2 = ph2.state().visible === true;
+    await G.ui.post({ who: 'sistema', text: 'Mensaje tras el giro' });
+    check('rotación: al pasar de retrato a flotante el panel CONSERVA su estado (abierto) y el modo sigue siendo manual (sin conteo con el panel abierto)',
+      rotKeepsW2 && ph2.state().visible === true && ph2.state().unread === 0 && ph2.state().manual === true, JSON.stringify(ph2.state()));
+
+    // Escritorio ancho: ni flotante ni retrato → la máquina automática de siempre, intacta
+    ph2.floatMode = false; ph2.portraitMode = false; ph2.reset();
+    await G.ui.post({ who: 'sistema', text: 'Mensaje de escritorio' });
+    check('escritorio: sin flotante ni retrato el chat sigue apareciendo solo con contenido nuevo (modo automático intacto)',
+      ph2.state().visible === true && ph2.state().manual === false, JSON.stringify(ph2.state()));
+    ph2.reset(); ph2.graceMs = 4000;
+  }
+
+  // --- Sección W3: las decisiones viven DENTRO del flujo de
+  // mensajes (propuesta de Jose, 2026-11-22) ---
+  // Las opciones de choose/assign dejan la zona fija #actions
+  // (retirada del HTML, del CSS y de game.js) y se añaden como
+  // último nodo de #msgs: si Jose desliza hacia arriba se van
+  // con el historial; si desliza hasta abajo, aparecen. Su
+  // llegada no mueve scrollTop en NINGÚN caso (ni lector arriba
+  // ni lector al final). Si el bloque queda bajo el pliegue con
+  // la decisión pendiente, avisa la PASTILLA «Decisión
+  // pendiente ↓» — que no mueve nada por sí sola: solo su toque
+  // baja la vista hasta el bloque — y desaparece cuando el
+  // bloque entra en vista o al responderse. Al responder, el
+  // bloque sale del flujo y queda el eco de siempre.
+  {
+    console.log('\nW3) Decisiones dentro del flujo de mensajes y pastilla de aviso');
+    const gameW3 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const htmlW3 = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+    const cssW3 = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+
+    // --- Fuente: el nuevo hogar del bloque ---
+    const iChooseW3 = gameW3.indexOf('choose(options, timer)');
+    const chooseTxtW3 = iChooseW3 >= 0 ? gameW3.slice(iChooseW3, gameW3.indexOf('assign(prompt, info)')) : '';
+    const iAssignW3 = gameW3.indexOf('assign(prompt, info)');
+    const assignTxtW3 = iAssignW3 >= 0 ? gameW3.slice(iAssignW3, gameW3.indexOf('modal(html, btn)')) : '';
+    check('flujo: choose y assign montan su bloque AL FINAL de los mensajes (mountDecision), no en una zona fija',
+      iChooseW3 >= 0 && iAssignW3 >= 0 && chooseTxtW3.includes('mountDecision(block)') && assignTxtW3.includes('mountDecision(block)'), '');
+    check('flujo: el viejo #actions desapareció del juego (sin referencia en game.js, sin nodo en index.html, sin reglas en el CSS)',
+      !gameW3.includes("$('#actions')") && !gameW3.includes('actions.innerHTML') && !gameW3.includes('actions.appendChild')
+      && !htmlW3.includes('id="actions"') && !cssW3.includes('#actions {'), '');
+    check('flujo: el bloque lleva la clase .decision con su fondo propio y la pastilla .dpill existe (fija al pie del panel, con su detector de pliegue)',
+      cssW3.includes('.decision {') && cssW3.includes('.dpill {') && gameW3.includes('Decisión pendiente ↓') && gameW3.includes('decisionOutOfView'), '');
+
+    // --- Comportamiento: choose en el flujo, sin mover el scroll ---
+    const ph3 = G.ui.phone, msgs3 = documentFake.querySelector('#msgs'), pill3 = documentFake.querySelector('#dpill');
+    ph3.floatMode = false; ph3.portraitMode = false; ph3.reset();
+    msgs3.scrollHeight = 2000; msgs3.clientHeight = 300; msgs3.scrollTop = 0; // lector arriba del todo
+    let chosen3 = -1;
+    const pChoose3 = G.ui.choose([{ label: 'Flujo A' }, { label: 'Flujo B' }]).then((i) => { chosen3 = i; });
+    const block3 = queryWithin(msgs3, '.decision', false);
+    check('flujo: el bloque de opciones es el ÚLTIMO nodo de los mensajes y la máquina lo marca pendiente (insignia y lógica intactas)',
+      !!block3 && msgs3.children[msgs3.children.length - 1] === block3 && ph3.state().pending === true, '');
+    check('flujo: la llegada de la decisión NO mueve el scroll (lector arriba)',
+      msgs3.scrollTop === 0, 'scrollTop=' + msgs3.scrollTop);
+    check('flujo: sin geometría medible la pastilla no aparece (no afirma lo que no puede medir)',
+      !!pill3 && pill3.style.display === 'none', '');
+
+    // Geometría simulada: el panel visible mide 300px (top 100 →
+    // bottom 400) y el bloque nace a 900px del origen del
+    // contenido, así que su posición en pantalla depende del
+    // scroll, como en un navegador real.
+    msgs3.getBoundingClientRect = () => ({ top: 100, bottom: 400, left: 0, right: 300, width: 300, height: 300 });
+    block3.getBoundingClientRect = () => ({ top: 900 - msgs3.scrollTop, bottom: 990 - msgs3.scrollTop, left: 0, right: 300, width: 300, height: 90 });
+    const pillShown3 = G.ui.decisionPillSync();
+    check('pastilla: con la decisión pendiente y el bloque BAJO EL PLIEGUE, la pastilla aparece (y solo avisa: no mueve nada por sí sola)',
+      pillShown3 === true && pill3.style.display !== 'none' && msgs3.scrollTop === 0, 'scrollTop=' + msgs3.scrollTop);
+    pill3.onclick(); // el toque de Jose: la vista baja hasta el bloque
+    check('pastilla: SOLO su toque desplaza la vista hasta el bloque (y al entrar el bloque en vista, la pastilla desaparece)',
+      msgs3.scrollTop === 794 && pill3.style.display === 'none', 'scrollTop=' + msgs3.scrollTop);
+    msgs3.scrollTop = 0; // Jose vuelve a subir a releer la razón: el bloque sale de vista…
+    const pillBack3 = G.ui.decisionPillSync(); // …que es lo que dispara el listener de scroll en el navegador
+    check('pastilla: si el bloque vuelve a salir de vista con la decisión pendiente, la pastilla reaparece',
+      pillBack3 === true && pill3.style.display !== 'none', '');
+    const opt3 = queryWithin(block3, '.opt', true).find((b) => b.onclick);
+    if (opt3) opt3.onclick();
+    await pChoose3;
+    const lastRow3 = msgs3.children[msgs3.children.length - 1];
+    check('flujo: al responder, el bloque SALE del flujo, la pastilla se apaga y queda el eco como último mensaje (el eco tampoco arrastra al lector que estaba arriba)',
+      chosen3 === 0 && queryWithin(msgs3, '.decision', false) === null && pill3.style.display === 'none' && msgs3.scrollTop === 0
+      && !!lastRow3 && lastRow3._html.includes('mine') && lastRow3._html.includes('Flujo A'),
+      'chosen=' + chosen3 + ' scrollTop=' + msgs3.scrollTop);
+
+    // Lector AL FINAL: tampoco hay excepción a la regla
+    msgs3.scrollTop = 1700; // pegado al final (2000 − 300)
+    let chosen3b = -1;
+    const pChoose3b = G.ui.choose([{ label: 'Final A' }, { label: 'Final B' }]).then((i) => { chosen3b = i; });
+    const block3b = queryWithin(msgs3, '.decision', false);
+    check('flujo: con el lector AL FINAL, la llegada de la decisión tampoco mueve el scroll (sin excepciones)',
+      !!block3b && msgs3.scrollTop === 1700, 'scrollTop=' + msgs3.scrollTop);
+    const opt3b = queryWithin(block3b, '.opt', true).find((b) => b.onclick);
+    if (opt3b) opt3b.onclick();
+    await pChoose3b;
+    check('flujo: la segunda decisión también se resuelve y su bloque sale del flujo',
+      chosen3b === 0 && queryWithin(msgs3, '.decision', false) === null, 'chosen=' + chosen3b);
+
+    // assign también vive en el flujo, con su pregunta dentro del bloque
+    let assigned3 = null;
+    const pAssign3 = G.ui.assign('¿Quién va?', () => ({ stats: 'Vel 1', odds: null, note: '' })).then((id) => { assigned3 = id; });
+    const blockA3 = queryWithin(msgs3, '.decision', false);
+    const cardA3 = blockA3 && queryWithin(blockA3, '.card', true).find((b) => b.onclick && !b.disabled);
+    check('flujo: assign monta en el flujo su bloque con la pregunta (.ask) y las tarjetas, como un mensaje más (y sin mover el scroll)',
+      !!blockA3 && blockA3._html.includes('ask') && !!cardA3 && msgs3.scrollTop === 2000, 'scrollTop=' + msgs3.scrollTop);
+    if (cardA3) cardA3.onclick();
+    await pAssign3;
+    const lastRowA3 = msgs3.children[msgs3.children.length - 1];
+    check('flujo: al asignar, el bloque sale del flujo y queda el eco «Va …» como último mensaje',
+      !!assigned3 && queryWithin(msgs3, '.decision', false) === null && !!lastRowA3 && lastRowA3._html.includes('Va '), 'assigned=' + assigned3);
+    delete msgs3.getBoundingClientRect; // la geometría simulada no debe contaminar a las secciones siguientes
+    ph3.reset();
+  }
+
+  // --- Sección W4: el chat se cierra al «1» de la cuenta atrás
+  // de los minijuegos (pedido de Jose, 2026-11-22) ---
+  // «En dispositivos móviles el chat debe cerrarse justo cuando
+  // el contador del minijuego esté en 1 segundo, porque no tiene
+  // sentido tener el chat abierto cuando se esté por jugar.»
+  // La cuenta de TODOS los duelos vive en la base Duel (tick):
+  // cuando el número mostrado pasa a 1, la base llama a
+  // phone.duelClose(), que solo actúa en modo manual (flotante
+  // o retrato) y solo si el panel está abierto; en escritorio
+  // NO se cierra. Velas (CandleGame) no usa la base: su cuenta
+  // es la fase de memoria («La luz se corta en N s») y su «1»
+  // es el último segundo de esa fase. Es la única excepción de
+  // CIERRE a la regla manual: nada se abre solo jamás, cerrar
+  // no marca nada leído y Jose puede reabrirlo cuando quiera.
+  {
+    console.log('\nW4) El chat se cierra al «1» de la cuenta atrás del minijuego (solo móvil)');
+    const gameW4 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const scenesW4 = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+
+    // --- Fuente: el método y los dos enganches ---
+    check('cuenta atrás: la máquina del teléfono expone duelClose y SOLO actúa con el panel abierto y en modo manual (manual())',
+      gameW4.includes('duelClose()') && gameW4.includes('if (!this.visible || !this.manual()) return;'), '');
+    const iDuelW4 = scenesW4.indexOf('class Duel {');
+    const duelTxtW4 = iDuelW4 >= 0 ? scenesW4.slice(iDuelW4, scenesW4.indexOf('class DecoDuel')) : '';
+    check('cuenta atrás: el enganche vive en el tick COMPARTIDO de la base Duel (la cuenta de todos los duelos), al pasar el número mostrado a 1',
+      duelTxtW4.includes('G.ui.phone.duelClose()') && duelTxtW4.includes('b > 1 && n <= 1'), '');
+    check('cuenta atrás: Velas (sin base Duel) engancha el último segundo de su fase de memoria, su cuenta atrás equivalente',
+      scenesW4.includes('if (b > 1 && Math.ceil(this.stT) <= 1 && G.ui && G.ui.phone) G.ui.phone.duelClose();'), '');
+
+    // --- Comportamiento: duelo base en modo manual (retrato) ---
+    const ph4 = G.ui.phone, phoneEl4 = documentFake.querySelector('#phone'), badge4 = documentFake.querySelector('#phonebadge');
+    const decoSaveW4 = S.deco, invSaveW4 = S.inv;
+    ph4.portraitMode = true; ph4.floatMode = false; ph4.reset();
+    ph4.toggle(); // Jose lo abre a mano: queda visible y fijado
+    const openW4 = ph4.state().visible === true && ph4.state().pinned === true;
+    const dW4 = new Sc.DecoDuel('natalia', () => {}); // st='count', stT=3.6: la cuenta muestra 4·3·2·1
+    while (dW4.stT > 1.6) dW4.tick(0.25); // avanzar hasta mostrar el 2 (stT ∈ (1.4, 2.4])
+    const stillOpenW4 = ph4.state().visible === true;
+    dW4.tick(0.25); dW4.tick(0.25); // stT cruza a ≤1.4: el número mostrado pasa a 1
+    check('cuenta atrás: en móvil el chat sigue abierto durante el 4·3·2 y se CIERRA justo cuando el contador llega a 1',
+      openW4 && stillOpenW4 && dW4.st === 'count' && ph4.state().visible === false && phoneEl4.classList.contains('ph-off'),
+      JSON.stringify(ph4.state()) + ' stT=' + dW4.stT);
+    check('cuenta atrás: el cierre no marca nada leído ni deja residuo: contador e insignia como estaban, sin fijado y sin decisión pendiente',
+      ph4.state().unread === 0 && ph4.state().pending === false && ph4.state().pinned === false && badge4.style.display === 'none',
+      JSON.stringify(ph4.state()));
+    ph4.toggle(); // reabrir a mano: permitido siempre, incluso a mitad del minijuego
+    check('cuenta atrás: Jose puede REABRIR el chat con el botón cuando quiera (la regla es solo el cierre en el 1)',
+      ph4.state().visible === true, JSON.stringify(ph4.state()));
+    ph4.reset();
+
+    // --- Comportamiento: con el chat ya cerrado, el «1» no hace nada ---
+    const dW4b = new Sc.DecoDuel('alan', () => {});
+    while (dW4b.st === 'count') dW4b.tick(0.25);
+    check('cuenta atrás: con el chat ya cerrado, la cuenta entera pasa sin tocar el panel (ni errores ni aperturas)',
+      ph4.state().visible === false && dW4b.st === 'play', JSON.stringify(ph4.state()));
+
+    // --- Comportamiento: en escritorio NO se cierra ---
+    ph4.portraitMode = false; ph4.floatMode = false; ph4.reset();
+    ph4.toggle();
+    const dW4c = new Sc.DecoDuel('natalia', () => {});
+    while (dW4c.st === 'count') dW4c.tick(0.25);
+    check('cuenta atrás: en ESCRITORIO (ni flotante ni retrato) la cuenta llega a jugar y el panel lateral NO se cierra solo',
+      ph4.state().visible === true && dW4c.st === 'play', JSON.stringify(ph4.state()));
+    ph4.reset();
+    S.deco = decoSaveW4; S.inv = invSaveW4;
+
+    // --- Comportamiento: Velas y su «1» de memoria ---
+    ph4.portraitMode = true; ph4.reset(); ph4.toggle();
+    const cgW4 = new Sc.CandleGame('natalia', () => {});
+    cgW4.st = 'memory'; cgW4.stT = 1.3; // «La luz se corta en 2 s»
+    cgW4.update(0.2); // stT=1.1: aún muestra 2, el chat sigue abierto
+    const candlesOpenW4 = ph4.state().visible === true;
+    cgW4.update(0.2); // stT=0.9: la memoria entra en su último segundo (muestra 1)
+    check('cuenta atrás: en Velas el chat se cierra al entrar la fase de memoria en su último segundo (su «1» equivalente)',
+      candlesOpenW4 && ph4.state().visible === false && cgW4.st === 'memory', JSON.stringify(ph4.state()) + ' st=' + cgW4.st);
+    W.xDoorOpen = cgW4.prevDoor; // la casa queda como estaba (Velas abre la puerta de Ximena al construirse)
+    ph4.portraitMode = false; ph4.reset();
+  }
+
+  // --- Sección W5: el botón de cerrar la ventana del chat,
+  // grande en móvil (pedido de Jose, 2026-11-22) ---
+  // «El botón de cerrar la ventana del chat debería ser más
+  // grande porque en dispositivos móviles no se ve nada.» El
+  // «×» de la cabecera (.ptop) era un glifo atenuado sin fondo
+  // de ~20×22px en TODOS los modos. Ahora la base es una
+  // pastilla visible de 32px y en los dos modos móviles
+  // (flotante horizontal y retrato en flujo) crece a objetivo
+  // táctil pleno de 44×44 con fondo, borde y ✕ blanca de 24px;
+  // la cabecera compensa el alto con menos padding vertical.
+  // La LÓGICA no cambia: el botón sigue invocando el toggle
+  // normal de la máquina del teléfono (game.js intacto), con
+  // insignia y estado como estén. El arnés no puebla los hijos
+  // de #phone, así que el cableado se fija por fuente y el
+  // comportamiento se ejercita sobre la máquina (toggle).
+  {
+    console.log('\nW5) Botón de cerrar la ventana del chat: objetivo táctil de 44px en móvil');
+    const cssW5 = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameW5 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const htmlW5 = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'index.html'), 'utf8');
+    const iCompactW5 = cssW5.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const compactW5 = iCompactW5 >= 0 ? cssW5.slice(iCompactW5) : '';
+    const iPortraitW5 = cssW5.indexOf('@media (max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait)');
+    const portraitW5 = iPortraitW5 >= 0 ? cssW5.slice(iPortraitW5) : '';
+
+    // --- Fuente: el botón vive en la cabecera del panel ---
+    const iAsideW5 = htmlW5.indexOf('<aside id="phone"');
+    check('cerrar: la ventana del chat trae su propio botón de cerrar (#phoneclose) dentro de la cabecera .ptop del panel',
+      iAsideW5 >= 0 && htmlW5.slice(iAsideW5).includes('id="phoneclose"') && htmlW5.includes('<div class="ptop">'), '');
+
+    // --- Fuente: tamaño y presencia en cada modo ---
+    check('cerrar: la regla base ya es una pastilla visible de 32px con fondo (no el glifo atenuado sin fondo de ~20×22px)',
+      cssW5.includes('#phoneclose { flex: none;') && cssW5.includes('min-width: 32px; min-height: 32px') && cssW5.includes('background: rgba(255, 255, 255, .08)'), '');
+    check('cerrar: en el modo FLOTANTE horizontal el botón es un objetivo táctil pleno de 44×44 con pastilla y ✕ de 24px, y la cabecera compensa el alto',
+      compactW5.includes('#phoneclose { width: 44px; height: 44px; min-width: 44px; min-height: 44px;') && compactW5.includes('font-size: 24px') && compactW5.includes('.ptop { padding: 6px 10px; }'), '');
+    check('cerrar: en RETRATO el botón tiene el mismo objetivo táctil pleno de 44×44 y la misma compensación de cabecera',
+      portraitW5.includes('#phoneclose { width: 44px; height: 44px; min-width: 44px; min-height: 44px;') && portraitW5.includes('font-size: 24px') && portraitW5.includes('.ptop { padding: 6px 10px; }'), '');
+
+    // --- Fuente: el cierre sigue siendo el camino normal ---
+    check('cerrar: el botón sigue cableado al cierre normal de la máquina (toggle con el panel visible; insignia y estado intactos)',
+      gameW5.includes("querySelector('#phoneclose')") && gameW5.includes('if (phoneClose) phoneClose.onclick = () => { if (phone.visible) { phone.toggle(); syncDecisionPill(); } };'), '');
+
+    // --- Comportamiento: la máquina cierra como siempre ---
+    const ph5 = G.ui.phone, phoneEl5 = documentFake.querySelector('#phone');
+    ph5.portraitMode = true; ph5.floatMode = false; ph5.reset();
+    ph5.toggle(); // abrir a mano
+    const openW5 = ph5.state().visible === true && !phoneEl5.classList.contains('ph-off');
+    ph5.toggle(); // cerrar, lo que hace el botón
+    check('cerrar: en modo manual el cierre deja el panel oculto (.ph-off) por el camino de siempre',
+      openW5 && ph5.state().visible === false && phoneEl5.classList.contains('ph-off'), JSON.stringify(ph5.state()));
+    ph5.portraitMode = false; ph5.reset();
+  }
+
+  // --- Sección X: botón de pruebas «Borrar caché y datos» ---
+  // Pedido de Jose (2026-11-22): dejar de depender de la ventana
+  // de incógnito para ver la versión fresca y para resetear el
+  // estado. El panel de Ajustes gana la acción con confirmación
+  // en dos pasos dentro del propio botón; al confirmar limpia el
+  // almacenamiento del origen, purga la Cache Storage si existe
+  // y recarga con cache-bust. Aquí se ejercita con el panel REAL:
+  // sin confirmar no se borra nada; confirmando, el localStorage
+  // falso queda vacío y la recarga (con stub) lleva el bust.
+  {
+    console.log('\nX) Borrar caché y datos — botón de pruebas en Ajustes (dos pasos, sin incógnito)');
+    const gameX = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const cssX = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const iScrX = gameX.indexOf('function settingsScreen');
+    const scrX = iScrX >= 0 ? gameX.slice(iScrX, iScrX + 6000) : '';
+    check('borrar: el panel de Ajustes trae la acción «Borrar caché y datos del juego» en su propia fila, con la advertencia de qué se pierde en este navegador',
+      scrX.includes('id="sclear"') && scrX.includes('Borrar caché y datos del juego') && scrX.includes('EN ESTE navegador'), scrX.slice(0, 120));
+    check('borrar: el botón tiene estilo propio sobrio de advertencia y estado armado (CSS del panel)',
+      cssX.includes('.optrow .clearbtn') && cssX.includes('.optrow .clearbtn.armed'), '');
+    check('borrar: la ejecución limpia ambos almacenamientos, purga la Cache Storage si existe y recarga con cache-bust vía location.replace (sin desregistrar workers)',
+      gameX.includes('localStorage.clear()') && gameX.includes('sessionStorage.clear()') && gameX.includes('caches.keys()')
+      && gameX.includes('location.replace') && gameX.includes('?v=${Date.now()}') && !gameX.includes('serviceWorker'), '');
+
+    // Comportamiento con el panel REAL y los stubs del arnés.
+    fakeLocalStorage.setItem('1mtp.settings', '{"musicVol":33}');
+    fakeLocalStorage.setItem('1mtp.minigames', '1');
+    let replacedX = null;
+    sandbox.location.replace = (u) => { replacedX = u; };
+    const panelX = G.debug.settingsScreen();
+    await tick();
+    const btnX = documentFake.querySelector('#sclear');
+    check('borrar: el botón existe en el panel con su manejador cableado',
+      !!btnX && typeof btnX.onclick === 'function', '');
+    btnX.onclick(); // primer toque: solo ARMA
+    check('borrar: el primer toque NO borra nada — arma el botón con la advertencia (clase «armed» y texto de confirmación)',
+      fakeLocalStorage.getItem('1mtp.settings') !== null && fakeLocalStorage.getItem('1mtp.minigames') === '1'
+      && replacedX === null && btnX.classList.contains('armed') && String(btnX.textContent).includes('¿Seguro?'),
+      `armed=${btnX.classList.contains('armed')} txt=${btnX.textContent}`);
+    btnX.onclick(); // segundo toque: EJECUTA
+    check('borrar: el segundo toque VACÍA el almacenamiento del origen (ajustes y desbloqueo incluidos)',
+      fakeLocalStorage.getItem('1mtp.settings') === null && fakeLocalStorage.getItem('1mtp.minigames') === null, '');
+    check('borrar: y recarga la MISMA ruta con parámetro cache-bust único (?v=<timestamp>)',
+      typeof replacedX === 'string' && /^\/index\.html\?v=\d+$/.test(replacedX), `replace=${replacedX}`);
+    const backX = documentFake.querySelector('#sback');
+    if (backX && backX.onclick) backX.onclick();
+    await panelX;
+    delete sandbox.location.replace;
+  }
+
+  // --- Sección Y: vertical — HUD y elección compactos ---
+  // Playtest de Jose en vertical (IMG_7628, 2026-11-22): el HUD
+  // apilaba ~4 filas y la elección de personaje cubría casi
+  // todo el chat. El bloque de retrato de style.css (las mismas
+  // consultas que el portraitMQ de game.js) deja el HUD en
+  // botones + 2 filas de medidores 2×2 y convierte las tarjetas
+  // de personaje (.card de ui.assign) en filas horizontales.
+  // El arnés no mide layout: checks de FUENTE sobre el bloque,
+  // y de que las reglas base/fuera del bloque NO cambiaron.
+  {
+    console.log('\nY) Vertical — HUD en botones + 2 filas y elección de personaje en filas compactas');
+    const cssY = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const iPor = cssY.indexOf('(max-width: 760px) and (orientation: portrait)');
+    const por = iPor >= 0 ? cssY.slice(iPor) : '';
+    check('vertical: existe el bloque de retrato acotado (aspect-ratio 4/5 o ≤760px en portrait) DESPUÉS del compacto horizontal',
+      iPor >= 0 && iPor > cssY.indexOf('(orientation: landscape) and (max-height: 700px)'), '');
+    check('vertical HUD: los medidores van en rejilla 2×2 (flex 47% sin encoger, barra flexible) — botones + solo 2 filas de medidores',
+      por.includes('#hud .meter { flex: 1 0 47%') && por.includes('grid-template-columns: auto 1fr auto'), '');
+    check('vertical HUD: la marca se reduce a icono + «1 MINUTO» (font-size:0 en .brand y talla propia en el <b>)',
+      por.includes('.brand { font-size: 0') && por.includes('.brand b { font-size: 12px'), '');
+    check('vertical HUD: el sueño conserva segmentos y estado SIN la etiqueta larga y SIN el min-width de 128px (ellipsis con tope, como en horizontal)',
+      por.includes('#m-sleep label { display: none') && por.includes('#m-sleep .val { min-width: 0; max-width: 104px')
+      && por.includes('text-overflow: ellipsis') && por.includes('.seg { width: 9px'), '');
+    check('vertical elección: las tarjetas de personaje son FILAS (contenedor en columna, tarjeta en fila, retrato ≤40px, alto táctil ≥48px)',
+      por.includes('.cards { flex-direction: column') && por.includes('.card { flex-direction: row')
+      && por.includes('.card img { width: 38px; height: 38px') && por.includes('.card {') && por.includes('min-height: 48px'), '');
+    check('vertical elección: la nota larga se recorta con ellipsis en la misma línea y el % va a la derecha; el foco se marca con el borde (sin levantado)',
+      por.includes('.card small.note { min-height: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis')
+      && por.includes('.card strong { margin-left: auto') && por.includes('.card:focus-visible { border-color: var(--yellow)')
+      && por.includes('.card:hover:not(:disabled) { transform: none'), '');
+    check('vertical: fuera del bloque NADA cambió — la tarjeta base sigue en columna con retrato de 52px y el min-width base del sueño sigue en 128px',
+      cssY.includes('.card { flex: 1;') && cssY.includes('.card img { width: 52px; height: 52px')
+      && cssY.includes('#m-sleep .val { min-width: 128px; }') && cssY.includes('.cards { display: flex; gap: 6px; }'), '');
+    check('vertical: el selector compacto no toca las opciones de texto (.opt) y las reglas de .pcard del bloque van SIEMPRE acotadas al carrusel (.car .pcard, nunca la clase pelada — la receta solo-cabeza de la sección Z)',
+      !por.includes('.opt {') && !/(^|\n)\s*\.pcard\s*\{/.test(por), '');
+  }
+
+  // --- Sección Z: selector SOLO-CABEZA en pantallas chicas ---
+  // Directiva de Jose (capturas IMG_7627 vertical e IMG_7630
+  // horizontal, 2026-11-22): el carrusel de protagonista y de
+  // práctica se perdía en pantallas chicas — en vertical las
+  // tarjetas se recortaban y solo asomaban las cabezas por el
+  // borde del modal; en horizontal la ficha se salía por abajo.
+  // En los bloques compacto horizontal y de retrato la tarjeta
+  // muestra SOLO la cabeza (Sp.portrait) + nombre + una línea
+  // compacta de atributos, con la caja dimensionada desde el
+  // alto real del escenario (--stageh que charCarousel mide,
+  // menos el cromo de cada modal). El arnés no mide layout:
+  // checks de fuente sobre ambos bloques, del invariante de
+  // escritorio y de comportamiento sobre el DOM generado.
+  {
+    console.log('\nZ) Selector solo-cabeza — en pantallas chicas la tarjeta muestra la cabeza y nada más');
+    const cssZ = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameZ = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const iLandZ = cssZ.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const iPorZ = cssZ.indexOf('(max-width: 760px) and (orientation: portrait)');
+    const landZ = iLandZ >= 0 && iPorZ > iLandZ ? cssZ.slice(iLandZ, iPorZ) : '';
+    const porZ = iPorZ >= 0 ? cssZ.slice(iPorZ) : '';
+    const iSelZ = gameZ.indexOf('function selectChar()');
+    const selZ = iSelZ >= 0 ? gameZ.slice(iSelZ, iSelZ + 2600) : '';
+    const iPickZ = gameZ.indexOf('function pickCharScreen');
+    const pickZ = iPickZ >= 0 ? gameZ.slice(iPickZ, iPickZ + 1600) : '';
+    check('solo-cabeza: AMBOS selectores (protagonista y práctica) montan la cabeza (Sp.portrait) junto al cuerpo en su tarjeta',
+      selZ.includes('Sp.portrait(id)') && selZ.includes('class="phead"') && pickZ.includes('Sp.portrait(id)') && pickZ.includes('class="pfull"'), '');
+    check('solo-cabeza: el protagonista genera la línea compacta de atributos con etiquetas cortas (STAT_SHORT) y la clase .stline',
+      selZ.includes('STAT_SHORT') && selZ.includes('class="stline"') && gameZ.includes("velocidad: 'Vel'"), '');
+    check('solo-cabeza: el carrusel mide el alto REAL del escenario y lo pasa al CSS (--stageh desde clientHeight, setProperty protegido)',
+      gameZ.includes('stageEl.clientHeight') && gameZ.includes("setProperty('--stageh'") && gameZ.includes('node.style.setProperty'), '');
+    check('solo-cabeza: en la base la cabeza y la línea compacta nacen ocultas y la ficha de escritorio queda intacta (retrato con su clamp, tarjeta de 248px)',
+      cssZ.includes('.pcard .phead, .pcard .stline { display: none; }')
+      && cssZ.includes('.pcard img { height: 150px; height: clamp(96px, 36cqh, 150px); width: auto;')
+      && cssZ.includes('.car .pcard { flex: none; width: 248px; }'), '');
+    check('solo-cabeza horizontal: el cuerpo se apaga y la cabeza es una caja cuadrada dimensionada por --stageh menos el cromo (suelo 46, techo 118)',
+      landZ.includes('.car .pcard img.pfull { display: none; }')
+      && landZ.includes('.car .pcard img.phead { display: block; width: var(--headh); height: var(--headh);')
+      && landZ.includes('--headh: clamp(46px, calc(var(--stageh, 350px) - 288px), 118px)'), '');
+    check('solo-cabeza horizontal: contenido mínimo — fuera epíteto, filas .st y habilidad/defecto; dentro la línea compacta; flechas al centro de la cabeza; ayuda acotada a 3 líneas',
+      landZ.includes('.car .pcard > small { display: none; }') && landZ.includes('.car .pcard .stline { display: block;')
+      && landZ.includes('.car .pcard p.good, .car .pcard p.bad { display: none; }')
+      && landZ.includes('.car .cnav, .car.slim .cnav { top: calc(15px + var(--headh) / 2); }')
+      && landZ.includes('-webkit-line-clamp: 3'), '');
+    check('solo-cabeza retrato: misma receta con su cromo (reserva 170, suelo 44, techo 92) y la tarjeta acotada al carrusel',
+      porZ.includes('--headh: clamp(44px, calc(var(--stageh, 212px) - 170px), 92px)')
+      && porZ.includes('.car .pcard img.phead { display: block; width: var(--headh); height: var(--headh);')
+      && porZ.includes('.car .pcard .stline { display: block;'), '');
+    check('solo-cabeza retrato: el cromo se aprieta SOLO en el modal del carrusel (padding/título con :has(.car)), la ayuda se oculta y Volver queda como pastilla en la esquina',
+      porZ.includes('.modal.noscroll:has(.car) { padding: 10px 12px; }')
+      && porZ.includes('.modal.noscroll .car ~ p.dim { display: none; }')
+      && porZ.includes('.modal.noscroll:has(.car) > button.big { position: absolute;'), '');
+    // Comportamiento: el DOM real del selector trae la cabeza y
+    // la línea compacta en las 7 tarjetas, y elegir sigue igual.
+    const overlayZ = documentFake.querySelector('#overlay');
+    let pickedZ = null;
+    const pSelZ = G.debug.selectChar().then((id) => { pickedZ = id; });
+    await tick(); await tick();
+    const modalZ = overlayZ.children[0];
+    const cardsZ = modalZ ? queryWithin(modalZ, '.pcard', true) : [];
+    check('solo-cabeza: las 7 tarjetas del selector traen la imagen de la cabeza y la línea compacta en su HTML',
+      cardsZ.length === 7 && cardsZ.every((b) => (b.innerHTML || '').includes('phead') && (b.innerHTML || '').includes('stline')),
+      'cards=' + cardsZ.length);
+    check('solo-cabeza: la línea compacta lleva los atributos pegados a su etiqueta corta («Vel9» y «Lóg» en la tarjeta de Natalia)',
+      cardsZ.length === 7 && (cardsZ[0].innerHTML || '').includes('Vel9') && (cardsZ[0].innerHTML || '').includes('Lóg'), '');
+    cardsZ[0].onclick(); await pSelZ;
+    check('solo-cabeza: elegir desde la tarjeta sigue resolviendo al roomie tocado', pickedZ === G.PLAYABLE[0], 'picked=' + pickedZ);
+  }
+
+  // --- Sección AA: el «filtro raro» del posproceso queda NEUTRO ---
+  // Playtest de Jose (2026-11-22): «cuando inicia el juego noto que
+  // hay un filtro raro que sube la nitidez de los colores y se ve
+  // raro». El filtro es la corrección de color de la pasada final
+  // de gl3d.js (FS_P): saturación 1.14 + curva S de contraste al
+  // 0.55 + tinte cálido (1.03, 1.00, 0.97), aplicada SIEMPRE que el
+  // 3D renderiza — los menús son DOM sin filtrar, por eso el salto
+  // se nota al empezar a jugar (no hay rampa: uFx solo escala
+  // blur/bloom/viñeta y ninguna cámara lo baja de 1). Ahora las
+  // tres palancas viven en constantes nombradas y NEUTRAS; el
+  // resto de la pasada (tilt-shift, bloom, viñeta) sigue intacto.
+  {
+    console.log('\nAA) Posproceso — corrección de color neutra (el «filtro raro» de Jose)');
+    const glTxt = fs.readFileSync(path.join(SRC, 'gl3d.js'), 'utf8');
+    check('filtro: las tres palancas de color viven en constantes nombradas y NEUTRAS (POST_SAT 1.0, POST_CONTRASTE 0.0, POST_TINTE 0.0)',
+      glTxt.includes('const POST_SAT = 1.0;') && glTxt.includes('const POST_CONTRASTE = 0.0;') && glTxt.includes('const POST_TINTE = 0.0;'), '');
+    check('filtro: el shader interpola las constantes (una sola fuente de verdad para pedir «la mitad» después)',
+      glTxt.includes('${POST_SAT.toFixed(3)}') && glTxt.includes('${POST_CONTRASTE.toFixed(3)}') && glTxt.includes('${POST_TINTE.toFixed(3)}'), '');
+    check('filtro: el realce anterior desapareció del shader (nada de saturación 1.14 ni tinte directo)',
+      !glTxt.includes('c, 1.14)') && !glTxt.includes('c *= vec3(1.03,1.0,0.97);') && !glTxt.includes('*0.55 + c*0.45'), '');
+    check('filtro: la pasada de posproceso SIGUE existiendo con lo que no es color (tilt-shift de 9 taps, bloom y viñeta por uFx, pasada final al FBO)',
+      glTxt.includes('c /= 9.;') && glTxt.includes('b/12.*1.5*uFx') && glTxt.includes('dot(d,d)*0.75*uFx') && glTxt.includes('pasada final a pantalla'), '');
+  }
+
+  // --- Sección AB: etiquetas de nombre por proximidad (SOLO la
+  // recolección) — pedido de Jose (2026-11-22): un jugador nuevo no
+  // distingue a los roomies en el minuto inicial. Pastilla translúcida
+  // sobre la cabeza que solo aparece al acercarse (radio NAME_TAG_R
+  // con fundido en el 40% exterior), pintada en la capa 2D con el
+  // anclaje de los globos (Actor.head): es canvas, jamás un nodo DOM,
+  // así que no intercepta toques ni deja residuos al cambiar de fase.
+  {
+    console.log('\nAB) Etiquetas de nombre por proximidad — solo en la recolección');
+    const scTxt = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+    const wTxt = fs.readFileSync(path.join(SRC, 'world.js'), 'utf8');
+    const gTxt = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    check('etiquetas: el radio vive en una constante nombrada (NAME_TAG_R = 110) y la pastilla es translúcida (rgba(20,16,32,.55))',
+      scTxt.includes('const NAME_TAG_R = 110;') && scTxt.includes("c.fillStyle = 'rgba(20,16,32,.55)';"), '');
+    const colBody = scTxt.slice(scTxt.indexOf('class CollectScene'), scTxt.indexOf('class HomeScene'));
+    check('etiquetas: el pintado vive SOLO en CollectScene (ni el motor World ni game.js conocen el mecanismo; HomeScene no lo hereda)',
+      colBody.includes('nameTagTargets().forEach') && colBody.includes('nameTagTargets()')
+      && !wTxt.includes('nameTag') && !gTxt.includes('nameTag')
+      && Sc.HomeScene.prototype.nameTagTargets === undefined && typeof Sc.CollectScene.prototype.nameTagTargets === 'function', '');
+    check('etiquetas: las exclusiones están en la fuente (al hombro, dentro del armario, oculto, globo/emote activo)',
+      colBody.includes("o.state === 'carried'") && colBody.includes("o.state === 'inside'") && colBody.includes('o.hidden') && colBody.includes('o.bubble || o.emote'), '');
+
+    // Comportamiento: draw real de la escena con el render y la
+    // proyección sustituidos (mismo patrón que la prueba de draw de la
+    // sección G), registrando textos y rellenos de la capa 2D.
+    const realRender = W.render, realProject = G.R.project;
+    const mkRec = () => {
+      const ctx = new FakeCtx(), log = { texts: [], fills: [] };
+      ctx.fillText = (s) => { log.texts.push(String(s)); };
+      ctx.fill = () => { log.fills.push({ alpha: ctx.globalAlpha, style: ctx.fillStyle }); };
+      return { ctx, log };
+    };
+    W.render = (opts) => { if (opts.boxes) opts.boxes(new G.R.MB(), 0); if (opts.sprites) opts.sprites(0); if (opts.over) opts.over(cur.ctx, 0); };
+    G.R.project = (x, y, z) => ({ x, y: z, ok: true });
+    let cur = mkRec();
+    try {
+      const esc = new Sc.CollectScene('natalia', () => {});
+      esc.count = 0;
+      const roomie = esc.others[0], rName = G.CHARS[roomie.id].name;
+      esc.others.forEach((o, i) => { o.x = 60 + i * 12; o.y = 560; o.bubble = null; o.emote = null; });
+      esc.cat.x = 950; esc.cat.y = 60; esc.cat.bubble = null; esc.cat.emote = null;
+      roomie.x = 500; roomie.y = 350;
+      const tagsOf = () => cur.log.fills.filter((f) => f.style === 'rgba(20,16,32,.55)');
+      esc.p.x = 500; esc.p.y = 300; // a 50 u del roomie: dentro, alfa pleno
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: a 50 u la pastilla se pinta con el nombre y opacidad plena (y el controlado nunca se etiqueta)',
+        cur.log.texts.includes(rName) && tagsOf().length === 1 && Math.abs(tagsOf()[0].alpha - 1) < 0.01 && !cur.log.texts.includes('Natalia'),
+        'texts=' + cur.log.texts.join('|'));
+      esc.p.y = 260; // a 90 u: en la banda de fundido (66–110)
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: a 90 u la pastilla se pinta FUNDIDA (alfa ≈ (110−90)/44 ≈ 0,45, sin corte seco)',
+        tagsOf().length === 1 && Math.abs(tagsOf()[0].alpha - (110 - 90) / 44) < 0.02, 'alfa=' + (tagsOf()[0] && tagsOf()[0].alpha));
+      esc.p.y = 220; // a 130 u: fuera del radio
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: a 130 u (fuera del radio) no se pinta nada', tagsOf().length === 0 && !cur.log.texts.includes(rName), '');
+      esc.p.y = 300; roomie.state = 'carried';
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: el roomie al hombro NO se etiqueta', tagsOf().length === 0 && !cur.log.texts.includes(rName), '');
+      roomie.state = 'inside'; roomie.hidden = true;
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: el roomie guardado dentro del armario NO se etiqueta', tagsOf().length === 0 && !cur.log.texts.includes(rName), '');
+      roomie.state = 'free'; roomie.hidden = false; roomie.say('¡Apúrate!', 2.2);
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: con un globo activo la cabeza ya está ocupada: sin pastilla', tagsOf().length === 0 && !cur.log.texts.includes(rName), '');
+      roomie.bubble = null; roomie.x = 60; roomie.y = 560; // el roomie se va lejos…
+      esc.cat.x = 500; esc.cat.y = 350; // …y Pollito queda a 50 u del jugador
+      cur = mkRec(); esc.draw(0.016);
+      check('etiquetas: el mecanismo es genérico sobre los actores con nombre (Pollito también se etiqueta)',
+        cur.log.texts.includes('Pollito') && tagsOf().length === 1, 'texts=' + cur.log.texts.join('|'));
+    } catch (e) {
+      check('etiquetas: draw sin errores (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
+    } finally { W.render = realRender; G.R.project = realProject; }
+  }
+
+  // --- Sección AC: autoguardado local (pedido de Jose, 2026-11-22:
+  // «¿qué pasa si refresco la pantalla? ¿Pierdo todo mi avance?»).
+  // Ranura única '1mtp.save' en localStorage, con versión y lectura
+  // defensiva; puntos de control SOLO en estados de reposo (collect,
+  // arrival, cada «hora» de la noche y el clímax); el título ofrece
+  // «Continuar partida» y la nueva sobrescribe en dos pasos;
+  // showEnding borra el guardado. Aquí se prueba el viaje completo:
+  // checkpoint → JSON → «refresco» (estado revuelto) → applySave.
+  {
+    console.log('\nAC) Autoguardado local — continuar la partida tras un refresco');
+    const gameAC = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const D = G.debug, lsAC = fakeLocalStorage;
+    lsAC.removeItem('1mtp.save');
+    // Fuente
+    check('autoguardado: ranura única con clave de la familia y versión, validada al leer (v, protagonista, reposo)',
+      gameAC.includes("const SAVE_KEY = '1mtp.save'") && gameAC.includes('const SAVE_V = 1') && gameAC.includes('sv.v === SAVE_V') && gameAC.includes('SAVE_V, at, state'), '');
+    check('autoguardado: puntos de control en los estados de reposo (collect, arrival, night por «hora», climax)',
+      gameAC.includes("saveCheckpoint('collect')") && gameAC.includes("saveCheckpoint('arrival'") && gameAC.includes("saveCheckpoint('night'") && gameAC.includes("saveCheckpoint('climax'"), '');
+    const iEndAC = gameAC.indexOf('async function showEnding');
+    const endBodyAC = iEndAC >= 0 ? gameAC.slice(iEndAC, gameAC.indexOf('location.reload', iEndAC)) : '';
+    const iPracAC = gameAC.indexOf('function enterPractice');
+    const pracBodyAC = iPracAC >= 0 ? gameAC.slice(iPracAC, gameAC.indexOf('function duelListScreen', iPracAC)) : '';
+    check('autoguardado: showEnding borra el guardado (cualquier final), abandonar a práctica también, y pagehide/visibilitychange re-persisten el último punto',
+      endBodyAC.includes('clearSave()') && pracBodyAC.includes('clearSave()') && gameAC.includes("'pagehide'") && gameAC.includes("'visibilitychange'") && gameAC.includes('repersistSave'), '');
+    // Comportamiento: el viaje de ida y vuelta del guardado
+    const msgsAC = documentFake.querySelector('#msgs');
+    S.player = 'saulo'; S.phase = 'act2'; S.sus = 33; S.sleep = 2; S.noise = 21; S.qBonus = 5;
+    S.inv = { pastel: true, globos: true }; S.partners = ['majo', 'alan']; S.party = ['saulo', 'majo', 'alan'];
+    S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
+    S.flags = { casting: true }; S.done = { cajas: true }; S.duels = [{ game: 'deco', boss: 'pollito', win: 'win' }];
+    S.tired = 'majo'; S.deco = [{ i: 0, improv: false, placed: true }]; S.log = { fallos: 1, despertares: 0 };
+    const uriAC = 'data:image/png;base64,QUJDREVGRw==';
+    msgsAC.innerHTML = `<div class="row"><div class="msg"><img class="av" src="${uriAC}"><div class="bubble">Hola de prueba</div></div></div><div class="row"><div class="msg"><img class="av" src="${uriAC}"><div class="bubble">Otro mensaje</div></div></div>`;
+    D.saveCheckpoint('night', { storyIdx: 5 });
+    let svAC = null; try { svAC = JSON.parse(lsAC.getItem('1mtp.save') || 'null'); } catch (e) { svAC = null; }
+    check('autoguardado: el punto de control escribe el JSON con versión, reposo e índice de la noche',
+      !!svAC && svAC.v === 1 && svAC.at === 'night' && svAC.storyIdx === 5 && svAC.state.player === 'saulo' && svAC.state.sus === 33, '');
+    check('autoguardado: el chat viaja empaquetado (ninguna data URI en línea; la repetida vive UNA vez en el diccionario)',
+      !!svAC && !svAC.chat.includes('data:image') && Array.isArray(svAC.dict) && svAC.dict.length === 1 && svAC.dict[0] === uriAC, '');
+    // «Refresco»: el estado y el chat se revuelven, y se reconstruye desde el JSON
+    S.player = 'natalia'; S.phase = 'title'; S.sus = 0; S.sleep = 1; S.noise = 0; S.qBonus = 0;
+    S.inv = {}; S.partners = []; S.party = []; S.fled = []; S.flags = {}; S.done = {}; S.duels = []; S.tired = null; S.deco = [];
+    msgsAC.innerHTML = '';
+    const backAC = D.readSave();
+    check('autoguardado: readSave devuelve el guardado válido tal cual (reposo e índice incluidos)',
+      !!backAC && backAC.at === 'night' && backAC.storyIdx === 5, '');
+    D.applySave(backAC);
+    check('autoguardado: tras el «refresco» se recuperan protagonista, estadísticas e inventario',
+      S.player === 'saulo' && S.phase === 'act2' && S.sus === 33 && S.sleep === 2 && S.noise === 21 && S.inv.pastel === true && S.inv.globos === true, '');
+    check('autoguardado: se recuperan party, banderas, duelos, progreso y descanso',
+      JSON.stringify(S.party) === JSON.stringify(['saulo', 'majo', 'alan']) && JSON.stringify(S.partners) === JSON.stringify(['majo', 'alan'])
+      && S.flags.casting === true && S.duels.length === 1 && S.duels[0].win === 'win' && S.done.cajas === true && S.tired === 'majo'
+      && Array.isArray(S.deco) && S.deco[0].placed === true && S.log.fallos === 1, '');
+    check('autoguardado: el historial del chat se reconstruye con sus avatares rehidratados',
+      msgsAC.innerHTML.includes('Hola de prueba') && msgsAC.innerHTML.includes('Otro mensaje') && msgsAC.innerHTML.includes(uriAC), '');
+    // Lectura defensiva
+    lsAC.setItem('1mtp.save', '{json roto');
+    check('autoguardado: un guardado corrupto se ignora y se borra (el arranque no se rompe)',
+      D.readSave() === null && lsAC.getItem('1mtp.save') === null, '');
+    lsAC.setItem('1mtp.save', JSON.stringify({ v: 99, at: 'night', storyIdx: 0, state: { player: 'saulo' } }));
+    check('autoguardado: un guardado de otra versión se ignora y se borra',
+      D.readSave() === null && lsAC.getItem('1mtp.save') === null, '');
+    // Título: sin guardado no hay Continuar; con guardado, sí (y con contexto)
+    const overlayAC = documentFake.querySelector('#overlay');
+    D.titleScreen(); // sin guardado: el título de siempre (la promesa queda pendiente, no se toca)
+    check('autoguardado: sin guardado el título NO ofrece Continuar (JUGAR, como siempre)',
+      overlayAC.innerHTML.includes('JUGAR') && !overlayAC.innerHTML.includes('CONTINUAR PARTIDA'), '');
+    D.saveCheckpoint('night', { storyIdx: 2 });
+    const pContAC = D.titleScreen();
+    const evNextAC = G.EVENTS[G.STORY[2]];
+    check('autoguardado: con guardado el título ofrece CONTINUAR con su contexto (protagonista y siguiente beat)',
+      overlayAC.innerHTML.includes('CONTINUAR PARTIDA') && overlayAC.innerHTML.includes('Saulo') && overlayAC.innerHTML.includes(evNextAC.title), '');
+    documentFake.querySelector('#tcontinue').onclick();
+    check('autoguardado: «Continuar» resuelve continue y NO borra el guardado (lo lee tryResume)',
+      (await pContAC) === 'continue' && !!lsAC.getItem('1mtp.save'), '');
+    // Nueva partida en dos pasos
+    const pNewAC = D.titleScreen();
+    const playBtnAC = documentFake.querySelector('#tplay');
+    playBtnAC.onclick(); // primer toque: solo arma
+    check('autoguardado: «Nueva partida» no sobrescribe sin confirmar (primer toque: arma y el guardado sigue)',
+      !!lsAC.getItem('1mtp.save') && String(playBtnAC.textContent || '').includes('¿Seguro?'), '');
+    playBtnAC.onclick(); // segundo toque: borra y arranca
+    check('autoguardado: el segundo toque borra el guardado y resuelve new',
+      (await pNewAC) === 'new' && lsAC.getItem('1mtp.save') === null, '');
+    // Alcance (aclaración de Jose, 2026-11-22): el autoguardado es
+    // SOLO del modo historia. Ni la práctica de minijuegos ni el
+    // easter egg «La Cita» crean, tocan ni resucitan guardados, y
+    // la red de seguridad (pagehide) no puede revivir uno borrado.
+    console.log('  — alcance: solo historia (práctica y «La Cita», fuera)');
+    // Fuente: los escritores del guardado viven confinados en la
+    // historia de game.js; ningún otro módulo conoce la ranura.
+    const modulosAC2 = ['scenes.js', 'world.js', 'music.js', 'data.js', 'gl3d.js', 'sprites.js', 'date.js'];
+    const fueraAC2 = modulosAC2.map((f) => fs.readFileSync(path.join(SRC, f), 'utf8')).join('\n');
+    check('alcance: ningún módulo fuera de game.js conoce el autoguardado (ni la cita en date.js)',
+      !fueraAC2.includes('1mtp.save') && !fueraAC2.includes('saveCheckpoint') && !fueraAC2.includes('clearSave') && !fueraAC2.includes('repersistSave'), '');
+    check('alcance: los puntos de control son exactamente los 6 de la historia (collect, arrival, night, climax y reanudaciones)',
+      (gameAC.match(/saveCheckpoint\('/g) || []).length === 6, '');
+    const pracDuelAC2 = gameAC.slice(gameAC.indexOf('async function practiceDuel'), gameAC.indexOf('function minigamesLockedScreen'));
+    const showMgAC2 = gameAC.slice(gameAC.indexOf('async function showMinigames'), gameAC.indexOf('function titleScreen'));
+    const resultAC2 = gameAC.slice(gameAC.indexOf('function resultScreen'), gameAC.indexOf('function enterMinigameMusic'));
+    const listAC2 = gameAC.slice(gameAC.indexOf('function duelListScreen'), gameAC.indexOf('function charCarousel'));
+    check('alcance: la práctica (lista, duelo, resultado) jamás escribe ni borra el guardado — su único contacto es el abandono en enterPractice',
+      !pracDuelAC2.includes('saveCheckpoint') && !pracDuelAC2.includes('clearSave')
+      && !showMgAC2.includes('saveCheckpoint') && !showMgAC2.includes('clearSave')
+      && !resultAC2.includes('saveCheckpoint') && !resultAC2.includes('clearSave')
+      && !listAC2.includes('saveCheckpoint') && !listAC2.includes('clearSave'), '');
+    const startDateAC2 = gameAC.slice(gameAC.indexOf('function startDate'), gameAC.indexOf('function enterPractice'));
+    check('alcance: entrar a «La Cita» (startDate) no escribe ni borra el guardado de la historia',
+      !startDateAC2.includes('saveCheckpoint') && !startDateAC2.includes('clearSave'), '');
+    // Comportamiento: la red de seguridad re-persiste un guardado
+    // VIVO (control positivo) pero jamás resucita uno borrado,
+    // porque clearSave también descarta la copia en memoria.
+    S.player = 'saulo'; S.phase = 'act2';
+    msgsAC.innerHTML = '<div class="row"><div class="msg"><div class="bubble">Punto de control</div></div></div>';
+    D.saveCheckpoint('night', { storyIdx: 1 });
+    lsAC.removeItem('1mtp.save'); // la escritura «se perdió»: la red la repone
+    D.repersistSave();
+    let reAC2 = null; try { reAC2 = JSON.parse(lsAC.getItem('1mtp.save') || 'null'); } catch (e) { reAC2 = null; }
+    check('alcance: la red de seguridad (pagehide) re-persiste el último punto si su escritura se perdió',
+      !!reAC2 && reAC2.at === 'night' && reAC2.storyIdx === 1, '');
+    D.clearSave();
+    D.repersistSave(); // la pestaña se oculta JUSTO tras borrar: no puede resucitar
+    check('alcance: tras clearSave, la red de seguridad NO resucita el guardado (la copia en memoria también se descarta)',
+      lsAC.getItem('1mtp.save') === null, '');
+    // Comportamiento: la práctica desde el título no crea guardado…
+    S.phase = 'title';
+    D.enterPractice();
+    check('alcance: practicar desde el título NO crea ningún guardado',
+      lsAC.getItem('1mtp.save') === null && S.phase === 'practice', '');
+    D.titleScreen(); // sin guardado tras practicar: el título sigue sin ofrecer Continuar
+    check('alcance: tras practicar, el título NO ofrece Continuar (no hay partida que retomar)',
+      overlayAC.innerHTML.includes('JUGAR') && !overlayAC.innerHTML.includes('CONTINUAR PARTIDA'), '');
+    // …ni toca el de una historia que ni siquiera se cargó…
+    S.player = 'saulo'; S.phase = 'title';
+    D.saveCheckpoint('night', { storyIdx: 4 });
+    const intactoAC2 = lsAC.getItem('1mtp.save');
+    D.enterPractice();
+    check('alcance: practicar desde el título deja INTACTO el guardado de una historia sin cargar',
+      !!intactoAC2 && lsAC.getItem('1mtp.save') === intactoAC2, '');
+    // …pero desde la pausa SÍ abandona la historia en curso, y ni
+    // la red de seguridad lo trae de vuelta al ocultar la pestaña.
+    S.phase = 'act2';
+    D.enterPractice();
+    D.repersistSave();
+    check('alcance: entrar a práctica con historia en curso la abandona (guardado borrado) y ni la red lo trae de vuelta',
+      lsAC.getItem('1mtp.save') === null, '');
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
