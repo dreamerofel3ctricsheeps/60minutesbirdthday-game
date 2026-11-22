@@ -1,0 +1,43 @@
+# Publica la rama DEVELOP (testing) en GitHub Pages, bajo /dev.
+# En cada push a develop, este workflow sincroniza application/src a la
+# carpeta dev/ de la rama gh-pages, SIN tocar la raíz (el juego publicado
+# desde main, que publica su propio workflow). URL de pruebas:
+# https://dreamerofel3ctricsheeps.github.io/60minutesbirdthday-game/dev/
+name: Publicar DEV en GitHub Pages
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repo (develop)
+        uses: actions/checkout@v4
+      - name: Sincronizar application/src → gh-pages/dev
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -e
+          git clone -q --depth 1 --branch gh-pages "https://x-access-token:${TOKEN}@github.com/${REPO}.git" /tmp/ghpages
+          mkdir -p /tmp/ghpages/dev
+          rsync -a --delete --exclude .git application/src/ /tmp/ghpages/dev/
+          rm -rf /tmp/ghpages/dev/tests
+          cd /tmp/ghpages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -q -m "Despliegue de develop ${SHA} en /dev"
+          for i in 1 2 3; do git push -q origin gh-pages && break || git pull -q --rebase origin gh-pages; done
+          echo "/dev actualizado desde develop ${SHA} (raíz intacta)"
