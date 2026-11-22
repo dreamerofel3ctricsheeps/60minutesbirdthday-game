@@ -3987,8 +3987,10 @@
   // que exige hoja definida; aquí el retrato sale del dibujo por código).
   // Con opts.solo la caja lleva SOLO el detalle del estado actual:
   // sin retrato y sin el nombre del minijuego (corrección de Jose,
-  // 2026-11-21). La piden PatronDuel y TrazoDuel; SogaDuel no pasa
-  // la opción y conserva su caja completa.
+  // 2026-11-21). La piden PatronDuel y TrazoDuel. SogaDuel ya ni
+  // llama al helper (corrección de Jose, 2026-11-21): en la Soga no
+  // hay caja de ningún tipo — su estado va en texto plano sin marco
+  // arriba a la izquierda, dibujado por su propio over().
   function legendsHud(d, c, title, lines, opts) {
     if (opts && opts.solo) {
       panel(c, 8, 8, 306, 26, 'rgba(20,16,32,.78)');
@@ -4671,6 +4673,26 @@
   const JUMP_H = 84; // alto de mundo del sprite de salto (el del Actor definido)
   const ESPERA_H = 84; // alto de mundo del sprite de ESPERA (misma escala que el de salto: el personaje no cambia de tamaño entre poses)
   const CAL_H = 49; // alto de mundo de las calaveritas utileras (el que ocupaba la figura por código)
+  // Gameplay de la Soga (corrección de Jose, 2026-11-21): el salto
+  // ya NO se carga manteniendo ESPACIO. Es de MOMENTO: un indicador
+  // aparece sobre la cabeza del personaje elegido cuando faltan
+  // SOGA_TIP_LEAD segundos para que la soga pase bajo sus pies, y
+  // la ventana útil cierra a SOGA_TIP_MIN del paso (más tarde el
+  // salto ya no despega a tiempo de esquivarla). El aviso se mide
+  // en TIEMPO hasta el paso (timeToBottom), no en ángulo fijo: a
+  // llama naranja la soga gira más rápido y un ángulo daría menos
+  // margen de reacción. El salto es de arco fijo (SOGA_JUMP_V con
+  // la gravedad de siempre, 1050): pulsando en cualquier punto de
+  // la ventana, al cruzar la soga el personaje va a ≥ ~46 u (por
+  // encima de la banda de roce, 38). Fuera de la ventana la acción
+  // NO salta, a propósito: el indicador ES la señal — si se pudiera
+  // saltar libremente, la lectura sería «salta cuando quieras» y el
+  // indicador sobraría; con una sola regla, el tropiezo siempre es
+  // culpa de no pulsar a tiempo, nunca de una fuerza mal cargada.
+  const SOGA_TIP_LEAD = 0.6, SOGA_TIP_MIN = 0.09, SOGA_JUMP_V = 560;
+  // Intentos del jugador en este duelo (corrección de Jose): cada
+  // tropiezo consume uno; el duelo solo se pierde al tercero.
+  const SOGA_TRIES = 3;
   // Sprites GENERADOS para este duelo (a pedido expreso de Jose,
   // 2026-11-21): el salto de soga de cada roomie desde su idle
   // definido (tools/mkjumps.py → G.JUMP_DATA) y las dos calaveritas
@@ -4694,7 +4716,7 @@
   function jumpPreload() { for (const n of JUMP_FILES) jumpImg(n); }
   class SogaDuel extends Duel {
     constructor(who, done) {
-      super(who, 'teodora', done, { rounds: 1, need: 1, time: 240, label: 'BOSS', title: 'LA SOGA DE FUEGO', hint: 'Mantén ESPACIO para cargar el salto y SUELTA para saltar · la llama azul va lento, la naranja rápido', rendT: 1.8 });
+      super(who, 'teodora', done, { rounds: 1, need: 1, time: 240, label: 'BOSS', title: 'LA SOGA DE FUEGO', hint: 'Cuando el indicador aparezca sobre tu cabeza, presiona ESPACIO para saltar · la llama azul va lento, la naranja rápido', rendT: 1.8 });
       this.timeMax = 240;
       this.p = new Actor(who, -32, 0);
       this.partners = (G.S && G.S.party ? G.S.party.filter((id) => id !== who) : []).slice(0, 2).map((id, i) => new Actor(id, i ? 118 : -112, 0));
@@ -4704,7 +4726,8 @@
     }
     setup() {
       this.a = -Math.PI / 2; this.passes = 0; this.maxPasses = 40;
-      this.mk = (x) => ({ x, h: 0, v: 0, out: false, roces: 0, charge: 0, react: rnd(0.3, 0.48), smoke: 0 });
+      this.trips = 0; // tropiezos del jugador: a los SOGA_TRIES pierde (el contador vive en el duelo, no en el saltador)
+      this.mk = (x) => ({ x, h: 0, v: 0, out: false, roces: 0, tripT: 0, react: rnd(0.3, 0.48), smoke: 0 });
       this.J = { p: this.mk(-32), t: this.mk(46), n: this.partners.map((a) => this.mk(a.x)) };
       this.teoSelfieT = 0;
       for (const a of [this.p, ...this.partners]) { a.dir = 'right'; }
@@ -4717,23 +4740,51 @@
       return base * (feint ? (ph < 0.45 ? 0.7 : 1.4) : 1);
     }
     timeToBottom() { const twoPi = Math.PI * 2, d = (Math.PI / 2 - (this.a % twoPi) + twoPi) % twoPi; return d / this.omega(); }
-    jumpP(charge) { const j = this.J.p; if (!j.out && j.h <= 0) { j.v = 335 + clamp15(charge, 0, 0.5) * 430; j.h = 0.01; } }
+    // Salto del jugador: arco FIJO (sin carga). La decisión de
+    // CUÁNDO puede saltar vive en update() + tipState(); este
+    // método solo ejecuta el salto si está en el suelo.
+    jumpP() { const j = this.J.p; if (!j.out && j.h <= 0) { j.v = SOGA_JUMP_V; j.h = 0.01; } }
+    // Estado del indicador de momento: activo cuando falta poco
+    // (en TIEMPO, vía timeToBottom) para que la soga pase bajo los
+    // pies del jugador y él está en el suelo. frac = fracción de
+    // ventana útil que queda (1 al abrir, 0 al cerrar en
+    // SOGA_TIP_MIN): es lo que la barra del indicador consume.
+    tipState() {
+      const j = this.J.p;
+      if (this.st !== 'play' || j.out || j.h > 0) return { on: false, frac: 0, ttb: Infinity };
+      const ttb = this.timeToBottom();
+      return { on: ttb <= SOGA_TIP_LEAD, frac: clamp15((ttb - SOGA_TIP_MIN) / (SOGA_TIP_LEAD - SOGA_TIP_MIN), 0, 1), ttb };
+    }
     stepJumper(j, a, dt, grav, mine) {
       if (j.out) { if (j.smoke > 0) j.smoke -= dt; if (a) { a.jy = 0; a.jv = 0; } return; }
       if (j.h > 0 || j.v > 0) { j.v -= grav * dt; j.h += j.v * dt; if (j.h <= 0) { j.h = 0; j.v = 0; if (a) a.squash = 0.14; } }
       if (a) { a.jy = j.h; a.jv = 0; }
     }
-    extra() { return { passes: this.passes, rocesP: this.J.p.roces, rocesT: this.J.t.roces }; }
+    extra() { return { passes: this.passes, rocesP: this.J.p.roces, rocesT: this.J.t.roces, trips: this.trips, tries: SOGA_TRIES }; }
     update(dt) {
       const p = this.p; p.update(dt); this.partners.forEach((a) => a.update(dt));
       if (!this.tick(dt)) return;
       const J = this.J, prev = this.a;
       this.a += this.omega() * dt;
       const twoPi = Math.PI * 2, crossed = Math.floor((prev - Math.PI / 2) / twoPi) !== Math.floor((this.a - Math.PI / 2) / twoPi);
-      if (crossed) { // la soga pasa BAJO los pies: quien esté bajo, se quema
+      if (crossed) { // la soga pasa BAJO los pies
         this.passes++;
-        for (const j of [J.p, J.t, ...J.n]) { if (j.out) continue; if (j.h < 20) { j.out = true; j.smoke = 1.6; j.v = 0; j.h = 0; } else if (j.h < 38) j.roces++; }
-        if (J.p.out) { G.sfx('bad'); this.say('¡Quemado cómico!', '#ff6b7a', 1.2); }
+        // El JUGADOR ya no se quema a la primera (corrección de
+        // Jose): si cruza bajo, se TROPIEZA — pierde un intento de
+        // SOGA_TRIES y suma un roce — y el duelo solo se pierde al
+        // tercer tropiezo (ver el cierre de update). Con el arco
+        // fijo, pulsar dentro de la ventana garantiza h ≥ ~46 al
+        // cruzar, así que «bajo» aquí equivale a «no pulsó a
+        // tiempo»: un solo umbral (38, la antigua banda de roce)
+        // separa la esquiva limpia del tropiezo.
+        if (J.p.h < 38) {
+          J.p.roces++; this.trips++; J.p.tripT = 0.55; J.p.v = 0; J.p.h = 0;
+          this.p.emo('!!', 0.9); this.p.flash = 0.5; G.sfx('bad');
+          this.say(this.trips >= SOGA_TRIES ? '¡Tercer tropiezo!' : '¡Te tropezaste!', '#ff6b7a', 1.1);
+        }
+        // Teodora y los partners conservan la regla de siempre:
+        // bajo = quemado y fuera; rozando = un roce.
+        for (const j of [J.t, ...J.n]) { if (j.out) continue; if (j.h < 20) { j.out = true; j.smoke = 1.6; j.v = 0; j.h = 0; } else if (j.h < 38) j.roces++; }
         if (J.t.out) { G.sfx('ok'); this.say('¡Teodora se quemó!', '#7dff8a', 1.2); }
       }
       // Chispas que se desprenden de la soga de fuego (el sistema
@@ -4741,11 +4792,13 @@
       // plano de la soga (z=0) a un ritmo ligado a su velocidad
       // angular — a llama naranja, que gira más rápido, saltan más.
       if (Math.random() < dt * this.omega() * 0.4) W.puff(rnd(-170, 170), 0, 1, true);
-      // jugador: mantener carga, soltar salta (tecla o toque vía 'action')
-      if (!J.p.out) {
-        if (G.input.held('action') && J.p.h <= 0) { J.p.charge = Math.min(0.5, J.p.charge + dt); if (J.p.charge >= 0.5) { this.jumpP(0.5); J.p.charge = 0; } }
-        else if (J.p.charge > 0) { this.jumpP(J.p.charge); J.p.charge = 0; }
-      }
+      // jugador: salto de MOMENTO (corrección de Jose) — la acción
+      // (tecla o toque, vía 'action') solo salta con el indicador
+      // activo y dentro de la ventana útil [SOGA_TIP_MIN,
+      // SOGA_TIP_LEAD]; fuera de ahí, pulsar no salta (ver la nota
+      // de las constantes: el indicador ES la señal).
+      if (!J.p.out && J.p.h <= 0 && G.input.hit('action')) { const tip = this.tipState(); if (tip.on && tip.ttb >= SOGA_TIP_MIN) this.jumpP(); }
+      if (J.p.tripT > 0) { J.p.tripT -= dt; if (J.p.tripT <= 0) { J.p.tripT = 0; this.p.tilt = 0; } }
       // Teodora: flota (gravedad baja, aguanta más) pero cada ~10
       // vueltas se toma una selfie y salta TARDE a propósito de guion.
       if (!J.t.out && J.t.h <= 0) {
@@ -4758,29 +4811,33 @@
       this.stepJumper(J.p, p, dt, 1050, true);
       this.stepJumper(J.t, null, dt, 600, false);
       J.n.forEach((j, i) => this.stepJumper(j, this.partners[i], dt, 1050, false));
-      if (J.p.out) return this.endRound(J.t.out ? 'p' : 'b', J.t.out ? 'Teodora también se quemó… ¡pero tú duraste más!' : 'Te quemaste: Teodora se queda con la escena.');
+      if (this.trips >= SOGA_TRIES) return this.endRound(J.t.out ? 'p' : 'b', J.t.out ? 'Teodora también se quemó… ¡pero tú duraste más!' : 'Tres tropiezos: Teodora se queda con la escena.');
       if (J.t.out) return this.endRound('p', '¡Teodora se quemó con su propia soga!');
       if (this.passes >= this.maxPasses) return this.endRound(J.p.roces < J.t.roces ? 'p' : J.p.roces > J.t.roces ? 'b' : 'tie', `Tope de vueltas — Roces tú: ${J.p.roces} · Teodora: ${J.t.roces}`);
     }
     draw(dt) {
       const t = performance.now() / 1000, J = this.J;
       // Intercambios de sprite del saltador (ronda de la Soga,
-      // 2026-11-21): el Actor definido manda SOLO mientras carga el
-      // salto (su squash ES la anticipación) o si algún sprite no
-      // cargó. En el AIRE lo sustituye su sprite de salto generado
-      // a la altura física; en el SUELO, esperando, su animación de
-      // ESPERA generada (perfil «en guardia», dos frames hermanos a
-      // ~4,5 fps + squash respiratorio): quieto de perfil ya no es
-      // un frame fijo. Al aterrizar vuelve el squash de stepJumper.
+      // 2026-11-21): el Actor definido manda si algún sprite no
+      // cargó y durante el TROPIEZO del jugador (su squash/tilt ES
+      // la animación del tropezón). En el AIRE lo sustituye su
+      // sprite de salto generado a la altura física; en el SUELO,
+      // esperando, su animación de ESPERA generada (perfil «en
+      // guardia», dos frames hermanos a ~4,5 fps + squash
+      // respiratorio): quieto de perfil ya no es un frame fijo. Al
+      // aterrizar vuelve el squash de stepJumper.
       const swapJumper = (a, j, isPlayer) => {
         const air = !j.out && j.h > 0 && rocketReady(jumpImg('salto-' + a.id));
-        const wait = !j.out && !air && j.h <= 0 && !(isPlayer && j.charge > 0) && rocketReady(jumpImg('espera-' + a.id));
+        const wait = !j.out && !air && j.h <= 0 && !(isPlayer && j.tripT > 0) && rocketReady(jumpImg('espera-' + a.id));
         const on = air || wait;
         a.hidden = on;
         return { air, wait };
       };
       const pSw = swapJumper(this.p, J.p, true), nSw = this.partners.map((a, i) => swapJumper(a, J.n[i], false));
-      if (J.p.charge > 0 && !J.p.out) this.p.squash = Math.max(this.p.squash, 0.12 * (J.p.charge / 0.5)); // se agacha al cargar
+      // Tropiezo del jugador por código: squash + inclinación que
+      // decaen con tripT (la sacudida); el «!!» y el flash se
+      // fijaron en el cruce, en update().
+      if (J.p.tripT > 0) { const k = J.p.tripT / 0.55; this.p.squash = Math.max(this.p.squash, 0.13 * k); this.p.tilt = Math.sin(this.T * 40) * 0.10 * k; }
       W.render({
         cam: this.cam, dt, light: SOGA_LIGHT, noApartment: true, actors: [this.p, ...this.partners], focusZ: 0,
         boxes: (mb) => {
@@ -4912,8 +4969,31 @@
           }
           c.globalAlpha = 1;
           for (let i = 1; i < 8; i++) { const u = i / 8, rp = ropePts[Math.round(u * NRP)]; imgStar(c, rp.x, rp.y, 5 + Math.sin(t * 17 + i * 2) * 1.6, col); }
-          legendsHud(this, c, 'LA SOGA DE FUEGO', `Vuelta ${Math.min(this.passes + 1, this.maxPasses)}/${this.maxPasses} · ${slow ? 'LLAMA AZUL: lento' : 'LLAMA NARANJA: ¡rápido!'} · Roces tú ${J.p.roces} · ella ${J.t.roces}`);
-          if (J.p.charge > 0) { const h = this.p.head(30); panel(c, h.x - 26, h.y, 52, 8, '#4a4458'); c.fillStyle = '#ffd23f'; c.fillRect(h.x - 24, h.y + 2, 48 * (J.p.charge / 0.5), 4); }
+          // Estado SIN CAJA (corrección de Jose, 2026-11-21): en
+          // este duelo no hay panel, ni retrato del boss, ni
+          // título. Solo una línea de texto plano arriba a la
+          // izquierda — vuelta, llama, roces e INTENTOS que quedan
+          // — con el borde oscuro de G.text a modo de sombra para
+          // que se lea sobre el patio. La burbuja de diálogo, si
+          // algún día se fija en el duelo, se pinta como la pintaba
+          // el helper compartido.
+          G.text(c, `Vuelta ${Math.min(this.passes + 1, this.maxPasses)}/${this.maxPasses} · ${slow ? 'LLAMA AZUL: lento' : 'LLAMA NARANJA: ¡rápido!'} · Roces tú ${J.p.roces} · ella ${J.t.roces} · Intentos: ${SOGA_TRIES - this.trips}`, 10, 17, { size: 10.5, align: 'left', color: '#fff', lw: 4 });
+          if (this.bubble) { const bw = Math.min(430, 26 + this.bubble.text.length * 6.4); panel(c, 320 - bw / 2, 58, bw, 24, 'rgba(20,16,32,.85)'); G.text(c, this.bubble.text, 320, 71, { size: 12.5, color: this.bubble.color, lw: 4 }); }
+          // INDICADOR DE MOMENTO sobre la cabeza del personaje
+          // elegido (corrección de Jose): pastilla «¡ESPACIO!» que
+          // pulsa suave, con la barra de la ventana consumiéndose
+          // debajo (frac de tipState: verde mientras hay margen,
+          // roja cuando la ventana está por cerrar). Se proyecta
+          // con head(), como las estrellitas de aturdido del
+          // Cinturón: siempre sobre la cabeza real del personaje.
+          const tip = this.tipState();
+          if (tip.on) {
+            const h = this.p.head(36), wP = 76 * (1 + Math.sin(t * 14) * 0.04);
+            panel(c, h.x - wP / 2, h.y - 13, wP, 17, tip.frac > 0.25 ? 'rgba(22,58,32,.88)' : 'rgba(84,24,24,.92)');
+            G.text(c, '¡ESPACIO!', h.x, h.y - 4, { size: 11, color: '#fff', lw: 3 });
+            panel(c, h.x - wP / 2, h.y + 6, wP, 5, '#4a4458');
+            c.fillStyle = tip.frac > 0.25 ? '#7dff8a' : '#ff6b7a'; c.fillRect(h.x - wP / 2 + 1, h.y + 7, (wP - 2) * tip.frac, 3);
+          }
           if (this.teoSelfieT > 0) { const q = R.project(J.t.x, 96 + J.t.h, 0); if (q.ok) G.text(c, '¡SELFIE!', q.x, q.y, { size: 12, color: '#ffd7f0', lw: 5 }); }
           if (this.st === 'rend') this.endOverlay(c);
         },
@@ -4932,6 +5012,8 @@
   SogaDuel.CAM = SOGA_CAM;
   SogaDuel.LIGHT = SOGA_LIGHT;
   SogaDuel.JUMP = { files: JUMP_FILES, teoH: SOGA_TEO_H, jumpH: JUMP_H, esperaH: ESPERA_H, calH: CAL_H };
+  SogaDuel.TRIES = SOGA_TRIES; // intentos del jugador: se pierde al tercer tropiezo
+  SogaDuel.TIP = { lead: SOGA_TIP_LEAD, min: SOGA_TIP_MIN, v: SOGA_JUMP_V }; // ventana del indicador de momento (en segundos hasta el paso) y arco fijo del salto
 
   // ----- Cadena del clímax de Leyendas -----
   // Revelación del set → 2A Trazo → 2B Soga → resolución por la

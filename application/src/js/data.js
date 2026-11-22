@@ -552,7 +552,7 @@
       chat: [
         { who: 'teodora', text: 'Última prueba. La soga. Y no, no voy a saltar "suavecito" por ustedes.', direct: true },
       ],
-      intro: 'Dos utileros calaverita giran una soga de fuego espectral en el patio. Saltan tú, tus partners y Teodora. Mantén ESPACIO (o el toque) para cargar el salto y suelta para saltar: corto y rápido, o alto y lento. La soga acelera por tramos y a veces amaga; la llama lo anuncia: azul = lento, naranja = rápido. Tocar la llama es quemado cómico y eliminación. Teodora flota: aguanta más en el aire… pero cada ~10 vueltas se toma una selfie y salta tarde.',
+      intro: 'Dos utileros calaverita giran una soga de fuego espectral en el patio. Saltan tú, tus partners y Teodora. Cuando el indicador «¡ESPACIO!» aparezca sobre tu cabeza, presiona ESPACIO (o el toque) en ese momento para saltar: ni antes ni después. Si la soga te alcanza en el suelo, te tropiezas y pierdes un intento: tienes 3. La soga acelera por tramos y a veces amaga; la llama lo anuncia: azul = lento, naranja = rápido. Teodora flota: aguanta más en el aire… pero cada ~10 vueltas se toma una selfie y salta tarde.',
       goal: 'Sé el último en pie, o sigue saltando cuando Teodora se queme.',
       results: {
         win: { effects: { quality: 5 }, reply: () => [{ who: 'teodora', text: '¡¿Me ganó en MI soga?! …Bueno. Igual sí lloré tantito.', direct: true }] },

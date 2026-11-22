@@ -1677,9 +1677,9 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('patrón: su caja de estado es SOLO estado (legendsHud con { solo: true }; el helper dibuja la línea sin retrato ni título)',
         patronSrc.includes("legendsHud(this, c, 'EL PATRÓN DEL ALEBRIJE'") && patronSrc.includes('{ solo: true }')
         && scenesTxtM.includes('function legendsHud(d, c, title, lines, opts)') && scenesTxtM.includes('opts.solo'), '');
-      check('leyendas: las cajas SOLO-estado son Patrón y Trazo (3 llamadas a legendsHud, 2 con { solo: true }; la Soga conserva su caja completa)',
-        (scenesTxtM.match(/legendsHud\(this, c,/g) || []).length === 3 && (scenesTxtM.match(/\{ solo: true \}/g) || []).length === 2
-        && !scenesTxtM.slice(scenesTxtM.indexOf('class SogaDuel'), scenesTxtM.indexOf('class LegendsRevealScene')).includes('{ solo: true }'), '');
+      check('leyendas: las cajas SOLO-estado son Patrón y Trazo (2 llamadas a legendsHud, ambas con { solo: true }; la Soga ya NO llama al helper: fuera su caja y el retrato del boss)',
+        (scenesTxtM.match(/legendsHud\(this, c,/g) || []).length === 2 && (scenesTxtM.match(/\{ solo: true \}/g) || []).length === 2
+        && !scenesTxtM.slice(scenesTxtM.indexOf('class SogaDuel'), scenesTxtM.indexOf('class LegendsRevealScene')).includes('legendsHud('), '');
       check('patrón: los chips de zona dicen solo el nombre, sin el número inicial',
         patronSrc.includes('G.text(c, z.label, x + w / 2, y + 14') && !patronSrc.includes('${i + 1} ${z.label}'), '');
     }
@@ -1916,14 +1916,62 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('soga (4ª ronda): chispas desprendidas con W.puff a ritmo de la velocidad angular (fuente)',
         sogaSrc4.includes('dt * this.omega() * 0.4') && sogaSrc4.includes('W.puff(rnd(-170, 170), 0, 1, true)'), '');
     }
-    // 2B Soga: sin saltar te quemas; saltando a tiempo, Teodora cae en su selfie (~vuelta 10)
+    // 2B Soga (mecánica de MOMENTO, corrección de Jose 2026-11-21):
+    // sin pulsar a tiempo te tropiezas, y a los 3 tropiezos pierdes;
+    // saltando a tiempo, Teodora cae en su selfie (~vuelta 10). El
+    // driver de victoria llama a jumpP() como haría la pulsación
+    // dentro de la ventana del indicador.
     {
       const d = new Sc.SogaDuel('natalia', () => {});
       const res = driveDuel(d, () => {}, 900);
-      check('2B soga: jugador inmóvil → se quema (lose)', !!res && res.win === 'lose', JSON.stringify(res));
+      check('2B soga: jugador inmóvil → 3 tropiezos → pierde (lose)', !!res && res.win === 'lose' && res.trips === 3, JSON.stringify(res));
       const d2 = new Sc.SogaDuel('natalia', () => {});
-      const res2 = driveDuel(d2, (dd) => { if (dd.J.p.h <= 0 && dd.timeToBottom() < 0.34) dd.jumpP(0.3); }, 4000);
+      const res2 = driveDuel(d2, (dd) => { if (dd.J.p.h <= 0 && dd.timeToBottom() < 0.34) dd.jumpP(); }, 4000);
       check('2B soga: saltando a tiempo, Teodora se quema en su selfie → win', !!res2 && res2.win === 'win' && res2.passes >= 9, JSON.stringify(res2));
+    }
+    // 2B-bis (ronda del indicador): sin caja, salto por ventana de
+    // tiempo y 3 intentos — fuente, constantes y comportamiento.
+    {
+      const srcS5 = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const sogaSrc5 = srcS5.slice(srcS5.indexOf('class SogaDuel'), srcS5.indexOf('SogaDuel.CAM = SOGA_CAM'));
+      check('soga (ronda indicador): la clase NO llama al helper de cajas ni dibuja barra de fuerza (sin legendsHud, sin .charge) y su estado va en texto plano con Intentos',
+        !sogaSrc5.includes('legendsHud(') && !sogaSrc5.includes('.charge') && sogaSrc5.includes('Intentos: ${SOGA_TRIES - this.trips}'), '');
+      check('soga (ronda indicador): el salto sale de la acción con la ventana de tipState y el indicador «¡ESPACIO!» se pinta sobre la cabeza (head)',
+        sogaSrc5.includes("G.input.hit('action')") && sogaSrc5.includes('tipState()') && sogaSrc5.includes("'¡ESPACIO!'") && sogaSrc5.includes('this.p.head(36)'), '');
+      check('soga (ronda indicador): constantes — 3 intentos y ventana por TIEMPO (lead 0,6 s > min 0,09 s; arco fijo v=560)',
+        Sc.SogaDuel.TRIES === 3 && Sc.SogaDuel.TIP.lead === 0.6 && Sc.SogaDuel.TIP.min === 0.09 && Sc.SogaDuel.TIP.v === 560,
+        JSON.stringify(Sc.SogaDuel.TIP));
+      check('soga (ronda indicador): la pantalla previa describe la mecánica de momento, no la de carga',
+        G.EVENTS.soga.intro.includes('¡ESPACIO!') && G.EVENTS.soga.intro.includes('tienes 3') && !G.EVENTS.soga.intro.includes('cargar el salto'), '');
+      // Comportamiento: con la soga lejos no hay indicador; cuando
+      // el indicador sale (frac casi llena), pulsar SALTA y el paso
+      // se esquiva sin tropiezo.
+      const dA = new Sc.SogaDuel('natalia', () => {});
+      dA.st = 'play';
+      const lejos = !dA.tipState().on;
+      let tipOn = null;
+      for (let i = 0; i < 40 && !tipOn; i++) { dA.update(0.05); const ts = dA.tipState(); if (ts.on) tipOn = ts; }
+      let salto = false, sinTropiezo = false;
+      if (tipOn) {
+        G.input.touchDown('action', 77); dA.update(0.05); G.input.touchUp('action', 77);
+        salto = dA.J.p.h > 0;
+        const p0 = dA.passes;
+        for (let i = 0; i < 60 && dA.passes === p0; i++) dA.update(0.05);
+        sinTropiezo = dA.trips === 0 && dA.J.p.roces === 0 && dA.passes === p0 + 1;
+      }
+      check('soga (ronda indicador): lejos no hay indicador; al salir (frac>0,85) pulsar en ventana salta y esquiva el paso sin tropiezo',
+        lejos && !!tipOn && tipOn.frac > 0.85 && salto && sinTropiezo, `lejos=${lejos} frac=${tipOn && tipOn.frac.toFixed(2)} salto=${salto} limpio=${sinTropiezo}`);
+      // Comportamiento: pulsar FUERA de ventana no salta; sin
+      // pulsar, el 1er y 2º tropiezo NO terminan el duelo y el 3º
+      // sí (derrota, con los 3 tropiezos en el resultado).
+      let resB = null; const dB = new Sc.SogaDuel('natalia', (r) => { resB = r; });
+      dB.st = 'play';
+      G.input.touchDown('action', 78); dB.update(0.05); G.input.touchUp('action', 78);
+      const noSalto = dB.J.p.h === 0 && dB.trips === 0;
+      let vio1 = false, vio2 = false;
+      for (let i = 0; i < 900 && !resB; i++) { dB.update(0.05); if (dB.trips === 1 && dB.st === 'play') vio1 = true; if (dB.trips === 2 && dB.st === 'play') vio2 = true; }
+      check('soga (ronda indicador): pulsar fuera de ventana NO salta; tropiezos 1 y 2 no acaban el duelo; el 3º es la derrota',
+        noSalto && vio1 && vio2 && !!resB && resB.win === 'lose' && resB.trips === 3, `noSalto=${noSalto} vio1=${vio1} vio2=${vio2} res=${JSON.stringify(resB)}`);
     }
     // Cadena completa y regla de boss: 2/2 = plena, 1/2 = película, 0/2 = sin película
     const driveChain = (trazoWin, sogaWin) => {
@@ -1936,7 +1984,7 @@ const tick = () => new Promise((r) => setImmediate(r));
           if (!trazoWin) { cur.p.x = 268; cur.p.y = 222; }
           else if (cur.phase === 'trazo') { const idx = Math.min(cur.pts.length - 1, 2 * Math.round((cur.pt / cur.tTrazo) * (cur.pts.length - 1) / 2)); cur.p.x = cur.pts[idx].x; cur.p.y = cur.pts[idx].y; }
           else if (cur.phase === 'corre' || cur.phase === 'cae') { const h = cur.hexes.find((hh) => hh.safe); if (h) { cur.p.x = h.x; cur.p.y = h.y; } }
-        } else if (cur instanceof Sc.SogaDuel && sogaWin) { if (cur.J.p.h <= 0 && cur.timeToBottom() < 0.34) cur.jumpP(0.3); }
+        } else if (cur instanceof Sc.SogaDuel && sogaWin) { if (cur.J.p.h <= 0 && cur.timeToBottom() < 0.34) cur.jumpP(); }
         chain.update(0.05);
       }
       return out;
