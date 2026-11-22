@@ -31,6 +31,10 @@
      sin bucles agresivos.
    - La pausa global (G.setPaused → G.Music.setPaused) pausa la
      música y al reanudar sigue donde iba.
+   - El VOLUMEN del jugador vive en los Ajustes (game.js:
+     G.settings.musicVol + el silencio general) y entra por
+     G.Music.setUserGain(0..1): multiplica el volumen propio de
+     cada cue y se aplica EN VIVO al deck que esté sonando.
    - El easter egg «La Cita» tiene SU canción en date.js: este
      módulo NO la toca. Al entrar a la cita, game.js llama a
      G.Music.stop() y ningún gancho de fase vuelve a disparar
@@ -80,10 +84,14 @@
   let currentName = null;         // cue activo ('menu', 'collect', …)
   let pausedByGame = false;       // pausa global del juego
   let needGesture = false;        // play() rechazado por autoplay
+  let userGain = 1;               // volumen del jugador (Ajustes): multiplica el de cada cue
 
   function tracksOf(cue) {
     return cue.tracks || [{ file: cue.file, start: cue.start, end: cue.end }];
   }
+
+  // Volumen efectivo de un cue: el suyo propio × el del jugador.
+  function targetFor(cue) { return Math.max(0, Math.min(1, cue.volume * userGain)); }
 
   function makeDeck() {
     let el = null;
@@ -194,7 +202,7 @@
     loadTrack(next, cue);
     next.el.volume = 0;
     tryPlay(next);
-    fadeTo(next, cue.volume);
+    fadeTo(next, targetFor(cue));
     if (prev && prev !== next) {
       fadeTo(prev, 0, () => { if (typeof prev.el.pause === 'function') { try { prev.el.pause(); } catch (e) { /* tolerante */ } } prev.cue = null; prev.name = null; });
     }
@@ -214,8 +222,19 @@
       if (typeof active.el.pause === 'function') { try { active.el.pause(); } catch (e) { /* tolerante */ } }
     } else {
       tryPlay(active);
-      if (active.cue) fadeTo(active, active.cue.volume);
+      if (active.cue) fadeTo(active, targetFor(active.cue));
     }
+  }
+
+  // Volumen del jugador (0..1) desde los Ajustes: queda guardado
+  // para los próximos play() y se aplica EN VIVO al deck que esté
+  // sonando — se corta su fade en curso y el volumen salta al
+  // nuevo efectivo, para que mover el deslizador se oiga al momento.
+  function setUserGain(g) {
+    userGain = isFinite(g) ? Math.max(0, Math.min(1, g)) : 1;
+    if (!active || !active.cue || pausedByGame) return;
+    if (active.fade) { clearInterval(active.fade); active.fade = null; }
+    try { active.el.volume = targetFor(active.cue); } catch (e) { /* tolerante */ }
   }
 
   // Autoplay: el primer gesto del usuario reintenta el cue activo
@@ -233,7 +252,8 @@
 
   G.Music = {
     CUES: MUSIC_CUES,
-    play, stop, setPaused,
+    play, stop, setPaused, setUserGain,
+    userGain: () => userGain,
     current: () => currentName,
   };
 })();

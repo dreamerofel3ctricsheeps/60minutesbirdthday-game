@@ -42,13 +42,20 @@
   }
 
   // ---------- Sonido (WebAudio, sin archivos) ----------
+  // Cada disparo lee la ganancia de efectos de los Ajustes
+  // (G.sfxGain, definida junto a G.settings más abajo; esto solo
+  // corre ya con el juego cargado): con el silencio general o el
+  // volumen de efectos a cero, ni siquiera se crean los nodos.
   let actx = null;
   G.sfx = function (name) {
     try {
+      const gain = typeof G.sfxGain === 'function' ? G.sfxGain() : 1;
+      if (!(gain > 0)) return;
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
       const T = { pick: [[660, 0.06], [880, 0.08]], ok: [[523, 0.07], [659, 0.07], [784, 0.12]], bad: [[196, 0.12], [147, 0.16]], meow: [[700, 0.08], [900, 0.1], [600, 0.14]], bell: [[988, 0.15], [784, 0.3]], door: [[120, 0.1], [90, 0.12]], msg: [[1200, 0.03]], party: [[523, 0.1], [659, 0.1], [784, 0.1], [1047, 0.3]] }[name] || [[440, 0.1]];
       let t = actx.currentTime;
-      T.forEach(([f, d]) => { const o = actx.createOscillator(), g = actx.createGain(); o.type = name === 'bad' || name === 'door' ? 'sawtooth' : 'square'; o.frequency.value = f; g.gain.setValueAtTime(0.05, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d); t += d * 0.9; });
+      const peak = 0.05 * gain;
+      T.forEach(([f, d]) => { const o = actx.createOscillator(), g = actx.createGain(); o.type = name === 'bad' || name === 'door' ? 'sawtooth' : 'square'; o.frequency.value = f; g.gain.setValueAtTime(peak, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * 0.02), t + d); o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d); t += d * 0.9; });
     } catch (e) { /* sin audio */ }
   };
 
@@ -323,10 +330,34 @@
   function detectTouch() { return !!((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)); }
   let savedSettings = {};
   try { savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { savedSettings = {}; }
-  G.settings = Object.assign({ touch: detectTouch() }, savedSettings);
+  G.settings = Object.assign({ touch: detectTouch(), musicVol: 100, sfxVol: 100, muted: false }, savedSettings);
   function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(G.settings)); } catch (e) { /* almacenamiento no disponible */ } }
   function applySettings() { document.body.classList.toggle('touch-on', !!G.settings.touch); }
   applySettings();
+
+  // ---------- Sonido: la fuente de verdad es G.settings ----------
+  // musicVol/sfxVol (0–100) y muted (el SILENCIO GENERAL) viven en
+  // los mismos Ajustes persistidos de arriba, junto a `touch`; los
+  // guardados de versiones anteriores no traen las claves nuevas y
+  // el Object.assign de arriba las rellena con su defecto (100/100/
+  // sin silencio) sin borrar las demás. Las ganancias efectivas
+  // (0..1) se derivan SOLO aquí, y todos los sistemas de audio del
+  // juego las obedecen: la música (applySoundSettings empuja la
+  // ganancia a G.Music.setUserGain), los efectos (G.sfx lee
+  // G.sfxGain en cada disparo) y el audio de La Cita (date.js lee
+  // estas mismas ganancias para su canción y su puerta, y recibe
+  // el empujón por G.DateMode.applySoundSettings). El silencio
+  // general lleva ambas ganancias a cero SIN tocar los volúmenes
+  // guardados: al desactivarlo, cada cosa vuelve a su volumen.
+  const vol01 = (v) => { v = Number(v); return isFinite(v) ? clamp(v, 0, 100) / 100 : 1; };
+  G.musicGain = () => (G.settings.muted ? 0 : vol01(G.settings.musicVol));
+  G.sfxGain = () => (G.settings.muted ? 0 : vol01(G.settings.sfxVol));
+  function applySoundSettings() {
+    if (G.Music && typeof G.Music.setUserGain === 'function') G.Music.setUserGain(G.musicGain());
+    if (G.DateMode && typeof G.DateMode.applySoundSettings === 'function') G.DateMode.applySoundSettings();
+  }
+  G.applySoundSettings = applySoundSettings;
+  applySoundSettings(); // antes del primer sonido: la música del título ya nace con el volumen guardado
 
   // ---------- Candado de Minijuegos (regla de Jose, 2026-11-22) ----------
   // La práctica (el menú Minijuegos del título y de la pausa) nace
@@ -355,11 +386,33 @@
       menuShow(`<h2><span class="pic pic-gear"><i></i></span>Ajustes</h2>
         <div class="optrow"><div><b>Controles táctiles</b><small>Joystick circular y botón de acción en pantalla, para jugar con el dedo en celular o tablet: arrastra el joystick en cualquier dirección para moverte (cuanto más lejos del centro, más rápido). El teclado sigue funcionando igual, estén activos o no.</small></div>
           <label class="switch"><input type="checkbox" id="stouch" ${G.settings.touch ? 'checked' : ''}><span class="track"></span></label></div>
+        <div class="optrow"><div><b>Música</b><small>Volumen de la banda sonora. Se aplica en vivo: lo que esté sonando cambia al momento.</small></div>
+          <input type="range" id="smusic" min="0" max="100" step="1" value="${G.settings.musicVol}"><span class="volval" id="smusicv">${G.settings.musicVol}%</span></div>
+        <div class="optrow"><div><b>Efectos</b><small>Volumen de los sonidos del juego (botones, aciertos, maullidos…). Al soltar el deslizador suena una muestra.</small></div>
+          <input type="range" id="ssfx" min="0" max="100" step="1" value="${G.settings.sfxVol}"><span class="volval" id="ssfxv">${G.settings.sfxVol}%</span></div>
+        <div class="optrow"><div><b>Silencio general</b><small>Apaga TODO el sonido (música y efectos) sin perder tus volúmenes: al desactivarlo, cada uno vuelve tal cual estaba.</small></div>
+          <label class="switch"><input type="checkbox" id="smute" ${G.settings.muted ? 'checked' : ''}><span class="track"></span></label></div>
         <button class="big alt" id="sback">← Volver</button>`);
       $('#stouch').onchange = (e) => {
         G.settings.touch = e.target.checked; saveSettings(); applySettings();
         if (!G.settings.touch) G.input.touchReset(); // suelta cualquier botón táctil "pegado" al desactivar
       };
+      // Deslizadores de volumen: `input` aplica EN VIVO (se oye
+      // mientras arrastras) y persiste en cada movimiento; el de
+      // efectos añade una muestra breve al soltar (`change`).
+      const wireVol = (id, vid, key) => {
+        const inp = $(id), lab = $(vid);
+        if (!inp) return;
+        inp.oninput = () => {
+          G.settings[key] = Number(inp.value);
+          if (lab) lab.textContent = `${inp.value}%`;
+          saveSettings(); applySoundSettings();
+        };
+        if (key === 'sfxVol') inp.onchange = () => G.sfx('pick');
+      };
+      wireVol('#smusic', '#smusicv', 'musicVol');
+      wireVol('#ssfx', '#ssfxv', 'sfxVol');
+      $('#smute').onchange = (e) => { G.settings.muted = e.target.checked; saveSettings(); applySoundSettings(); };
       $('#sback').onclick = () => { G.sfx('pick'); menuHide(); res(); };
     });
   }

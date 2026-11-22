@@ -100,6 +100,15 @@
       la API existe, cambiar de cue y pausar/reanudar no lanzan
       aunque los MP3 no existan, y el index.html carga music.js
       entre data.js y game.js.
+   T) Sonido en los Ajustes (pedido de Jose): deslizadores de
+      volumen de Música y Efectos (0–100) y el Silencio general
+      en el panel, con la fuente de verdad en G.settings
+      (musicVol/sfxVol/muted, persistidos en '1mtp.settings'
+      junto a touch): la ganancia efectiva (G.musicGain/
+      G.sfxGain) manda sobre G.Music (setUserGain en vivo sobre
+      el deck que suena), sobre G.sfx (la lee en cada disparo) y
+      sobre el audio de La Cita (date.js la consulta y recibe
+      applySoundSettings).
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -213,7 +222,14 @@ load('teodora-sheets.js');
 load('jump-sheets.js');
 load('sprites.js');
 load('data.js');
-load('music.js');
+// music.js: la inyección es SOLO para la prueba (el archivo real
+// no cambia): se expone el <audio> del deck activo para poder
+// comprobar que el volumen del jugador se aplica EN VIVO (sección T).
+load('music.js', (code) => {
+  const from = 'current: () => currentName,';
+  if (!code.includes(from)) throw new Error('no se encontró G.Music.current en music.js');
+  return code.replace(from, 'current: () => currentName, debugActiveEl: () => (active ? active.el : null),');
+});
 load('gl3d.js');
 load('world.js');
 load('scenes.js');
@@ -221,11 +237,12 @@ load('scenes.js');
 // real no cambia): se añade MG a lo que G.debug ya expone. La sección Q
 // suma showMinigames/showEnding (el candado de Minijuegos) y un reset
 // del respaldo en memoria del candado (mgSession), para poder simular
-// una sesión sin desbloqueo tras haberlo abierto.
+// una sesión sin desbloqueo tras haberlo abierto. La sección T suma
+// saveSettings/applySoundSettings (los controles de sonido).
 load('game.js', (code) => {
   const from = 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect };';
   if (!code.includes(from)) throw new Error('no se encontró G.debug en game.js');
-  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; } };');
+  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings };');
 });
 
 const G = sandbox.G, Sc = G.Scenes, W = G.World;
@@ -2550,6 +2567,104 @@ const tick = () => new Promise((r) => setImmediate(r));
       && !gameTxtS.includes('iw < 2 * CW + GAP + 170'), '');
     check('táctil: joystick y botón de acción escalan con el alto del escenario (clamp con cqh, topes de siempre)',
       cssS.includes('#joystick { width: clamp(96px, 34cqh, 148px)') && cssS.includes('.taction { width: clamp(52px, 18cqh, 78px)'), '');
+  }
+
+  // --- Sección T: sonido en los Ajustes (pedido de Jose, 2026-11-22) ---
+  // Deslizadores de Música/Efectos (0–100) y Silencio general en el
+  // panel, con la fuente de verdad en G.settings (musicVol/sfxVol/
+  // muted, persistidos en '1mtp.settings'): la ganancia efectiva
+  // manda sobre la música (en vivo, sobre el deck que suena), sobre
+  // los efectos (se lee en cada disparo) y sobre el audio de La
+  // Cita (fuente de date.js: consulta las mismas ganancias).
+  {
+    console.log('\nT) Sonido en los Ajustes — volúmenes de música/efectos y silencio general');
+    const gameT = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const dateT = fs.readFileSync(path.join(SRC, 'date.js'), 'utf8');
+    const cssT = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const iScr = gameT.indexOf('function settingsScreen');
+    const scr = iScr >= 0 ? gameT.slice(iScr, iScr + 6000) : '';
+    check('sonido: el panel de Ajustes trae los TRES controles (deslizador de Música, deslizador de Efectos con muestra al soltar, e interruptor de Silencio general)',
+      scr.includes('id="smusic"') && scr.includes('id="ssfx"') && scr.includes('id="smute"')
+      && scr.includes('<b>Música</b>') && scr.includes('<b>Efectos</b>') && scr.includes('<b>Silencio general</b>')
+      && scr.includes("inp.onchange = () => G.sfx('pick')"), scr.slice(0, 120));
+    check('sonido: los deslizadores se estilan en el panel (accent-color del tema y área táctil de 32px)',
+      cssT.includes('.optrow input[type="range"]') && cssT.includes('accent-color: var(--yellow)'), '');
+    check('sonido: las claves nuevas nacen con su defecto en el merge de ajustes (un guardado viejo sin ellas se rellena sin borrar las demás)',
+      gameT.includes('musicVol: 100, sfxVol: 100, muted: false'), '');
+    check('sonido: sin tocar nada, los ajustes de sonido valen 100/100 y sin silencio',
+      G.settings.musicVol === 100 && G.settings.sfxVol === 100 && G.settings.muted === false,
+      JSON.stringify({ m: G.settings.musicVol, s: G.settings.sfxVol, mu: G.settings.muted }));
+
+    // Ganancias efectivas derivadas de G.settings.
+    G.settings.musicVol = 40; G.settings.sfxVol = 25; G.settings.muted = false;
+    check('sonido: la ganancia efectiva refleja cada volumen (40% música, 25% efectos)',
+      Math.abs(G.musicGain() - 0.4) < 1e-9 && Math.abs(G.sfxGain() - 0.25) < 1e-9,
+      `music=${G.musicGain()} sfx=${G.sfxGain()}`);
+    G.settings.muted = true;
+    check('sonido: el SILENCIO GENERAL lleva ambas ganancias a cero SIN tocar los volúmenes guardados',
+      G.musicGain() === 0 && G.sfxGain() === 0 && G.settings.musicVol === 40 && G.settings.sfxVol === 25, '');
+    G.settings.muted = false;
+
+    // La música obedece EN VIVO: al aplicar los ajustes, el deck
+    // que está sonando salta al nuevo volumen efectivo sin esperar
+    // al siguiente cue. (Sin MP3 en el sandbox: bastan los <audio>
+    // falsos; debugActiveEl es inyección del propio humo.)
+    const M = G.Music;
+    G.settings.musicVol = 50;
+    M.play('menu');
+    G.debug.applySoundSettings();
+    const deckEl = M.debugActiveEl();
+    check('sonido: G.Music recibe la ganancia del jugador (50%) y el deck que suena queda al volumen efectivo del cue (0.45 × 0.5 = 0.225)',
+      M.userGain() === 0.5 && !!deckEl && Math.abs(deckEl.volume - 0.225) < 1e-9,
+      `gain=${M.userGain()} vol=${deckEl && deckEl.volume}`);
+    G.settings.muted = true;
+    G.debug.applySoundSettings();
+    check('sonido: con el silencio general, el deck que suena cae a cero en vivo',
+      M.userGain() === 0 && !!deckEl && deckEl.volume === 0, `vol=${deckEl && deckEl.volume}`);
+    G.settings.muted = false; G.settings.musicVol = 100;
+    G.debug.applySoundSettings();
+    M.stop();
+
+    // Los efectos obedecen en cada disparo: un AudioContext falso
+    // registra el pico de ganancia con que nace cada nota.
+    const peaks = [];
+    sandbox.AudioContext = class {
+      constructor() { this.currentTime = 0; this.destination = {}; }
+      createOscillator() { return { type: '', frequency: { value: 0 }, connect: (n) => n, start() {}, stop() {} }; }
+      createGain() { return { gain: { setValueAtTime: (v) => peaks.push(v), exponentialRampToValueAtTime: () => {} }, connect: (n) => n }; }
+    };
+    G.settings.sfxVol = 50;
+    G.sfx('pick');
+    check('sonido: un efecto al 50% nace con la mitad del pico de siempre (0.05 → 0.025)',
+      peaks.length > 0 && Math.abs(peaks[0] - 0.025) < 1e-9, `peaks=${peaks.join(',')}`);
+    const beforeMute = peaks.length;
+    G.settings.muted = true;
+    G.sfx('pick');
+    check('sonido: con el silencio general, un efecto ni siquiera crea sus nodos',
+      peaks.length === beforeMute, `antes=${beforeMute} después=${peaks.length}`);
+    G.settings.muted = false; G.settings.sfxVol = 100;
+
+    // Persistencia: los valores viajan a '1mtp.settings' y
+    // conviven con las claves que ya vivían ahí (touch).
+    G.settings.musicVol = 33; G.settings.sfxVol = 66; G.settings.muted = true;
+    G.debug.saveSettings();
+    let stored = null;
+    try { stored = JSON.parse(fakeLocalStorage.getItem('1mtp.settings') || 'null'); } catch (e) { stored = null; }
+    check('sonido: los tres valores PERSISTEN en 1mtp.settings junto a las claves existentes (touch)',
+      !!stored && stored.musicVol === 33 && stored.sfxVol === 66 && stored.muted === true && ('touch' in stored),
+      JSON.stringify(stored));
+    // El sandbox queda como estaba: valores por defecto, guardados.
+    G.settings.musicVol = 100; G.settings.sfxVol = 100; G.settings.muted = false;
+    G.debug.saveSettings(); G.debug.applySoundSettings();
+
+    // La Cita obedece a la misma fuente (fuente de date.js): lee
+    // las ganancias globales para su canción y su puerta, y
+    // expone el punto de resincronización que game.js empuja.
+    check('sonido: date.js consulta las ganancias globales (musicGain para la canción, sfxGain para la puerta) y expone applySoundSettings',
+      dateT.includes("typeof G.musicGain === 'function'") && dateT.includes("typeof G.sfxGain === 'function'")
+      && dateT.includes('applySoundSettings: applySongSound'), '');
+    check('sonido: la puerta de la cita respeta el silencio general y escala su volumen con la ganancia de efectos',
+      dateT.includes('g != null && g <= 0') && dateT.includes('0.9 * (g == null ? 1 : g)'), '');
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
