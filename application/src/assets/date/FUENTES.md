@@ -74,3 +74,26 @@
   paisaje lejano, con velo de distancia aplicado por código.
   Si el archivo no está en la copia local, el juego simplemente
   no dibuja la vista.
+
+## sanangel/ — Recortes de la escena de San Ángel (NO versionados)
+- Recortes de imágenes de El Libro de la Vida aportadas por Jose,
+  uso personal, **assets solo-locales no incluidos en el
+  repositorio** (la carpeta `sanangel/` está en `.gitignore`, como
+  la canción y la vista de arriba): las casas del pueblo
+  (`casas-full.png`, `casas-a.png`, `casas-b.png`), la pileta con
+  la estatua del general a caballo (`pileta.png`), Manolo con su
+  guitarra (`manolo.png`), María de espaldas (`maria.png`), el
+  chancho de María, Chuy (`chuy.png`), el árbol gigante de las
+  velas (`arbol.png`) y dos velas del suelo (`vela-a.png`,
+  `vela-b.png`).
+- **Procesado local:** segmentación pieza a pieza (rembg, GrabCut,
+  croma contra el cielo turquesa y máscaras a mano según la pieza),
+  borde blanco horneado y sombra suave en las piezas-sticker
+  (pileta, Manolo, María, Chuy); las casas, el árbol y las velas
+  van sin borde (son paisaje). Todo verificado sobre fondo
+  magenta. La María del cameo caminante es la de espaldas: en la
+  imagen lateral del pueblo las figuras miden ~20–30 px, muy por
+  debajo de los ~92 px a los que se dibuja el cameo.
+- Si la carpeta no está en la copia local, la escena de San Ángel
+  se juega igual: cada elemento se dibuja solo si su imagen
+  cargó, y el cielo y el piso se dibujan por código.

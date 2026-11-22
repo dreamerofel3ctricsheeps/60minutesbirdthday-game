@@ -8,3 +8,9 @@ application/src/assets/audio/*.mp3
 # canción, vive SOLO en la copia local y nunca se sube al repo.
 # El código tolera que falte (simplemente no se dibuja la vista).
 application/src/assets/date/sanangel-vista.png
+# Los recortes de la escena de San Ángel (casas, pileta, Manolo,
+# María, Chuy, el árbol y las velas) son arte de la misma película
+# aportado por Jose: SOLO-LOCALES, como la canción y la vista. El
+# código tolera que falten (cada elemento se dibuja solo si su
+# imagen cargó; la escena se juega igual sin la carpeta).
+application/src/assets/date/sanangel/

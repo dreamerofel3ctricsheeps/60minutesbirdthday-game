@@ -27,6 +27,12 @@
       de la hoja y «pulsaba» al bajar), el acompañante sin
       parpadeo walk/idle al caminar juntos (histéresis), y Jose
       ya sin ramo en la plaza (sin drawBouquet en date.js).
+   J) Escena 2 «San Ángel» (Parte 2): la Puerta de salida de la
+      plaza (mundo x=1068) cruza a la franja de San Ángel
+      (1500 px, mismo modo libre), el cameo de Manolo y María
+      con Chuy camina a la izquierda una sola vez, las velas
+      parpadean, la Puerta del árbol devuelve a la plaza, y la
+      carpeta sanangel/ queda solo-local (.gitignore + FUENTES).
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -399,6 +405,69 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('sanangel-vista.png está en .gitignore (nunca se versiona, como la canción)',
     gitignore.includes('application/src/assets/date/sanangel-vista.png'));
   sc.draw(0.016); // con los complementos, el dibujo de la plaza no explota
+
+  console.log('\nJ) Escena 2 «San Ángel»: Puerta de salida, franja libre, cameo, velas y vuelta');
+  // La plaza ganó su Puerta de salida al final de la franja,
+  // exactamente donde ancla la vista lejana de San Ángel.
+  check('la plaza tiene su Puerta de salida en el mundo x=1068 (el ancla de la vista de San Ángel)',
+    sc.exitDoorX === 1068 && FX.vistaWorldX === sc.exitDoorX, 'exitDoorX=' + sc.exitDoorX);
+  if (F.active !== 'ximena') sc.switchActive();
+  X.x = sc.exitDoorX - 10; X.y = sc.groundY; J.x = X.x - 70; J.y = sc.groundY;
+  sc.update(0.05);
+  check('junto a la Puerta de salida se ofrece cruzarla (nearExit)', sc.nearExit === true);
+  key('Space', true); sc.update(0.016); key('Space', false);
+  check('ESPACIO en la Puerta de salida inicia el cruce (fase exitdoor)', sc.phase === 'exitdoor', 'phase=' + sc.phase);
+  for (let i = 0; i < 25 && G.scene === sc; i++) sc.update(0.05);
+  const ang = G.scene;
+  check('tras la luz (~1 s) la escena activa es San Ángel y el estado del modo lo refleja',
+    ang !== sc && !!ang && ang.id === 'sanangel' && DM.state.state === 'sanangel', 'id=' + (ang && ang.id) + ', state=' + DM.state.state);
+  for (let i = 0; i < 25 && ang.phase !== 'free'; i++) ang.update(0.05);
+  check('San Ángel amanece en modo libre tras ~1 s de luz (sin paneo largo)', ang.phase === 'free', 'phase=' + ang.phase);
+  check('la franja de San Ángel mide 1500 px, con Puerta de entrada (90) y de salida junto al árbol (1400)',
+    ang.worldW === 1500 && ang.entryDoorX === 90 && ang.exitDoorX === 1400 && DM.debug.SANANGEL.worldW === 1500);
+  const AF = ang.free, AX = AF.chars[AF.active];
+  const ax0 = AX.x;
+  key('ArrowRight', true);
+  for (let i = 0; i < 40; i++) ang.update(0.05);
+  key('ArrowRight', false);
+  check('en San Ángel el input mueve al activo y la cámara sigue dentro de la franja (pan 0..860)',
+    AX.x > ax0 + 150 && ang.pan >= 0 && ang.pan <= 860.01, `x ${ax0} → ${AX.x.toFixed(0)}, pan=${ang.pan.toFixed(0)}`);
+  const aBefore = AF.active;
+  key('Tab', true); key('Tab', false);
+  check('TAB también alterna el personaje activo en San Ángel', AF.active !== aBefore, 'active=' + AF.active);
+  // El cameo: Manolo y María caminan juntos a la izquierda y
+  // Chuy acompaña a María; las distancias entre ellos no varían.
+  const cm0 = { m: ang.cameo.manoloX, ma: ang.cameo.mariaX, ch: ang.cameo.chuyX };
+  for (let i = 0; i < 40; i++) ang.update(0.05);
+  check('el cameo de Manolo y María camina hacia la izquierda a velocidad de paseo (~55 px/s)',
+    ang.cameo.manoloX < cm0.m - 80 && ang.cameo.done === false, `x ${cm0.m.toFixed(0)} → ${ang.cameo.manoloX.toFixed(0)}`);
+  check('María acompaña a Manolo a distancia fija y Chuy trota junto a María (sin separarse)',
+    Math.abs((ang.cameo.mariaX - ang.cameo.manoloX) - (cm0.ma - cm0.m)) < 0.01 &&
+    Math.abs((ang.cameo.chuyX - ang.cameo.mariaX) - (cm0.ch - cm0.ma)) < 0.01);
+  // Las velas: decenas en el camino al árbol y parpadeo real.
+  check('hay decenas de velas camino al árbol (26–40 instancias)', ang.candles.length >= 26 && ang.candles.length <= 40, 'n=' + ang.candles.length);
+  const g0 = ang.candleGlowAt(0, 0), g1 = ang.candleGlowAt(0.7, 0), g2 = ang.candleGlowAt(3.1, 5);
+  check('el brillo de las velas varía con el tiempo (parpadeo) y se mantiene en rango [0,3, 1,05]',
+    g0 !== g1 && [g0, g1, g2].every((g) => g >= 0.3 && g <= 1.05), `g=${g0.toFixed(2)}/${g1.toFixed(2)}/${g2.toFixed(2)}`);
+  ang.draw(0.016); // San Ángel se dibuja sin explotar (sin assets locales: guardas imgOk)
+  // Viaje de vuelta por la Puerta del árbol.
+  if (AF.active !== 'ximena') ang.switchActive();
+  const AX2 = AF.chars.ximena;
+  AX2.x = ang.exitDoorX - 10; AX2.y = ang.groundY;
+  ang.update(0.05);
+  check('junto a la Puerta del árbol se ofrece cruzarla (nearDoor)', ang.nearDoor === true);
+  key('Space', true); ang.update(0.016); key('Space', false);
+  for (let i = 0; i < 25 && G.scene === ang; i++) ang.update(0.05);
+  check('la Puerta del árbol devuelve a la plaza, en modo libre y con el estado plaza-arrived',
+    G.scene === sc && sc.phase === 'free' && DM.state.state === 'plaza-arrived', 'state=' + DM.state.state + ', phase=' + sc.phase);
+  sc.draw(0.016); // de vuelta en la plaza, el dibujo sigue sano
+  // La carpeta de recortes es solo-local y está registrada.
+  check('la carpeta sanangel/ está en .gitignore (arte de la película: nunca se versiona)',
+    gitignore.includes('application/src/assets/date/sanangel/'));
+  check('FUENTES.md registra los recortes de sanangel/ como solo-locales de El Libro de la Vida',
+    fuentes.includes('sanangel/') && fuentes.includes('Libro de la Vida'));
+  check('date.js referencia los recortes de San Ángel y los dibuja solo si cargaron (imgOk)',
+    ['sanangel/pileta.png', 'sanangel/arbol.png', 'sanangel/manolo.png', 'sanangel/maria.png', 'sanangel/chuy.png', 'sanangel/vela-a.png', 'sanangel/casas-full.png'].every((f) => dateSrc.includes(f)) && dateSrc.includes('imgOk(saPileta)'));
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);

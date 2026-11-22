@@ -1,8 +1,15 @@
 /* ============================================================
-   EASTER EGG «LA CITA» — Parte 1 (feat/easter-egg-cita)
+   EASTER EGG «LA CITA» — Partes 1 y 2 (feat/easter-egg-cita)
    Modo secreto: se controla a XIMENA en el departamento con
    todos escondidos, sale por la puerta principal y llega a la
    plaza de CDMX (capas parallax + recorte de foto real).
+   Parte 2: la Puerta de salida de la plaza (mundo x=1068, donde
+   ancla la vista lejana) cruza a la escena de SAN ÁNGEL, una
+   segunda franja libre construida con recortes de las imágenes
+   de El Libro de la Vida que aportó Jose (assets SOLO-LOCALES
+   en assets/date/sanangel/, fuera de git; la escena se juega
+   igual si la carpeta no está). Su Puerta del árbol devuelve a
+   la plaza: los viajes son para revisión, sin reloj nuevo.
    Especificación: goals/1-minuto-para-la-fiesta/files/
    tecnico-easter-egg-la-cita-v1.md
 
@@ -94,8 +101,9 @@
 
   // ---------- Estado propio del modo ----------
   const D = {
-    active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|done
-    scene: null, arrived: false, joseJoined: false,
+    active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|sanangel|done
+    scene: null, plazaScene: null, angelScene: null,
+    arrived: false, joseJoined: false,
     clockRunning: false, factor: 1, tap: false,
   };
 
@@ -235,7 +243,140 @@
     return 790 - (ph / f.cruce) * 960;
   }
 
-  // ---------- TAB en el modo libre de la plaza ----------
+  // ---------- Escena 2: SAN ÁNGEL (recortes de la película) ----------
+  // Todo lo de esta carpeta es arte de El Libro de la Vida
+  // aportado por Jose: SOLO-LOCAL (en .gitignore, como la canción
+  // y la vista), y cada elemento se dibuja SOLO si su imagen
+  // cargó (imgOk): sin la carpeta, la escena corre con su cielo
+  // y su piso dibujados por código. Procedencia en FUENTES.md.
+  const saCasasFull = loadDateImg('assets/date/sanangel/casas-full.png');
+  const saCasasA = loadDateImg('assets/date/sanangel/casas-a.png');
+  const saCasasB = loadDateImg('assets/date/sanangel/casas-b.png');
+  const saPileta = loadDateImg('assets/date/sanangel/pileta.png');
+  const saManolo = loadDateImg('assets/date/sanangel/manolo.png');
+  const saMaria = loadDateImg('assets/date/sanangel/maria.png');
+  const saChuy = loadDateImg('assets/date/sanangel/chuy.png');
+  const saArbol = loadDateImg('assets/date/sanangel/arbol.png');
+  const saVelaA = loadDateImg('assets/date/sanangel/vela-a.png');
+  const saVelaB = loadDateImg('assets/date/sanangel/vela-b.png');
+  // Geometría de la franja de San Ángel: 1500 px de mundo, la
+  // Puerta de entrada a la izquierda (x=90) y la de salida junto
+  // al árbol (x=1400). Las casas viven en su capa (parallax 0,4)
+  // como segmentos de x/h en ese espacio; el árbol ancla su
+  // centro en el espacio de la suya (parallax 0,25).
+  const SANANGEL = { worldW: 1500, entryDoorX: 90, exitDoorX: 1400, groundY: 316, horizon: 246 };
+  const SA_HOUSES = [
+    { img: saCasasA, x: -10, h: 112 }, { img: saCasasB, x: 176, h: 126 },
+    { img: saCasasFull, x: 322, h: 126 }, { img: saCasasA, x: 640, h: 116 },
+    { img: saCasasB, x: 826, h: 122 },
+  ];
+  // Velitas colgando de la copa del árbol: fracciones (x, y)
+  // sobre la caja en que se dibuja el recorte del árbol; el
+  // punto de luz y su parpadeo se dibujan por código.
+  const SA_HANG = [
+    [0.16, 0.50], [0.28, 0.58], [0.40, 0.48], [0.52, 0.58], [0.63, 0.50], [0.75, 0.58],
+    [0.86, 0.52], [0.22, 0.66], [0.47, 0.67], [0.70, 0.67], [0.34, 0.72], [0.60, 0.74],
+  ];
+  // Brillo de una vela en el tiempo t (índice i = su fase): dos
+  // senos de frecuencias distintas dan un parpadeo orgánico que
+  // nunca se repite igual entre velas vecinas. Rango ~[0,44, 1].
+  function candleGlow(t, i) {
+    return 0.72 + 0.28 * Math.sin(t * 6.3 + i * 1.93) * Math.sin(t * 2.7 + i * 0.71);
+  }
+
+  // ---------- Motor de franja libre (compartido plaza ⇄ San Ángel) ----------
+  // Las dos escenas 2D son franjas caminables con el mismo modo
+  // libre: personaje activo con el input (TAB alterna), el otro
+  // siguiendo a su puesto con histéresis, cámara que sigue al
+  // activo dentro de la franja y dibujo lateral por distancia.
+  // Estas funciones son la ÚNICA implementación de esa lógica;
+  // cada escena aporta su free/worldW/groundY/pan.
+  function makeStripChars(x1, x2, groundY) {
+    return {
+      active: 'ximena',
+      chars: {
+        ximena: { id: 'ximena', x: x1, y: groundY, dist: 0, dir: 'right', moving: false, animWalk: false, idleT: 0, follow: false },
+        jose: { id: 'jose', x: x2, y: groundY, dist: 0, dir: 'left', moving: false, animWalk: false, idleT: 0, follow: false },
+      },
+    };
+  }
+  // Estado de ANIMACIÓN de caminata: se enciende con el
+  // movimiento real y se apaga con 0,12 s de gracia desde la
+  // última vez que se movió (ver el porqué en updateStripFree).
+  function animStepChar(ch, physically, dt) {
+    if (physically) { ch.animWalk = true; ch.idleT = 0; }
+    else if (ch.animWalk) { ch.idleT += dt; if (ch.idleT >= 0.12) ch.animWalk = false; }
+  }
+  function updateStripFree(sc, dt) {
+    const F = sc.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+    const clampX = (x) => Math.max(40, Math.min(sc.worldW - 40, x));
+    const clampY = (y) => Math.max(sc.groundY - 26, Math.min(sc.groundY + 26, y));
+    // --- el activo, con el input del jugador ---
+    const ax = G.input.axis();
+    const ix = ax.x || (touchVec ? touchVec.x : 0), iy = ax.y || (touchVec ? touchVec.y : 0);
+    const ox = A.x, oy = A.y;
+    if (ix || iy) {
+      A.x = clampX(A.x + ix * 150 * dt);
+      A.y = clampY(A.y + iy * 150 * dt);
+    }
+    const dA = Math.hypot(A.x - ox, A.y - oy);
+    A.moving = dA > 0.01;
+    if (A.moving) { A.dist += dA; if (Math.abs(A.x - ox) > 0.01) A.dir = A.x > ox ? 'right' : 'left'; }
+    animStepChar(A, A.moving, dt);
+    // --- el acompañante sigue a su puesto (histéresis: arranca
+    // si el puesto se aleja > 12 px y no se detiene hasta quedar
+    // a < 3 px, con velocidad proporcional de tope 190; con
+    // umbral único y velocidad fija alcanzaba el puesto, paraba
+    // un frame y volvía a arrancar: el sprite parpadeaba) ---
+    const tx = clampX(B.id === 'jose' ? A.x + 70 : A.x - 70), ty = clampY(A.y);
+    const bx = B.x, by = B.y, dx = tx - bx, dy = ty - by, dB = Math.hypot(dx, dy);
+    if (!B.follow && dB > 12) B.follow = true;
+    B.moving = false;
+    if (B.follow) {
+      if (dB <= 3) B.follow = false;
+      else {
+        const step = Math.min(dB, Math.min(190, dB * 7) * dt); // llegada suave: frena al acercarse
+        B.x += (dx / dB) * step; B.y += (dy / dB) * step;
+        B.dist += step; B.moving = true;
+        if (Math.abs(dx) > 1) B.dir = dx > 0 ? 'right' : 'left';
+      }
+    }
+    animStepChar(B, B.follow, dt);
+    // --- la cámara sigue al activo dentro de la franja ---
+    const camT = Math.max(0, Math.min(sc.worldW - 640, A.x - 320));
+    sc.pan += (camT - sc.pan) * Math.min(1, dt * 6);
+    if (Math.abs(camT - sc.pan) < 0.05) sc.pan = camT;
+    D.tap = false;
+  }
+  // Índice del ciclo de caminata lateral según la distancia
+  // recorrida: ~9,8 u por frame (la cadencia de world.js);
+  // ciclos de 3 frames en ping-pong (0,1,2,1), otros en loop.
+  function walkIdxFor(id, dist) {
+    const len = Sp.animLen(id, 'walk_right') || 1;
+    const beat = Math.floor(dist / 9.8);
+    if (len === 3) { const per = 4, k = ((beat % per) + per) % per; return k < 3 ? k : per - k; }
+    return ((beat % len) + len) % len;
+  }
+  function drawChar2DAt(c, id, x, baseY, h, anim, idx, expr, flip, bobY) {
+    const fr = Sp.frame(id, anim, idx, { expr, flip });
+    if (!fr || !fr.width) return;
+    const w = h * fr.width / fr.height;
+    c.drawImage(fr, x - w / 2, baseY - h + (bobY || 0), w, h);
+  }
+  function drawDoor2DAt(c, x, baseY, openK) {
+    // LA Puerta: la misma en todas las escenas (madera, marco claro).
+    const w = 46, h = 82, x0 = x - w / 2, y0 = baseY - h;
+    c.fillStyle = 'rgba(20,14,26,0.30)'; c.beginPath(); c.ellipse(x, baseY + 3, w * 0.62, 5, 0, 0, 6.3); c.fill();
+    c.fillStyle = '#e8ddc8'; c.fillRect(x0 - 4, y0 - 4, w + 8, h + 4);
+    if (openK > 0) { c.fillStyle = `rgba(255,240,200,${0.55 + openK * 0.45})`; c.fillRect(x0, y0, w, h); }
+    c.fillStyle = '#7a4a2b';
+    const dw = w * (1 - openK * 0.72);
+    c.fillRect(x0 + (w - dw), y0, dw, h);
+    c.fillStyle = 'rgba(0,0,0,0.18)'; c.fillRect(x0 + (w - dw) + 5, y0 + 8, Math.max(0, dw - 10), 26); c.fillRect(x0 + (w - dw) + 5, y0 + 42, Math.max(0, dw - 10), 26);
+    c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(x0 + w - 7, y0 + h / 2, 2.6, 0, 6.3); c.fill();
+  }
+
+  // ---------- TAB en el modo libre (plaza y San Ángel) ----------
   // G.input no mapea Tab (no es tecla del juego): el modo cita
   // escucha por su cuenta y solo actúa en la fase 'free'.
   try {
@@ -324,13 +465,13 @@
       // de mundo del revelado (al final del paneo, cámara=90:
       // Ximena en pantalla 168 → mundo 258; Jose 238 → 328).
       this.worldW = 1150; this.doorX = 174; this.groundY = 316;
-      this.free = {
-        active: 'ximena',
-        chars: {
-          ximena: { id: 'ximena', x: 258, y: 316, dist: 0, dir: 'right', moving: false, animWalk: false, idleT: 0, follow: false },
-          jose: { id: 'jose', x: 328, y: 316, dist: 0, dir: 'left', moving: false, animWalk: false, idleT: 0, follow: false },
-        },
-      };
+      this.free = makeStripChars(258, 328, 316);
+      // La Puerta de SALIDA de la plaza: la misma Puerta de
+      // siempre, al final de la franja (mundo x=1068), justo
+      // donde ancla la vista lejana de San Ángel que se ve en el
+      // fondo (PLAZA_FX.vistaWorldX). Cruzarla lleva a la escena
+      // de San Ángel; su Puerta del árbol devuelve aquí.
+      this.exitDoorX = PLAZA_FX.vistaWorldX; this.nearExit = false;
     }
     // Altura en pantalla (px lógicos) de un segmento vertical con
     // la altura del sprite de Ximena, plantado en (x, z), visto
@@ -430,69 +571,47 @@
         this.phaseT += dt;
         this.updateFree(dt);
       }
+      if (this.phase === 'exitdoor') {
+        // Cruzando la Puerta de salida: la luz crece ~1 s y al
+        // otro lado está San Ángel. El reloj de la cita NO se
+        // reinicia: es el mismo paseo (y si la canción ya acabó,
+        // las escenas siguen en silencio).
+        this.phaseT += dt;
+        if (this.phaseT >= 1) travelTo('sanangel');
+      }
+    }
+    // Cruzar la Puerta de salida hacia San Ángel (desde el modo
+    // libre, junto a ella, con ESPACIO/acción o toque).
+    beginExit() {
+      if (this.phase !== 'free') return;
+      this.phase = 'exitdoor'; this.phaseT = 0; D.tap = false;
+      G.sfx('door');
+    }
+    // Vuelta desde San Ángel: se reaparece en modo libre junto
+    // a la Puerta de salida, como se dejó la plaza.
+    enterFromAngel() {
+      this.phase = 'free'; this.phaseT = 0;
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      A.x = this.exitDoorX - 70; A.y = this.groundY;
+      B.x = this.exitDoorX - 140; B.y = this.groundY; B.follow = false;
+      this.pan = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
+      this.nearExit = false;
     }
     // ---------- Modo libre de la plaza (revisión a detalle) ----------
     // Sin fin automático: ni el fin de la canción ni el paso del
     // tiempo cierran la escena (el reloj puede agotarse y el modo
-    // sigue en silencio; la canción NO entra en loop). Se
-    // controla al personaje activo (TAB alterna Ximena ⇄ Jose);
-    // el otro SIGUE al activo hacia su puesto junto a él (Jose va
-    // 70 px a la derecha de Ximena) y se queda en idle al llegar.
-    // El seguimiento va con HISTÉRESIS y llegada suave: arranca
-    // cuando el puesto se aleja > 12 px y no se detiene hasta
-    // quedar a < 3 px, con velocidad proporcional (tope 190).
-    // Con umbral único y velocidad fija (175 contra 150 del
-    // activo) alcanzaba el puesto, paraba un frame y volvía a
-    // arrancar: el sprite de idle parpadeaba entre la caminata.
-    // Y la ANIMACIÓN (animWalk, lo que decide el dibujo) tiene
-    // una gracia de 0,12 s tras el último movimiento real, para
-    // que ni un roce con el tope de la franja ni un cambio de
-    // dirección meta un frame de idle en mitad de la caminata.
+    // sigue en silencio; la canción NO entra en loop). El motor
+    // del modo (activo con input, TAB, seguidor con histéresis,
+    // cámara) vive en updateStripFree, compartido con San Ángel;
+    // aquí solo se vigila la Puerta de salida, ANTES de que el
+    // motor consuma el toque (D.tap) del frame.
     updateFree(dt) {
-      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
-      const clampX = (x) => Math.max(40, Math.min(this.worldW - 40, x));
-      const clampY = (y) => Math.max(this.groundY - 26, Math.min(this.groundY + 26, y));
-      // --- el activo, con el input del jugador ---
-      const ax = G.input.axis();
-      const ix = ax.x || (touchVec ? touchVec.x : 0), iy = ax.y || (touchVec ? touchVec.y : 0);
-      const ox = A.x, oy = A.y;
-      if (ix || iy) {
-        A.x = clampX(A.x + ix * 150 * dt);
-        A.y = clampY(A.y + iy * 150 * dt);
-      }
-      const dA = Math.hypot(A.x - ox, A.y - oy);
-      A.moving = dA > 0.01;
-      if (A.moving) { A.dist += dA; if (Math.abs(A.x - ox) > 0.01) A.dir = A.x > ox ? 'right' : 'left'; }
-      this.animStep(A, A.moving, dt);
-      // --- el acompañante sigue a su puesto (histéresis) ---
-      const tx = clampX(B.id === 'jose' ? A.x + 70 : A.x - 70), ty = clampY(A.y);
-      const bx = B.x, by = B.y, dx = tx - bx, dy = ty - by, dB = Math.hypot(dx, dy);
-      if (!B.follow && dB > 12) B.follow = true;   // arranca solo si el puesto se alejó de verdad
-      B.moving = false;
-      if (B.follow) {
-        if (dB <= 3) B.follow = false;             // …y no se detiene hasta estar encima del puesto
-        else {
-          const step = Math.min(dB, Math.min(190, dB * 7) * dt); // llegada suave: frena al acercarse
-          B.x += (dx / dB) * step; B.y += (dy / dB) * step;
-          B.dist += step; B.moving = true;
-          if (Math.abs(dx) > 1) B.dir = dx > 0 ? 'right' : 'left';
-        }
-      }
-      this.animStep(B, B.follow, dt);
-      // --- la cámara sigue al activo dentro de la franja ---
-      const camT = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
-      this.pan += (camT - this.pan) * Math.min(1, dt * 6);
-      if (Math.abs(camT - this.pan) < 0.05) this.pan = camT;
-      D.tap = false;
+      const F = this.free, A = F.chars[F.active];
+      this.nearExit = Math.abs(A.x - this.exitDoorX) < 58 && Math.abs(A.y - this.groundY) < 40;
+      if (this.nearExit && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
+      updateStripFree(this, dt);
     }
-    // Estado de ANIMACIÓN de caminata de un personaje del modo
-    // libre: se enciende con el movimiento real y se apaga con
-    // 0,12 s de gracia desde la última vez que se movió (o, el
-    // acompañante, desde que su seguimiento se detuvo).
-    animStep(ch, physically, dt) {
-      if (physically) { ch.animWalk = true; ch.idleT = 0; }
-      else if (ch.animWalk) { ch.idleT += dt; if (ch.idleT >= 0.12) ch.animWalk = false; }
-    }
+    animStep(ch, physically, dt) { animStepChar(ch, physically, dt); }
     draw(dt) {
       if (this.phase === 'depa' || this.phase === 'door') {
         this.home.draw(dt);
@@ -637,6 +756,12 @@
       const groundY = this.groundY;
       const openK = this.phase === 'plaza' && this.phaseT < 0.9 ? 1 - this.phaseT / 0.9 : 0;
       this.drawDoor2D(c, this.doorX - pan, groundY, openK);
+      // L4 · la Puerta de SALIDA, al final de la franja: la misma
+      // Puerta, apoyada justo delante de la vista lejana de San
+      // Ángel (su destino). Al cruzarla (fase 'exitdoor') se abre
+      // con la luz, como la del depa.
+      const exitOpenK = this.phase === 'exitdoor' ? Math.min(1, this.phaseT) : 0;
+      this.drawDoor2D(c, this.exitDoorX - pan, groundY, exitOpenK);
       const hop = this.joseReacted && this.phase === 'plaza' ? Math.abs(Math.sin(t * 5)) * 3 : 0;
       // Se dibujan de atrás hacia adelante (menor y primero). En
       // el revelado ambos están en idle; en 'free' quien se mueve
@@ -685,33 +810,273 @@
       }
       // luz de llegada (se disipa al inicio del revelado)
       if (this.phase === 'plaza' && this.phaseT < 0.8) { c.fillStyle = `rgba(255,244,214,${(1 - this.phaseT / 0.8).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+      // junto a la Puerta de salida, su aviso (el mismo estilo
+      // que el de la puerta del depa)
+      if (this.phase === 'free' && this.nearExit) G.prompt(c, 'ESPACIO: cruzar la Puerta', this.exitDoorX - pan, groundY - 96);
+      // luz del cruce hacia San Ángel (crece ~1 s)
+      if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
     }
-    // Índice del ciclo de caminata lateral según la distancia
-    // recorrida: ~9,8 u por frame (la cadencia de world.js);
-    // ciclos de 3 frames en ping-pong (0,1,2,1), otros en loop.
-    walkIdx(id, dist) {
-      const len = Sp.animLen(id, 'walk_right') || 1;
-      const beat = Math.floor(dist / 9.8);
-      if (len === 3) { const per = 4, k = ((beat % per) + per) % per; return k < 3 ? k : per - k; }
-      return ((beat % len) + len) % len;
+    walkIdx(id, dist) { return walkIdxFor(id, dist); }
+    drawChar2D(c, id, x, baseY, h, anim, idx, expr, flip, bobY) { drawChar2DAt(c, id, x, baseY, h, anim, idx, expr, flip, bobY); }
+    drawDoor2D(c, x, baseY, openK) { drawDoor2DAt(c, x, baseY, openK); }
+  }
+
+  // =========================================================
+  // ESCENA 2: SAN ÁNGEL — la franja del pueblo y el árbol
+  // =========================================================
+  // Misma franja libre que la plaza (updateStripFree, TAB,
+  // seguidor con histéresis, cámara), con el decorado de las
+  // pinturas que aportó Jose: las casas y la pileta en la zona
+  // de calle, el cameo de Manolo y María con Chuy cruzando una
+  // sola vez por visita, y al final el árbol gigante con su
+  // camino de velas, donde espera la Puerta de salida (que por
+  // ahora devuelve a la plaza: la secuencia cronometrada
+  // llegará cuando existan todas las escenas). Todo recorte se
+  // dibuja solo si cargó: sin la carpeta local, quedan el cielo
+  // y el piso por código, las velas como puntos de luz y las
+  // Puertas — la escena se juega igual.
+  class SanAngelScene {
+    constructor() {
+      this.id = 'sanangel';
+      this.phase = 'light'; this.t = 0; this.phaseT = 0;
+      this.worldW = SANANGEL.worldW; this.groundY = SANANGEL.groundY; this.horizon = SANANGEL.horizon;
+      this.entryDoorX = SANANGEL.entryDoorX; this.exitDoorX = SANANGEL.exitDoorX;
+      this.pan = 0; this.joseExpr = 'happy';
+      this.nearDoor = false; this.nearDoorX = this.entryDoorX; this.usedDoorX = this.entryDoorX;
+      this.piletaX = 750; this.piletaBaseY = 286; this.piletaW = 235;
+      this.treeLayerCx = 685; // centro del árbol en el espacio de su capa (parallax 0,25)
+      this.free = makeStripChars(210, 280, this.groundY);
+      // Las velas del suelo: dos filas curvas que convergen
+      // hacia la Puerta del árbol formando el camino de la
+      // pintura, más un arco de velas frente a la Puerta.
+      this.candles = [];
+      for (let i = 0; i < 15; i++) {
+        const s = i / 14, cx = 1005 + s * 330, cy = 340 - s * 22, off = 17 - s * 7;
+        this.candles.push({ x: cx, y: cy - off, size: 11 + (i % 3) * 3, v: i % 2 });
+        this.candles.push({ x: cx + 9, y: cy + off, size: 12 + ((i + 1) % 3) * 3, v: (i + 1) % 2 });
+      }
+      for (let j = 0; j < 7; j++) {
+        const a = Math.PI * (0.12 + 0.76 * (j / 6));
+        this.candles.push({ x: this.exitDoorX + Math.cos(a) * 48, y: 330 + Math.sin(a) * 15, size: 10 + (j % 3) * 2, v: j % 2 });
+      }
+      this.resetCameo();
     }
-    drawChar2D(c, id, x, baseY, h, anim, idx, expr, flip, bobY) {
-      const fr = Sp.frame(id, anim, idx, { expr, flip });
-      if (!fr || !fr.width) return;
-      const w = h * fr.width / fr.height;
-      c.drawImage(fr, x - w / 2, baseY - h + (bobY || 0), w, h);
+    resetCameo() {
+      // Manolo y María vienen del lado del árbol caminando
+      // juntos hacia la izquierda; Chuy trota junto a María.
+      this.cameo = { x: 1010, y: 322, dist: 0, done: false, manoloX: 1010, mariaX: 1064, chuyX: 1098 };
     }
-    drawDoor2D(c, x, baseY, openK) {
-      // LA Puerta: la misma en todas las escenas (madera, marco claro).
-      const w = 46, h = 82, x0 = x - w / 2, y0 = baseY - h;
-      c.fillStyle = 'rgba(20,14,26,0.30)'; c.beginPath(); c.ellipse(x, baseY + 3, w * 0.62, 5, 0, 0, 6.3); c.fill();
-      c.fillStyle = '#e8ddc8'; c.fillRect(x0 - 4, y0 - 4, w + 8, h + 4);
-      if (openK > 0) { c.fillStyle = `rgba(255,240,200,${0.55 + openK * 0.45})`; c.fillRect(x0, y0, w, h); }
-      c.fillStyle = '#7a4a2b';
-      const dw = w * (1 - openK * 0.72);
-      c.fillRect(x0 + (w - dw), y0, dw, h);
-      c.fillStyle = 'rgba(0,0,0,0.18)'; c.fillRect(x0 + (w - dw) + 5, y0 + 8, Math.max(0, dw - 10), 26); c.fillRect(x0 + (w - dw) + 5, y0 + 42, Math.max(0, dw - 10), 26);
-      c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(x0 + w - 7, y0 + h / 2, 2.6, 0, 6.3); c.fill();
+    candleGlowAt(t, i) { return candleGlow(t, i); }
+    switchActive() {
+      if (this.phase !== 'free') return;
+      this.free.active = this.free.active === 'ximena' ? 'jose' : 'ximena';
+      if (G.input && G.input.flush) G.input.flush();
+    }
+    // Llegada desde la plaza: fundido de luz (~1 s) y la escena
+    // ya queda explorable en modo libre, sin paneo largo.
+    enterFromPlaza() {
+      this.phase = 'light'; this.phaseT = 0;
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      A.x = this.entryDoorX + 120; A.y = this.groundY;
+      B.x = this.entryDoorX + 190; B.y = this.groundY; B.follow = false;
+      this.pan = 0; this.nearDoor = false;
+      this.resetCameo();
+    }
+    beginExit() {
+      if (this.phase !== 'free') return;
+      this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
+      G.sfx('door');
+    }
+    update(dt) {
+      this.t += dt;
+      if (this.phase === 'light') {
+        this.phaseT += dt;
+        if (this.phaseT >= 1) { this.phase = 'free'; this.phaseT = 0; }
+        return;
+      }
+      if (this.phase === 'exitdoor') {
+        // De vuelta a la plaza por la Puerta (la que se haya
+        // usado: la del árbol o la de entrada). Sin reloj nuevo.
+        this.phaseT += dt;
+        if (this.phaseT >= 1) travelTo('plaza');
+        return;
+      }
+      if (this.phase === 'free') {
+        this.phaseT += dt;
+        this.updateFree(dt);
+        this.updateCameo(dt);
+      }
+    }
+    updateFree(dt) {
+      const F = this.free, A = F.chars[F.active];
+      const dE = Math.abs(A.x - this.entryDoorX), dX = Math.abs(A.x - this.exitDoorX);
+      this.nearDoor = Math.min(dE, dX) < 58 && Math.abs(A.y - this.groundY) < 40;
+      this.nearDoorX = dE <= dX ? this.entryDoorX : this.exitDoorX;
+      if (this.nearDoor && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
+      updateStripFree(this, dt);
+    }
+    updateCameo(dt) {
+      const cm = this.cameo;
+      if (cm.done) return;
+      cm.x -= 55 * dt; cm.dist += 55 * dt; // velocidad de paseo
+      cm.manoloX = cm.x; cm.mariaX = cm.x + 54; cm.chuyX = cm.x + 88;
+      if (cm.x < -170) cm.done = true; // una sola pasada por visita
+    }
+    draw(dt) {
+      const c = G.ovCtx; if (!c) return;
+      c.setTransform(2, 0, 0, 2, 0, 0);
+      c.clearRect(0, 0, 640, 360);
+      const t = this.t, pan = this.pan, horizon = this.horizon, groundY = this.groundY;
+      // cielo de tarde dorada, en la paleta de las pinturas
+      // (turquesa arriba que se funde en dorado al horizonte)
+      const sky = c.createLinearGradient(0, 0, 0, horizon);
+      sky.addColorStop(0, '#4fb3a9'); sky.addColorStop(0.5, '#9fd3c0'); sky.addColorStop(0.8, '#f4cf8e'); sky.addColorStop(1, '#ffd9a0');
+      c.fillStyle = sky; c.fillRect(0, 0, 640, horizon + 2);
+      c.fillStyle = 'rgba(255,246,230,0.80)';
+      const cloud = (x, y, s) => { c.beginPath(); c.ellipse(x, y, 26 * s, 8 * s, 0, 0, 6.3); c.ellipse(x + 18 * s, y + 2 * s, 18 * s, 6 * s, 0, 0, 6.3); c.ellipse(x - 20 * s, y + 2 * s, 16 * s, 5.5 * s, 0, 0, 6.3); c.fill(); };
+      cloud(150 - pan * 0.1, 40, 1.0); cloud(470 - pan * 0.1, 64, 1.2); cloud(320 - pan * 0.1, 96, 0.6);
+      // casas del pueblo (recortes, parallax 0,4): la calle
+      for (const sgm of SA_HOUSES) {
+        if (!imgOk(sgm.img)) continue;
+        const w = sgm.h * sgm.img.naturalWidth / sgm.img.naturalHeight;
+        const sx = sgm.x - pan * 0.4;
+        if (sx + w < -20 || sx > 660) continue;
+        c.drawImage(sgm.img, sx, horizon + 6 - sgm.h, w, sgm.h);
+      }
+      // el ÁRBOL gigante (recorte, parallax 0,25): domina el
+      // fondo de la zona final, con su base en el horizonte
+      let treeBox = null;
+      if (imgOk(saArbol)) {
+        const tw = 440, th = tw * saArbol.naturalHeight / saArbol.naturalWidth;
+        const tx = this.treeLayerCx - pan * 0.25 - tw / 2, ty = horizon + 6 - th;
+        c.drawImage(saArbol, tx, ty, tw, th);
+        treeBox = { x: tx, y: ty, w: tw, h: th };
+      }
+      // piso cálido de la plaza del pueblo, dibujado
+      const fl = c.createLinearGradient(0, horizon, 0, 360);
+      fl.addColorStop(0, '#d9a860'); fl.addColorStop(1, '#a8743f');
+      c.fillStyle = fl; c.fillRect(0, horizon, 640, 360 - horizon);
+      c.strokeStyle = 'rgba(120,62,28,0.35)'; c.lineWidth = 1;
+      const tileOff = -(pan % 34);
+      for (let x = tileOff; x < 640; x += 34) { c.beginPath(); c.moveTo(x, horizon + 4); c.lineTo(x - 9, 360); c.stroke(); }
+      for (let y = horizon + 15; y < 360; y += 17) { c.beginPath(); c.moveTo(0, y); c.lineTo(640, y); c.stroke(); }
+      // velo de anochecer: la zona del árbol oscurece de forma
+      // progresiva según x de mundo (anclado, no a la pantalla)
+      const veil = c.createLinearGradient(860 - pan, 0, 1400 - pan, 0);
+      veil.addColorStop(0, 'rgba(24,18,50,0)'); veil.addColorStop(1, 'rgba(24,18,50,0.58)');
+      c.fillStyle = veil; c.fillRect(0, 0, 640, 360);
+      // resplandor cálido de las velas junto a la Puerta del árbol
+      const dgx = this.exitDoorX - pan;
+      const glow = c.createRadialGradient(dgx, groundY - 26, 8, dgx, groundY - 26, 150);
+      glow.addColorStop(0, 'rgba(255,176,92,0.30)'); glow.addColorStop(1, 'rgba(255,176,92,0)');
+      c.fillStyle = glow; c.fillRect(dgx - 150, groundY - 176, 300, 300);
+      // velitas colgando de la copa: puntos de luz con halo,
+      // dibujados por código sobre el recorte, parpadeando
+      if (treeBox) {
+        SA_HANG.forEach((p, i) => {
+          const gx = treeBox.x + p[0] * treeBox.w, gy = treeBox.y + p[1] * treeBox.h;
+          if (gx < -20 || gx > 660) return;
+          const g = candleGlow(t, 40 + i);
+          c.fillStyle = `rgba(255,176,92,${(0.30 * g).toFixed(3)})`;
+          c.beginPath(); c.arc(gx, gy, 6 + 3 * g, 0, 6.3); c.fill();
+          c.fillStyle = `rgba(255,226,160,${(0.55 + 0.4 * g).toFixed(3)})`;
+          c.beginPath(); c.arc(gx, gy, 1.8, 0, 6.3); c.fill();
+        });
+      }
+      // velas del suelo, fila trasera (delante vendrá la otra)
+      this.drawCandles(c, pan, false);
+      // las dos Puertas de la franja (la misma Puerta de siempre)
+      const usedOpen = this.phase === 'exitdoor' ? Math.min(1, this.phaseT) : 0;
+      const entryOpen = this.phase === 'light' && this.phaseT < 0.9 ? 1 - this.phaseT / 0.9 : (this.usedDoorX === this.entryDoorX ? usedOpen : 0);
+      drawDoor2DAt(c, this.entryDoorX - pan, groundY, entryOpen);
+      drawDoor2DAt(c, this.exitDoorX - pan, groundY, this.usedDoorX === this.exitDoorX ? usedOpen : 0);
+      // capa de personajes, ordenada por Y: la pileta (su base
+      // ~30 px sobre la línea de pies deja pasar por delante y
+      // por detrás), el cameo y los protagonistas
+      const items = [];
+      items.push({
+        y: this.piletaBaseY, fn: () => {
+          if (!imgOk(saPileta)) return;
+          const w = this.piletaW, h = w * saPileta.naturalHeight / saPileta.naturalWidth;
+          c.drawImage(saPileta, this.piletaX - pan - w / 2, this.piletaBaseY - h, w, h);
+        },
+      });
+      if (!this.cameo.done) items.push({ y: this.cameo.y, fn: () => this.drawCameo(c, pan) });
+      const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
+      for (const ch of chars) {
+        items.push({
+          y: ch.y, fn: () => {
+            let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
+            if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = walkIdxFor(ch.id, ch.dist); bobY = 0; }
+            drawChar2DAt(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
+          },
+        });
+      }
+      items.sort((a, b) => a.y - b.y);
+      for (const it of items) it.fn();
+      // velas del suelo, fila delantera (sobre los pies)
+      this.drawCandles(c, pan, true);
+      if (this.phase === 'free' && this.nearDoor) G.prompt(c, 'ESPACIO: cruzar la Puerta', this.nearDoorX - pan, groundY - 96);
+      // luz de la Puerta: se disipa al llegar, crece al salir
+      if (this.phase === 'light') { c.fillStyle = `rgba(255,244,214,${(1 - Math.min(1, this.phaseT)).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+      if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+    }
+    // Las velas del suelo (recortes con su halo por código):
+    // `front` separa la fila trasera (y<330) de la delantera.
+    // Sin los recortes locales, cada vela es su punto de luz.
+    drawCandles(c, pan, front) {
+      const t = this.t;
+      this.candles.forEach((cd, i) => {
+        if ((cd.y >= 330) !== front) return;
+        const sx = cd.x - pan;
+        if (sx < -30 || sx > 670) return;
+        const g = candleGlow(t, i);
+        c.fillStyle = `rgba(255,170,80,${(0.26 * g).toFixed(3)})`;
+        c.beginPath(); c.arc(sx, cd.y - cd.size * 0.55, cd.size * (0.75 + 0.3 * g), 0, 6.3); c.fill();
+        const img = cd.v ? saVelaB : saVelaA;
+        if (imgOk(img)) {
+          const h = cd.size * (0.92 + 0.16 * g), w = h * img.naturalWidth / img.naturalHeight;
+          c.drawImage(img, sx - w / 2, cd.y - h, w, h);
+        } else {
+          c.fillStyle = `rgba(255,220,150,${(0.6 + 0.35 * g).toFixed(3)})`;
+          c.fillRect(sx - 1, cd.y - cd.size * 0.8, 2, cd.size * 0.8);
+        }
+      });
+    }
+    // El cameo: recortes estáticos con bob de papel (balanceo
+    // vertical por distancia recorrida, como el vocho de la
+    // plaza). María va de espaldas (la de la imagen del árbol):
+    // en la imagen lateral del pueblo las figuras miden
+    // ~20–30 px, sin resolución para un cameo de ~92 px.
+    drawCameo(c, pan) {
+      const cm = this.cameo;
+      const fig = (img, cx, h, ph) => {
+        if (!imgOk(img)) return;
+        const w = h * img.naturalWidth / img.naturalHeight;
+        const bob = -Math.abs(Math.sin(cm.dist * 0.30 + ph)) * 2.4;
+        c.drawImage(img, cx - pan - w / 2, cm.y - h + bob, w, h);
+      };
+      fig(saManolo, cm.manoloX, 92, 0);
+      fig(saMaria, cm.mariaX, 92, 1.4);
+      fig(saChuy, cm.chuyX, 30, 2.6);
+    }
+  }
+
+  // Viaje entre la plaza y San Ángel por la Puerta. NO toca el
+  // reloj ni la canción: si el audio ya terminó, las escenas
+  // siguen en silencio (nada de play() forzado).
+  function travelTo(dest) {
+    if (dest === 'sanangel') {
+      if (!D.angelScene) D.angelScene = new SanAngelScene();
+      D.scene = D.angelScene;
+      D.angelScene.enterFromPlaza();
+      D.state = 'sanangel';
+      G.setScene(D.scene);
+    } else {
+      D.scene = D.plazaScene;
+      if (D.plazaScene) D.plazaScene.enterFromAngel();
+      D.state = 'plaza-arrived';
+      G.setScene(D.scene);
     }
   }
 
@@ -722,6 +1087,7 @@
     if (G.S) G.S.phase = 'date';
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.add('date-mode');
     D.scene = new DateScene(onDone);
+    D.plazaScene = D.scene; D.angelScene = null;
     G.setScene(D.scene);
   }
   function stop() {
@@ -729,7 +1095,7 @@
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('date-mode');
     W.closet.target = 0; W.xDoorOpen = false;
-    D.scene = null;
+    D.scene = null; D.plazaScene = null; D.angelScene = null;
   }
   G.DateMode = {
     start, stop, setPaused, verify: verifyCode, dateNow,
@@ -740,6 +1106,6 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt },
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, candleGlow, travelTo },
   };
 })();
