@@ -35,8 +35,10 @@
       el cameo de Manolo y María con Chuy se dispara por cámara
       (pan > 900) y camina a la izquierda una sola vez por
       visita, las velas parpadean, la Puerta del árbol devuelve
-      a la plaza, y la carpeta sanangel/ queda solo-local
-      (.gitignore + FUENTES).
+      a la plaza, y la carpeta sanangel/ quedó VERSIONADA por
+      decisión expresa de Jose (commit 5599034, integrado tal
+      cual); la vista sanangel-vista.png sigue fuera del repo
+      y el humo lo verifica.
    K) Audio (pedidos de Jose): el archivo de la canción trae
       ~4 s de silencio inicial → AUDIO_SKIP=4: al arrancar se
       salta a esa posición (con re-aplicación ÚNICA si el
@@ -468,8 +470,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('FUENTES.md registra la vista como asset solo-local aportado por Jose',
     fuentes.includes('sanangel-vista.png') && fuentes.includes('solo-local'));
   const gitignore = fs.readFileSync(path.join(__dirname, '..', '.gitignore'), 'utf8');
-  check('sanangel-vista.png está en .gitignore (nunca se versiona, como la canción)',
-    gitignore.includes('application/src/assets/date/sanangel-vista.png'));
+  // CRITERIO ACTUALIZADO (2026-11-21): el commit 5599034 de Jose
+  // («chore: add assets», integrado tal cual por su decisión
+  // expresa) eliminó del .gitignore tanto la carpeta sanangel/
+  // como esta vista. El archivo de la vista NO fue versionado en
+  // ese commit: la protección que queda es ESTE check — la vista
+  // sigue fuera del repo y el humo falla si alguien la versiona.
+  const vistaVersionada = (() => {
+    try {
+      const out = require('child_process').execSync(
+        'git ls-files application/src/assets/date/sanangel-vista.png',
+        { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+      return out.trim().length > 0;
+    } catch (e) { return true; } // sin git a la vista: fallar cerrado
+  })();
+  check('sanangel-vista.png NO está versionada (sigue fuera del repo, como la canción)',
+    !vistaVersionada);
   sc.draw(0.016); // con los complementos, el dibujo de la plaza no explota
 
   console.log('\nJ) Escena 2 «San Ángel»: Puerta de salida, franja libre, cameo, velas y vuelta');
@@ -582,9 +598,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('la Puerta del árbol devuelve a la plaza, en modo libre y con el estado plaza-arrived',
     G.scene === sc && sc.phase === 'free' && DM.state.state === 'plaza-arrived', 'state=' + DM.state.state + ', phase=' + sc.phase);
   sc.draw(0.016); // de vuelta en la plaza, el dibujo sigue sano
-  // La carpeta de recortes es solo-local y está registrada.
-  check('la carpeta sanangel/ está en .gitignore (arte de la película: nunca se versiona)',
-    gitignore.includes('application/src/assets/date/sanangel/'));
+  // La carpeta de recortes está registrada y, desde el commit
+  // 5599034 de Jose («chore: add assets», integrado tal cual por
+  // su decisión expresa del 2026-11-21), VERSIONADA en el repo:
+  // el criterio anterior (solo-local en .gitignore) quedó sin
+  // efecto por decisión del dueño. Este check fija la realidad
+  // nueva: los PNG de sanangel/ están en el índice de git.
+  const sanangelVersionados = (() => {
+    try {
+      const out = require('child_process').execSync(
+        'git ls-files application/src/assets/date/sanangel/',
+        { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+      return ['arbol.png', 'pileta.png', 'manolo.png', 'maria.png', 'chuy.png'].every((f) => out.includes('sanangel/' + f));
+    } catch (e) { return false; }
+  })();
+  check('los recortes de sanangel/ están versionados (decisión expresa de Jose, commit 5599034)',
+    sanangelVersionados);
   check('FUENTES.md registra los recortes de sanangel/ como solo-locales de El Libro de la Vida',
     fuentes.includes('sanangel/') && fuentes.includes('Libro de la Vida'));
   check('date.js referencia los recortes de San Ángel y los dibuja solo si cargaron (imgOk)',
