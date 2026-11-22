@@ -1374,6 +1374,26 @@ const tick = () => new Promise((r) => setImmediate(r));
     const bruised = (belt) => new Sc.SpacePartyScene('natalia', { belt }, () => {}).bruised;
     check('J1407b revisión: pastel magullado SOLO si pierdes 1B o chocas 3+ veces (el empate no magulla)',
       bruised({ win: 'lose', hitsP: 0 }) === true && bruised({ win: 'win', hitsP: 3 }) === true && bruised({ win: 'win', hitsP: 2 }) === false && bruised({ win: 'tie', hitsP: 0 }) === false && bruised({ win: 'tie', hitsP: 3 }) === true);
+    // --- Corrección del playtest de Jose (2026-11-21): cohetes como
+    // IMÁGENES diseñadas, tamaño/hitbox derivados del sprite y pista
+    // con marcas transversales que SÍ muestran el avance ---
+    const imgDir = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+    const rocketFiles = ['cohete-party-back', 'cohete-rival-back', 'cohete-party-side', 'cohete-party-side-averiado', 'cohete-rival-side', 'cohete-rival-side-averiado'];
+    check('J1407b imágenes: los 6 PNG de cohetes existen en application/src/assets/img/',
+      rocketFiles.every((n) => fs.existsSync(path.join(imgDir, n + '.png'))));
+    const scenesTxt2 = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+    check('J1407b imágenes: el código referencia los 6 PNG y ya NO llama a rocketBackCv/rocketSideCv (nada de cohetes por canvas)',
+      rocketFiles.every((n) => scenesTxt2.includes("'" + n + "'")) && !scenesTxt2.includes('rocketBackCv(') && !scenesTxt2.includes('rocketSideCv('));
+    check('J1407b tamaño: el cohete cabe en UN carril (ROCKET_W = 46 < 52) y su alto sale del aspect real del PNG trasero',
+      Sc.RingRaceDuel.ROCKET_W === 46 && Sc.RingRaceDuel.ROCKET_W < 52 && Math.abs(Sc.RingRaceDuel.ROCKET_H - 46 * (371 / 280)) < 0.01,
+      `W=${Sc.RingRaceDuel.ROCKET_W} H=${Sc.RingRaceDuel.ROCKET_H}`);
+    check('J1407b hitbox: el umbral de choque se DERIVA de los sprites (núcleos al 70%): (0,7·46 + 0,7·50)/2 ≈ 33,6',
+      Math.abs(Sc.RingRaceDuel.HIT_W - (46 * 0.7 + 50 * 0.7) / 2) < 0.001 && Sc.RingRaceDuel.METEOR_W === 50, 'HIT_W=' + Sc.RingRaceDuel.HIT_W);
+    check('J1407b pista: hay marcas transversales (banda por segmento, balizas, tonos alternos y marca de distancia cada 500 u)',
+      Sc.RingRaceDuel.TRACK.bandW > 0 && Sc.RingRaceDuel.TRACK.distEvery === 500 && Sc.RingRaceDuel.TRACK.beacons === true && Sc.RingRaceDuel.TRACK.altTones === true && scenesTxt2.includes('TRACK_BAND_W') && scenesTxt2.includes('TRACK_DIST_EVERY'));
+    const dCam = new Sc.RingRaceDuel('natalia', () => {});
+    check('J1407b cámara: dist 480 / pitch 0,34 — el cohete se ve entero (68 px de 360) y queda pista por delante',
+      dCam.cam.dist === 480 && Math.abs(dCam.cam.pitch - 0.34) < 1e-9, JSON.stringify(dCam.cam));
   }
 
   // ================= M) Final LEYENDAS (LEYENDAS_MOVIE_ENDING) =============

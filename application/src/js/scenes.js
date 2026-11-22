@@ -2696,9 +2696,10 @@
   // (geometría, materiales por código, luces y cámara) — NO se usa
   // ninguna imagen de fondo. La pista ES la geometría del anillo, el
   // cinturón son rocas en el espacio 3D y la plataforma una losa sobre
-  // el anillo. Personajes, cohetes, ítems y obstáculos van como
-  // billboards o lienzos DIBUJADOS POR CÓDIGO (abajo), igual que las
-  // galaxias de la Escalada: ningún archivo de imagen nuevo.
+  // el anillo. Personajes, ítems y obstáculos van como billboards o
+  // lienzos dibujados por código (abajo), igual que las galaxias de
+  // la Escalada. EXCEPCIÓN pedida por Jose (2026-11-21): los COHETES
+  // son imágenes diseñadas (assets/img/cohete-*.png, ver rocketImg).
   // VENTAJA CRUZADA (aprobada para esta implementación): ganar 1A da
   // SALIDA ADELANTADA en 1B = empiezas BELT_ADV unidades más cerca
   // del aro (ver AsteroidBeltDuel). Perder 1B NO es derrota de
@@ -2765,64 +2766,64 @@
     x.restore();
     planetCvCache = cv; return cv;
   }
-  const ROCKET_PAL = {
-    party: { body: '#f5e6c8', body2: '#e8d3a8', acc: '#e4573d', fin: '#2fa8a0', win: '#274b5c' },
-    rival: { body: '#4a3566', body2: '#5d4780', acc: '#58c46a', fin: '#3f9e58', win: '#241a38' },
-  };
-  // Cohete en vista TRASERA (para 1A): en la ventanilla se ven las
-  // NUCAS con casco de piloto y copiloto, nunca las caras (defecto de
-  // la hoja de concepto corregido aquí, como marca la ficha).
-  const rocketBackCache = {};
-  function rocketBackCv(livery) {
-    if (rocketBackCache[livery]) return rocketBackCache[livery];
-    const P = ROCKET_PAL[livery];
-    const cv = document.createElement('canvas'); cv.width = 170; cv.height = 150;
-    const x = cv.getContext('2d');
-    x.fillStyle = P.fin;
-    x.beginPath(); x.moveTo(28, 62); x.lineTo(6, 128); x.lineTo(40, 128); x.lineTo(52, 84); x.closePath(); x.fill();
-    x.beginPath(); x.moveTo(142, 62); x.lineTo(164, 128); x.lineTo(130, 128); x.lineTo(118, 84); x.closePath(); x.fill();
-    x.fillStyle = P.body; x.beginPath(); x.ellipse(85, 76, 56, 62, 0, 0, 6.3); x.fill();
-    x.fillStyle = P.body2; x.beginPath(); x.ellipse(85, 76, 56, 62, 0, 0, Math.PI); x.fill();
-    x.fillStyle = P.acc; x.fillRect(31, 94, 108, 10);
-    x.fillStyle = P.win; x.beginPath(); x.arc(85, 56, 30, 0, 6.3); x.fill();
-    x.lineWidth = 4; x.strokeStyle = '#c8ccd8'; x.stroke();
-    for (const hx of [70, 100]) { // dos cascos vistos desde atrás
-      x.fillStyle = 'rgba(190,220,255,.92)'; x.beginPath(); x.arc(hx, 58, 12.5, 0, 6.3); x.fill();
-      x.fillStyle = '#5a4030'; x.beginPath(); x.ellipse(hx, 63, 11, 7, 0, 0, Math.PI); x.fill();
-      x.fillStyle = 'rgba(255,255,255,.85)'; x.beginPath(); x.arc(hx - 4, 52, 3.4, 0, 6.3); x.fill();
-    }
-    x.fillStyle = '#3a3348'; x.beginPath(); x.moveTo(70, 130); x.lineTo(100, 130); x.lineTo(94, 146); x.lineTo(76, 146); x.closePath(); x.fill();
-    rocketBackCache[livery] = cv; return cv;
+  // COHETES COMO IMÁGENES DISEÑADAS (corrección de Jose tras su
+  // playtest en navegador, 2026-11-21): antes los cohetes se pintaban
+  // por código en canvas (rocketBackCv/rocketSideCv) y Jose ordenó
+  // diseñarlos como IMAGEN desde la hoja aprobada
+  // (files/diseno-j1407b/cohete-items-j1407b-v1.webp). Los 6 PNG con
+  // alfa viven en assets/img/ y se cargan con Image() y la ruta
+  // relativa de la app: el mismo patrón que G.iconImg (world.js).
+  // La trasera party muestra las NUCAS con casco de piloto y
+  // copiloto (nunca caras); la rival, el casco de Jose de espaldas y
+  // la nuca atigrada de Pollito en la ventanilla — y su Actor
+  // definido sigue asomando junto al cohete rival en 1A. Mientras una
+  // imagen no haya cargado NO se pinta el cohete (nada de sustituto
+  // de canvas): la precarga arranca al construir cualquier escena de
+  // la cadena, así que al llegar a la carrera ya están listas.
+  const ROCKET_FILES = ['cohete-party-back', 'cohete-rival-back', 'cohete-party-side', 'cohete-party-side-averiado', 'cohete-rival-side', 'cohete-rival-side-averiado'];
+  const rocketImgs = {};
+  function rocketImg(name) {
+    if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
+    if (!rocketImgs[name]) { const im = new Image(); im.src = 'assets/img/' + name + '.png'; rocketImgs[name] = im; }
+    return rocketImgs[name];
   }
-  // Cohete vertical de perfil (despegue, transición y plataforma).
-  const rocketSideCache = {};
-  function rocketSideCv(livery, damaged) {
-    const key = livery + (damaged ? 'd' : '');
-    if (rocketSideCache[key]) return rocketSideCache[key];
-    const P = ROCKET_PAL[livery];
-    const cv = document.createElement('canvas'); cv.width = 170; cv.height = 200;
-    const x = cv.getContext('2d');
-    x.fillStyle = P.fin;
-    x.beginPath(); x.moveTo(58, 128); x.lineTo(26, 182); x.lineTo(58, 182); x.closePath(); x.fill();
-    x.beginPath(); x.moveTo(112, 128); x.lineTo(144, 182); x.lineTo(112, 182); x.closePath(); x.fill();
-    x.fillStyle = P.body; x.beginPath(); x.roundRect(55, 26, 60, 138, 29); x.fill();
-    x.fillStyle = P.acc; x.beginPath(); x.roundRect(55, 26, 60, 34, 16); x.fill();
-    x.fillStyle = P.body2; x.fillRect(55, 118, 60, 9);
-    x.fillStyle = P.win; x.beginPath(); x.arc(85, 80, 17, 0, 6.3); x.fill();
-    x.lineWidth = 3.4; x.strokeStyle = '#c8ccd8'; x.stroke();
-    x.fillStyle = 'rgba(190,220,255,.92)'; x.beginPath(); x.arc(85, 82, 10.5, 0, 6.3); x.fill();
-    x.fillStyle = '#5a4030'; x.beginPath(); x.ellipse(85, 86, 9.5, 6, 0, 0, Math.PI); x.fill();
-    x.strokeStyle = 'rgba(40,32,54,.55)'; x.lineWidth = 2; x.beginPath(); x.roundRect(67, 106, 36, 42, 8); x.stroke();
-    x.fillStyle = '#3a3348'; x.beginPath(); x.moveTo(72, 164); x.lineTo(98, 164); x.lineTo(93, 178); x.lineTo(77, 178); x.closePath(); x.fill();
-    if (damaged) { // averiado: manchas de hollín, abolladuras y una grieta
-      x.fillStyle = 'rgba(70,66,80,.5)';
-      x.beginPath(); x.ellipse(70, 120, 13, 9, 0.4, 0, 6.3); x.fill();
-      x.beginPath(); x.ellipse(98, 52, 10, 7, -0.3, 0, 6.3); x.fill();
-      x.strokeStyle = 'rgba(30,26,40,.7)'; x.lineWidth = 1.8;
-      x.beginPath(); x.moveTo(88, 96); x.lineTo(94, 110); x.lineTo(89, 122); x.stroke();
-    }
-    rocketSideCache[key] = cv; return cv;
+  function rocketPreload() { for (const n of ROCKET_FILES) rocketImg(n); }
+  const rocketReady = (im) => !!(im && im.complete && im.naturalWidth);
+  // Dibuja un cohete por su ANCHO de mundo, conservando el aspect
+  // real del PNG. Si la imagen aún no cargó, no pinta nada (false).
+  function drawRocketW(im, x, y, z, wWorld, o) {
+    if (!rocketReady(im)) return false;
+    R.sprite(im, x, y, z, Object.assign({}, o, { w: wWorld, h: wWorld * (im.naturalHeight / im.naturalWidth) }));
+    return true;
   }
+  // Ídem por su ALTO de mundo (perfiles del despegue y la transición).
+  function drawRocketH(im, x, y, z, hWorld, o) {
+    if (!rocketReady(im)) return false;
+    R.sprite(im, x, y, z, Object.assign({}, o, { w: hWorld * (im.naturalWidth / im.naturalHeight), h: hWorld }));
+    return true;
+  }
+  // TAMAÑO ÚNICO DEL COHETE EN 1A y su HITBOX (corrección de Jose,
+  // 2026-11-21): antes el cohete se dibujaba a 148 u de ancho sobre
+  // carriles de 52 u (¡casi 3 carriles!) y el choque usaba un umbral
+  // mágico de 34 sin relación con el dibujo. Ahora TODO sale de una
+  // constante: ROCKET_W = 46 cabe en UN carril (52) con 3 u de margen
+  // por lado; ROCKET_H sale del aspect real de los PNG traseros
+  // (280×370 y 280×372 ⇒ alto/ancho ≈ 1,325); la roca de un carril
+  // (METEOR_W = 50) se ve de ~un carril; y hay choque solo si las
+  // HUELLAS se solapan de verdad, con núcleos reducidos al 70% del
+  // ancho visual de cada sprite para que se sienta justo:
+  //   choque ⇔ |xCohete − xRoca| < (0,7·ROCKET_W + 0,7·METEOR_W)/2 ≈ 33,6
+  const ROCKET_W = 46;
+  const ROCKET_ASPECT = 371 / 280;
+  const ROCKET_H = ROCKET_W * ROCKET_ASPECT; // ≈ 61
+  const METEOR_W = 50;
+  const RING_HIT_W = (ROCKET_W * 0.7 + METEOR_W * 0.7) / 2; // ≈ 33,6
+  const ROCKET_CAT_DX = 14; // Pollito asoma junto a la ventanilla rival (≈ 0,3·ROCKET_W del centro)
+  // Marcas de la pista (ver el callback boxes de RingRaceDuel): el
+  // avance se percibe por la banda transversal de cada segmento, las
+  // balizas laterales y la marca dorada de distancia cada 500 u.
+  const RING_SEG = 90, TRACK_BAND_W = 7, TRACK_DIST_EVERY = 500;
+  const TRACK_BANDS = [['#b97f3e', '#a8732f'], ['#d9a45b', '#cb9c4e'], ['#a8743a', '#99662f']]; // [tramo de 1500 u][segmento par/impar]
   // Llama de motor por código (punta hacia abajo).
   let flameCvCache = null;
   function flameCv() {
@@ -2921,9 +2922,21 @@
       super(who, 'jose', done, { rounds: 1, need: 1, label: 'CARRERA', title: 'ANILLOS DE J1407B', hint: '← → para cambiar de carril · Si tu copiloto sugiere otro carril y vas al contrario, el cohete duda', rendT: 1.6 });
       this.isRingRace = true; this.quietRend = true;
       this.copilotId = (o && o.copilot) || spaceCopilotOf(who);
-      this.cat = new Actor('pollito', RING_LANES[2] + 17, -40);
+      this.cat = new Actor('pollito', RING_LANES[2] + ROCKET_CAT_DX, -40);
       this.cat.dir = 'down'; this.cat.elev = 30;
-      this.cam = { x: 0, y: 10, z: 96, dist: 330, pitch: 0.3, fov: 42 };
+      rocketPreload(); // los cohetes son imágenes: a cargar desde ya
+      // CÁMARA DE 1A (corrección de Jose, 2026-11-21): antes dist 330 /
+      // pitch 0,30 y el cohete dibujado a 148×130 ocupaba ~190 px de
+      // los 360 del canvas y tapaba la pista. Ahora dist 480 /
+      // pitch 0,34, verificado con la proyección real de gl3d.js
+      // (R.project sobre el VP de R.begin): el cohete del jugador
+      // (46×61 de mundo) mide 68 px de alto y 49 de ancho en el canvas
+      // 640×360; el rival se lee delante a rz +150 (83 px) y detrás a
+      // −330 (49 px); un meteorito de 50 u se anuncia desde −1000
+      // (24 px) y el horizonte de la pista queda en y≈8. Con pitch
+      // ≥ 0,36 el horizonte SALÍA del cuadro y se veía MENOS pista por
+      // delante: por eso 0,34 y no más.
+      this.cam = { x: 0, y: 10, z: 96, dist: 480, pitch: 0.34, fov: 42 };
       // Táctil (mismo patrón que el clic de La imagen distinta):
       // mitad izquierda/derecha de la pantalla = cambiar de carril.
       // El listener se guarda y se RETIRA en finish(): antes quedaba
@@ -2952,7 +2965,7 @@
       this.crashT = 0; this.rcrashT = 0; this.crashesP = 0; this.crashesB = 0;
       this.doubtT = 0; this.sug = null; this.sugCd = 2.5;
       this.meteors = []; this.nextMet = 520; this.finished = false;
-      this.cat.x = RING_LANES[2] + 17; this.cat.y = -40; this.cat.elev = 30;
+      this.cat.x = RING_LANES[2] + ROCKET_CAT_DX; this.cat.y = -40; this.cat.elev = 30;
     }
     press(dir) {
       const nl = Math.max(0, Math.min(2, this.lane + dir));
@@ -3024,16 +3037,18 @@
         const m = this.meteors.find((mm) => mm.prog > this.prog + 120 && mm.prog < this.prog + 1000);
         if (m) { const safe = [0, 1, 2].filter((l) => !m.lanes.includes(l)); const sl = safe.includes(this.lane) ? this.lane : safe[(Math.random() * safe.length) | 0]; this.sug = { lane: sl, t: 2.4, mProg: m.prog }; this.sugCd = 5.5; }
       }
-      // Choques al cruzar la línea de cada meteorito.
+      // Choques al cruzar la línea de cada meteorito: el umbral es
+      // RING_HIT_W, derivado de los anchos reales de los sprites
+      // (núcleos al 70%), no un número mágico — ver la constante.
       for (const m of this.meteors) {
-        if (!m.hitP && prevP < m.prog && this.prog >= m.prog) { m.hitP = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.laneX) < 34)) this.crashP(); }
-        if (!m.hitB && prevB < m.prog && this.rprog >= m.prog) { m.hitB = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.rlaneX) < 34)) this.crashB(); }
+        if (!m.hitP && prevP < m.prog && this.prog >= m.prog) { m.hitP = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.laneX) < RING_HIT_W)) this.crashP(); }
+        if (!m.hitB && prevB < m.prog && this.rprog >= m.prog) { m.hitB = true; if (m.lanes.some((l) => Math.abs(RING_LANES[l] - this.rlaneX) < RING_HIT_W)) this.crashB(); }
         m.rot += dt * 0.7;
       }
       this.meteors = this.meteors.filter((m) => m.prog > Math.min(this.prog, this.rprog) - 260);
       // Pollito acompaña al cohete rival, asomado en su ventanilla.
       const rz = Math.max(-330, Math.min(150, -(this.rprog - this.prog)));
-      cat.x = this.rlaneX + 17; cat.y = rz - 3; cat.elev = 30 + Math.sin(this.T * 2.2) * 1.6;
+      cat.x = this.rlaneX + ROCKET_CAT_DX; cat.y = rz - 3; cat.elev = 30 + Math.sin(this.T * 2.2) * 1.6;
       if (this.prog >= RING_LEN) return this.finish('p');
       if (this.rprog >= RING_LEN) return this.finish('b');
       if (this.elapsed > 115) return this.finish(this.prog > this.rprog + 30 ? 'p' : this.rprog > this.prog + 30 ? 'b' : 'tie');
@@ -3052,14 +3067,31 @@
         cam: this.cam, dt, mesh: null, actors: [this.cat], noApartment: true,
         light: { amb: [0.42, 0.44, 0.62], sun: [0.3, 0.3, 0.42], sky: '#0a1030', points: [{ x: 0, y: 120, z: -300, r: 700, c: [0.3, 0.3, 0.25] }] },
         boxes: (mb) => { // LA PISTA ES EL ANILLO: cinta 3D que avanza, con 3 carriles y divisorias teal emisivas
-          const SEG = 90, off = this.prog % SEG, base = Math.floor(this.prog / SEG);
+          // AVANCE VISIBLE (corrección de Jose, 2026-11-21): la lógica
+          // siempre avanzó (prog += v·dt), pero el dibujo pintaba cada
+          // segmento de 90 u SOLO con franjas LONGITUDINALES idénticas:
+          // al reciclarse segmentos iguales, el ojo no percibía el
+          // movimiento. Ahora cada segmento lleva marcas TRANSVERSALES
+          // que SÍ desfilan hacia la cámara con off = prog % SEG y se
+          // reciclan sin saltos: (a) tono alterno par/impar, (b) una
+          // banda cruzada oscura en su borde lejano, (c) balizas
+          // laterales 3D que pasan, y (d) una marca dorada de distancia
+          // cada 500 u en la posición exacta del múltiplo.
+          const SEG = RING_SEG, off = this.prog % SEG, base = Math.floor(this.prog / SEG);
           for (let i = 0; i < 15; i++) {
             const zTop = 60 - i * SEG + off, sp = (base + i) * SEG, band = Math.floor(sp / 1500) % 3;
-            mb.flat(-108, zTop - SEG, 216, SEG + 2, 0, ['#b97f3e', '#d9a45b', '#a8743a'][band]);
+            const par = (((base + i) % 2) + 2) % 2;
+            mb.flat(-108, zTop - SEG, 216, SEG + 2, 0, TRACK_BANDS[band][par]);
             mb.flat(-28, zTop - SEG, 4, SEG + 2, 0.5, '#2fa8a0', true);
             mb.flat(24, zTop - SEG, 4, SEG + 2, 0.5, '#2fa8a0', true);
             mb.flat(-112, zTop - SEG, 4, SEG + 2, 0.5, '#e4573d', true);
             mb.flat(108, zTop - SEG, 4, SEG + 2, 0.5, '#e4573d', true);
+            mb.flat(-108, zTop - SEG, 216, TRACK_BAND_W, 0.6, '#7c4f27'); // (b) banda transversal
+            const bc = par ? '#ffd23f' : '#2fa8a0'; // (c) balizas laterales que desfilan
+            mb.box(-120, 0, zTop - SEG, 7, 13, 7, bc, { emit: true });
+            mb.box(113, 0, zTop - SEG, 7, 13, 7, bc, { emit: true });
+            const b500 = Math.ceil(sp / TRACK_DIST_EVERY) * TRACK_DIST_EVERY; // (d) marca de distancia
+            if (b500 > sp && b500 < sp + SEG) mb.flat(-108, zTop - SEG + ((b500 - sp) / SEG) * SEG, 216, 9, 0.7, '#ffd23f', true);
           }
         },
         sprites: (t) => {
@@ -3070,20 +3102,24 @@
             if (mz < -1250 || mz > 90) continue;
             for (const l of m.lanes) {
               const mx = RING_LANES[l];
-              if (mz > -430) R.flat(R.glowTex, mx, 0.9, mz, 30, { tint: [1, 0.35, 0.25], alpha: 0.35 + Math.sin(t * 10) * 0.15 }); // sombra de aviso en el carril
-              R.sprite(rockCv('rock', m.seed), mx, 16, mz, { w: 74, h: 74, roll: m.rot, lit: 0.5 });
+              if (mz > -430) R.flat(R.glowTex, mx, 0.9, mz, METEOR_W * 0.6, { tint: [1, 0.35, 0.25], alpha: 0.35 + Math.sin(t * 10) * 0.15 }); // sombra de aviso en el carril
+              R.sprite(rockCv('rock', m.seed), mx, 16, mz, { w: METEOR_W, h: METEOR_W, roll: m.rot, lit: 0.5 });
             }
           }
           const gz = -(RING_LEN - this.prog);
           if (gz > -1100) R.sprite(ringGoalCv('luz'), 0, 6, gz, { w: 240, h: 240, nostretch: true, lit: 0 });
+          // Los cohetes son las IMÁGENES diseñadas, a ROCKET_W de ancho
+          // (un carril) con el alto del aspect del PNG — ver constantes.
           const rbob = Math.sin(t * 2.2) * 2;
-          R.sprite(rocketBackCv('rival'), this.rlaneX, 10 + rbob, rz, { w: 132, h: 116, roll: Math.max(-0.3, Math.min(0.3, (RING_LANES[this.rlane] - this.rlaneX) * 0.004)), lit: 0.7 });
+          drawRocketW(rocketImg('cohete-rival-back'), this.rlaneX, 10 + rbob, rz, ROCKET_W, { roll: Math.max(-0.3, Math.min(0.3, (RING_LANES[this.rlane] - this.rlaneX) * 0.004)), lit: 0.7 });
           const tilt = Math.max(-0.34, Math.min(0.34, (RING_LANES[this.lane] - this.laneX) * 0.005)) + (this.doubtT > 0 ? Math.sin(t * 42) * 0.07 : 0);
           const bob = Math.sin(t * 2.6) * 2 + (this.crashT > 0 ? Math.sin(t * 30) * 2 : 0);
-          R.sprite(rocketBackCv('party'), this.laneX, 12 + bob, -6, { w: 148, h: 130, roll: tilt, lit: 0.75 });
-          const fl = 0.75 + Math.sin(t * 31) * 0.18 + this.v / Math.max(40, this.cruise) * 0.35, fh = 52 * fl;
-          R.sprite(flameCv(), this.laneX, 14 - fh, -6, { w: 34, h: fh, nostretch: true, lit: 0 });
-          R.sprite(flameCv(), this.rlaneX, 12 - fh * 0.85, rz, { w: 30, h: fh * 0.85, nostretch: true, lit: 0 });
+          drawRocketW(rocketImg('cohete-party-back'), this.laneX, 12 + bob, -6, ROCKET_W, { roll: tilt, lit: 0.75 });
+          // Llamas derivadas del tamaño del cohete: ancho = ½·ROCKET_W
+          // y largo ≈ 0,8·ROCKET_H, pegadas a la tobera (base + 2).
+          const fl = 0.75 + Math.sin(t * 31) * 0.18 + this.v / Math.max(40, this.cruise) * 0.35, fh = ROCKET_H * 0.8 * fl;
+          R.sprite(flameCv(), this.laneX, 12 + bob + 2 - fh, -6, { w: ROCKET_W * 0.5, h: fh, nostretch: true, lit: 0 });
+          R.sprite(flameCv(), this.rlaneX, 10 + rbob + 2 - fh * 0.85, rz, { w: ROCKET_W * 0.5, h: fh * 0.85, nostretch: true, lit: 0 });
         },
         over: (c, t) => {
           if (this.st === 'over') { this.endOverlay(c); return; }
@@ -3102,6 +3138,15 @@
       });
     }
   }
+
+  // Expuestos para la prueba de humo (mismo patrón que ClimbDuel):
+  // tamaño del cohete, hitbox derivado y marcas de la pista.
+  RingRaceDuel.ROCKET_W = ROCKET_W;
+  RingRaceDuel.ROCKET_H = ROCKET_H;
+  RingRaceDuel.METEOR_W = METEOR_W;
+  RingRaceDuel.HIT_W = RING_HIT_W;
+  RingRaceDuel.ROCKET_FILES = ROCKET_FILES;
+  RingRaceDuel.TRACK = { seg: RING_SEG, bandW: TRACK_BAND_W, distEvery: TRACK_DIST_EVERY, beacons: true, altTones: true };
 
   // ---------- 1B. CINTURÓN DE ASTEROIDES (Mass Meteor) ----------
   // VENTAJA CRUZADA: BELT_ADV = cuánto más cerca del aro empiezas si
@@ -3261,6 +3306,7 @@
       this.cat = new Actor('pollito', 176, 6); this.cat.dir = 'down';
       this.cam = { x: 0, y: 0, z: 0, dist: 430, pitch: 0.42, fov: 38 };
       this.phase = 'walk'; this.phT = 0; this.rkY = 0; this.rkV = 0;
+      rocketPreload(); // el cohete de esta cinemática es imagen diseñada
     }
     finish() { if (!this.sent) { this.sent = true; this.done(); } }
     update(dt) {
@@ -3301,7 +3347,7 @@
           R.flat(R.glowTex, -330, 330, -430, 42, { tint: [0.92, 0.96, 1], alpha: 0.9 }); // la luna
           const fl = this.phase === 'lift' ? 1.15 + Math.sin(t * 29) * 0.2 : this.phase === 'ignite' ? 0.45 + Math.sin(t * 29) * 0.15 + this.phT * 0.3 : 0;
           if (fl > 0) R.sprite(flameCv(), 110 + shake, this.rkY - 62 * fl + 14, -34, { w: 40, h: 62 * fl, nostretch: true, lit: 0 });
-          R.sprite(rocketSideCv('party', false), 110 + shake, this.rkY, -34, { w: 150, h: 190, lit: 0.7 });
+          drawRocketH(rocketImg('cohete-party-side'), 110 + shake, this.rkY, -34, 190, { lit: 0.7 }); // imagen diseñada, ancho según su aspect
         },
         over: (c, t) => {
           if (!this.xi.hidden) { // el antifaz de Ximena dormida, sobre su pose cargada
@@ -3346,8 +3392,8 @@
         light: { amb: [0.42, 0.44, 0.62], sun: [0.3, 0.3, 0.42], sky: '#081026', points: [{ x: 0, y: 130, z: -200, r: 800, c: [0.3, 0.3, 0.25] }] },
         sprites: (t) => {
           drawSpaceSky(t, 0);
-          R.sprite(rocketSideCv('party', true), -175, 56 + Math.sin(t * 0.9) * 5, -70, { w: 130, h: 165, roll: 0.5, lit: 0.6 });
-          R.sprite(rocketSideCv('rival', true), 180, 80 + Math.sin(t * 0.8 + 1) * 5, -70, { w: 130, h: 165, roll: -0.42, lit: 0.6 });
+          drawRocketH(rocketImg('cohete-party-side-averiado'), -175, 56 + Math.sin(t * 0.9) * 5, -70, 165, { roll: 0.5, lit: 0.6 }); // imágenes diseñadas (averiados)
+          drawRocketH(rocketImg('cohete-rival-side-averiado'), 180, 80 + Math.sin(t * 0.8 + 1) * 5, -70, 165, { roll: -0.42, lit: 0.6 });
         },
         over: (c, t) => {
           drawHelmet(c, this.p, false); drawHelmet(c, this.jose, false); drawHelmet(c, this.cat, false);
@@ -3446,6 +3492,7 @@
   class SpaceEndingScene {
     constructor(who, done) {
       this.who = who; this.done = done; this.finished = false; this.results = {};
+      rocketPreload(); // precarga de los 6 PNG de cohetes al abrir la cadena
       this.cur = new SpaceLaunchScene(who, () => this.startRace());
     }
     startRace() { this.cur = new RingRaceDuel(this.who, (r) => { this.results.ring = r; this.cur = new SpaceTransitionScene(this.who, () => this.startBelt()); }, { copilot: spaceCopilotOf(this.who) }); }
