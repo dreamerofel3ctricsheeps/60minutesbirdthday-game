@@ -33,6 +33,7 @@ jobs:
           git clone -q --depth 1 --branch gh-pages "https://x-access-token:${TOKEN}@github.com/${REPO}.git" /tmp/ghpages
           rsync -a --delete --exclude dev --exclude .git application/src/ /tmp/ghpages/
           rm -rf /tmp/ghpages/tests
+          sed -i -E "s/(\"(css|js)\/[^\"]+)\"/\1?v=${SHA}\"/g" /tmp/ghpages/index.html
           cd /tmp/ghpages
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
