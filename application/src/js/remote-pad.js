@@ -1,49 +1,79 @@
-/* Mando móvil (LAN): empareja un teléfono por SSE y alimenta el input del
-   juego (G.input.joySet + touchDown/Up('action')). Requiere el relay
-   (tools/relay.cjs): npm run build && npm run relay. */
+/* Mando móvil (LAN): empareja un teléfono por bus SSE (relay tools/relay.cjs) y:
+   - alimenta el input del juego (G.input.joySet + touchDown/Up('action')),
+   - abre el menú de pausa desde el teléfono (G.setPaused),
+   - REFLEJA al teléfono los menús/decisiones clic-only (pausa, overlays y los
+     bloques .decision del chat) como botones; al elegir en el teléfono, hace
+     clic en el botón real del navegador.
+   Requiere: npm run build && npm run relay. */
 (function (root) {
   'use strict';
   const G = (root.G = root.G || {});
-  if (typeof document === 'undefined') { G.RemotePad = { open() {}, close() {} }; return; }
+  if (typeof document === 'undefined') { G.RemotePad = { open() {}, hide() {}, disconnect() {} }; return; }
   const PID = 'remote';
-
   function code() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += a[Math.random() * a.length | 0]; return s; }
 
-  let es = null, room = null, panel = null;
+  let es = null, room = null, panel = null, curBox = null, lastSig = null, mo = null;
 
-  function apply(m) {
+  function send(obj) { if (!room) return; fetch('/send?room=' + room + '&from=game', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) }).catch(() => {}); }
+
+  // ---- recibir del teléfono ----
+  function fromPad(m) {
     if (!G.input) return;
     if (m.t === 'joy') G.input.joySet(+m.x || 0, +m.y || 0);
     else if (m.t === 'act') m.down ? G.input.touchDown('action', PID) : G.input.touchUp('action', PID);
-    if (m.t === 'hello' || m.t === 'joy' || m.t === 'act') setStatus(true);
+    else if (m.t === 'menu') { if (G.setPaused && G.canPause && G.canPause() || (G.setPaused && G.paused)) G.setPaused(!G.paused); scheduleScan(); }
+    else if (m.t === 'pick') { const bs = curBox && curBox.querySelectorAll('button'); const b = bs && bs[m.i | 0]; if (b && !b.disabled) b.click(); scheduleScan(); }
+    if (m.t === 'hello' || m.t === 'joy' || m.t === 'act' || m.t === 'menu' || m.t === 'pick') setStatus(true);
   }
-  function release() { try { G.input.joySet(0, 0); G.input.touchUp('action', PID); } catch (e) {} }
-  function setStatus(on) { if (panel) panel.querySelector('.rp-status').textContent = on ? 'Teléfono conectado ✓' : 'Esperando teléfono…'; }
+
+  // ---- reflejar UI clic-only (pausa / overlay / decisión) ----
+  function pickBox() {
+    const pov = document.getElementById('pauseov');
+    if (pov && pov.classList.contains('show')) { const b = pov.querySelector('.modal'); if (b) return { box: b, title: 'Pausa' }; }
+    const ov = document.getElementById('overlay');
+    if (ov && ov.classList.contains('show')) { const b = ov.querySelector('.modal'); if (b) return { box: b, title: ((b.querySelector('h1,h2') || {}).textContent || '').trim() }; }
+    const dec = document.querySelectorAll('#msgs .decision');
+    if (dec.length) { const b = dec[dec.length - 1]; const ask = b.querySelector('.ask'); return { box: b, title: ask ? ask.textContent.trim() : 'Elige una opción' }; }
+    return null;
+  }
+  function label(btn) { const b = btn.querySelector('b'); let t = b ? b.textContent : btn.textContent; return (t || '').replace(/\s+/g, ' ').trim().slice(0, 70); }
+  function scan() {
+    const r = pickBox();
+    if (!r) { if (curBox) { curBox = null; lastSig = null; send({ t: 'ui-end' }); } return; }
+    const btns = Array.from(r.box.querySelectorAll('button'));
+    if (!btns.length) { if (curBox) { curBox = null; lastSig = null; send({ t: 'ui-end' }); } return; } // sin botones = no reflejar
+    const data = btns.map(b => ({ label: label(b), disabled: !!b.disabled }));
+    const sig = r.title + '|' + data.map(d => d.label + (d.disabled ? '*' : '')).join('|');
+    if (sig === lastSig && curBox === r.box) return;
+    curBox = r.box; lastSig = sig; send({ t: 'ui', title: r.title, buttons: data });
+  }
+  let scanPend = false;
+  function scheduleScan() { if (scanPend) return; scanPend = true; requestAnimationFrame(() => { scanPend = false; try { scan(); } catch (e) {} }); }
 
   async function open() {
     if (panel) { panel.style.display = 'flex'; return; }
-    let lan = null;
-    try { lan = await fetch('/lan').then(r => r.json()); } catch (e) {}
-    if (!lan) { alert('El mando necesita el servidor relay.\nEn tu computadora:\n  npm run build && npm run relay\nAbre la URL que muestra y reintenta.'); return; }
+    let lan = null; try { lan = await fetch('/lan').then(r => r.json()); } catch (e) {}
+    if (!lan) { alert('El mando necesita el servidor relay.\nEn tu computadora:\n  npm run build && npm run relay'); return; }
     room = code();
-    const url = 'http://' + lan.ip + ':' + lan.port + '/control?room=' + room;
-    build(url);
-    es = new EventSource('/events?room=' + room);
-    es.onmessage = (e) => { try { apply(JSON.parse(e.data)); } catch (x) {} };
+    build('http://' + lan.ip + ':' + lan.port + '/control?room=' + room);
+    es = new EventSource('/events?room=' + room + '&role=game');
+    es.onmessage = (e) => { try { fromPad(JSON.parse(e.data)); } catch (x) {} };
+    mo = new MutationObserver(scheduleScan);
+    for (const id of ['msgs', 'pauseov', 'overlay']) { const n = document.getElementById(id); if (n) mo.observe(n, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] }); }
+    scheduleScan();
   }
-  function hide() { if (panel) panel.style.display = 'none'; }        // oculta el panel, MANTIENE la conexión viva
-  function disconnect() { if (es) { es.close(); es = null; } release(); hide(); }
+  function hide() { if (panel) panel.style.display = 'none'; }   // mantiene la conexión viva
+  function disconnect() { if (es) { es.close(); es = null; } if (mo) { mo.disconnect(); mo = null; } try { G.input.joySet(0, 0); G.input.touchUp('action', PID); } catch (e) {} hide(); }
 
+  function setStatus(on) { if (panel) { const s = panel.querySelector('.rp-status'); if (s) s.textContent = on ? 'Teléfono conectado ✓' : 'Esperando teléfono…'; } }
   function build(url) {
     styles();
-    panel = document.createElement('div');
-    panel.className = 'rp-panel';
+    panel = document.createElement('div'); panel.className = 'rp-panel';
     panel.innerHTML =
       '<div class="rp-box"><div class="rp-title">📱 Tu teléfono como mando</div>' +
       '<div class="rp-sub">Escanea con la cámara del teléfono (<b>misma Wi-Fi</b>):</div>' +
-      '<img class="rp-qr" alt="QR del mando">' +
-      '<div class="rp-sub">o abre la dirección a mano:</div><div class="rp-url"></div>' +
-      '<div class="rp-status">Esperando teléfono…</div>' +
+      '<img class="rp-qr" alt="QR del mando"><div class="rp-sub">o abre la dirección a mano:</div>' +
+      '<div class="rp-url"></div><div class="rp-status">Esperando teléfono…</div>' +
       '<button class="rp-close">Empezar a jugar</button></div>';
     panel.querySelector('.rp-url').textContent = url;
     panel.querySelector('.rp-qr').src = '/qr?data=' + encodeURIComponent(url);
