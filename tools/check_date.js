@@ -1388,10 +1388,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     pr3.frenoT === 0 && C1.offT === 0, `frenoT=${pr3.frenoT}, offT=${C1.offT}`);
   // Mononoke y la arboleda del fondo.
   const ARB = PR.arboleda, protMo = (ARB.layerCx - 320) / ARB.par;
-  check('Mononoke observa desde la arboleda: su protagonista cae en la segunda mitad del paseo (55–75% de pan 0..3710) y mide 200–240 px de alto',
-    protMo / 3710 >= 0.55 && protMo / 3710 <= 0.75 && PR.mononoke.h >= 200 && PR.mononoke.h <= 240 &&
+  check('Mononoke observa desde la arboleda: su protagonista cae en la segunda mitad del paseo (55–75% de pan 0..3710) y el recorte se dibuja SUTIL, a 110–125 px de alto (la mitad de su primera versión, que a 218 dominaba el fondo)',
+    protMo / 3710 >= 0.55 && protMo / 3710 <= 0.75 && PR.mononoke.h >= 110 && PR.mononoke.h <= 125 &&
     typeof pr3.drawArboleda === 'function',
     `protagonista=${(100 * protMo / 3710).toFixed(0)}% (pan ${protMo.toFixed(0)}), h=${PR.mononoke.h}`);
+  // La oclusión: en drawArboleda el recorte se pinta DESPUÉS
+  // de la fila trasera y ANTES de la frontal, y la copa
+  // frontal central (h=76: su techo llega a baseY−1,02·76)
+  // queda por encima de la mitad del recorte — la fila
+  // frontal le tapa la mitad inferior. Y el velo de
+  // distancia subió a 0,2 para fundirla más con el fondo.
+  check('Mononoke va DETRÁS de la fila frontal de la arboleda: el recorte se dibuja antes que las copas frontales, cuya copa central cubre desde la mitad del recorte hacia abajo, y el velo de distancia es 0,2',
+    (() => {
+      const iImg = dateSrc.indexOf('drawImage(mononokeImg');
+      const iFront = dateSrc.indexOf("tree(-238, 84, '#274d2a')");
+      const techoCopa = ARB.baseY - 76 * 1.02, mitadRecorte = ARB.baseY + 6 - PR.mononoke.h / 2;
+      return iImg > 0 && iFront > iImg && techoCopa < mitadRecorte &&
+        dateSrc.includes("rgba(174,200,226,0.2)'; // el velo de la distancia");
+    })(),
+    `techo copa frontal=${(ARB.baseY - 76 * 1.02).toFixed(0)}, mitad del recorte=${(ARB.baseY + 6 - PR.mononoke.h / 2).toFixed(0)}`);
   check('la arboleda acompaña el tramo de mundo 2800–3300: Mononoke está en pantalla con pan 2480 y con pan 2980',
     (ARB.layerCx - 2480 * ARB.par) > -100 && (ARB.layerCx - 2480 * ARB.par) < 740 &&
     (ARB.layerCx - 2980 * ARB.par) > -100 && (ARB.layerCx - 2980 * ARB.par) < 740,

@@ -2114,7 +2114,10 @@
     // 2480–2980). baseY: las copas se apoyan tras la línea
     // de la colina y el suelo de la pradera tapa la base.
     arboleda: { par: 0.45, layerCx: 1450, baseY: 292 },
-    mononoke: { h: 218 }, // alto del recorte al dibujarlo (ancho según su aspecto 760×839)
+    // h: el alto del recorte al dibujarlo (ancho según su
+    // aspecto 760×839). dx: su corrimiento dentro de la
+    // arboleda — va pequeña y escondida (ver drawArboleda).
+    mononoke: { h: 120, dx: -30 },
     // El SOL de la tarde: disco con halo en la capa más
     // lejana (parallax 0,06): acompaña todo el paseo (su
     // centro pasa de pantalla 500 a pan 0 a ~277 a pan 3710).
@@ -2673,11 +2676,13 @@
     }
     // La ARBOLEDA del fondo y MONONOKE observando desde ella.
     // Fila trasera de árboles de copas verdes oscuras, el
-    // recorte asomando entre ellos (solo si cargó) con su velo
-    // de distancia, y una fila frontal de copas y arbustos que
-    // le tapa el borde inferior: San y Moro quedan «entre los
-    // árboles», quietos, mirando el paseo. Sin el recorte, la
-    // arboleda se dibuja igual.
+    // recorte ESCONDIDO entre ellos (solo si cargó) con su
+    // velo de distancia, y una fila frontal de copas y
+    // arbustos que —junto con el suelo de la pradera, que se
+    // pinta después— le tapa la mitad inferior: San y Moro
+    // quedan «detrás de los arbustos», quietos, mirando el
+    // paseo, y solo se los nota mirando con atención. Sin el
+    // recorte, la arboleda se dibuja igual.
     drawArboleda(c, pan) {
       const AR = PRADERA.arboleda, cx = AR.layerCx - pan * AR.par, baseY = AR.baseY;
       if (cx + 300 < -20 || cx - 300 > 660) return;
@@ -2694,13 +2699,23 @@
       // la fila trasera
       tree(-205, 128, '#356b38'); tree(-128, 148, '#2f5d33'); tree(-48, 118, '#356b38');
       tree(58, 142, '#2f5d33'); tree(152, 124, '#356b38'); tree(228, 108, '#2f5d33');
-      // MONONOKE entre los árboles (su base la tapan el suelo
-      // de la pradera, que se pinta después, y la fila frontal)
+      // MONONOKE escondida entre los árboles: SUTIL, como
+      // pidió Jose tras su playtest — a 218 px se veía gigante
+      // y dominaba el fondo. Ahora el recorte se dibuja a
+      // ~120 px (escala de alguien escondido, no de monumento)
+      // y corrido a la izquierda (dx), para que la cabeza y
+      // los hombros de San y las orejas y el ojo de Moro
+      // asomen entre las copas traseras, mientras la fila
+      // frontal (que se pinta justo después) y el suelo le
+      // tapan la mitad inferior — la oclusión además esconde
+      // el borde inferior del recorte, que delataba el
+      // rectángulo contra las copas.
       if (imgOk(mononokeImg)) {
         const mh = PRADERA.mononoke.h, mw = mh * mononokeImg.naturalWidth / mononokeImg.naturalHeight;
-        c.drawImage(mononokeImg, cx - mw / 2, baseY + 6 - mh, mw, mh);
-        c.fillStyle = 'rgba(174,200,226,0.13)'; // el velo de la distancia
-        c.fillRect(cx - mw / 2, baseY + 6 - mh, mw, mh);
+        const mx = cx + PRADERA.mononoke.dx - mw / 2;
+        c.drawImage(mononokeImg, mx, baseY + 6 - mh, mw, mh);
+        c.fillStyle = 'rgba(174,200,226,0.2)'; // el velo de la distancia
+        c.fillRect(mx, baseY + 6 - mh, mw, mh);
       }
       // la fila frontal: copas más bajas y oscuras, que le
       // tapan los costados y el borde inferior al recorte
