@@ -323,6 +323,119 @@
   msgs.addEventListener('scroll', syncDecisionPill); // al deslizar Jose, la pastilla sigue la pista del bloque
 
   const CHAT_STICK_PX = 48; // «casi al final»: dentro de este margen el chat sigue a los mensajes nuevos (ver ui.scroll)
+
+  // ---------- Cadencia de lectura del chat ----------
+  // (Pedido de Jose, 2026-11-22: «cuando hablan varias personas
+  // los mensajes aparecen al unísono y no me permite leer
+  // tranquilo».) Diagnóstico: ui.post ya serializaba DENTRO de
+  // postAll con su «escribiendo…», pero la pausa tras mostrar un
+  // mensaje era fija (0,35 s) sin importar su largo: leer un
+  // mensaje de 120 caracteres tenía el mismo ~1,5 s que uno de
+  // 10 antes de que cayera el siguiente. Y la conversación de
+  // apertura de la recolección ni siquiera pasaba por ui.post:
+  // se volcaba con ui.raw, los 4 mensajes en el mismo frame.
+  // Ahora TODOS los mensajes de personaje pasan por UNA cola
+  // en la capa del chat (ui.post encola; la bomba los muestra
+  // de uno en uno) con dos tiempos por mensaje, ambos en
+  // CHAT_PACE — el único sitio donde se ajusta el ritmo: si
+  // Jose pide «más lento» o «más rápido», se toca un número —:
+  //   · «escribiendo…» del que va a hablar: base + por carácter
+  //     del mensaje entrante (la calibración de siempre).
+  //   · pausa de LECTURA tras mostrar un mensaje, proporcional
+  //     a SU largo (espíritu de la regla de los globos del
+  //     mundo: 0,045 s × caracteres): es el tiempo que Jose
+  //     tiene para leerlo antes de que empiece el siguiente.
+  //     Solo corre si hay más mensajes en cola: el último de
+  //     una ráfaga no deja espera muerta tras de sí.
+  // Con esto, una conversación típica de 5 mensajes pasa de
+  // ~7 s (con ~1,5 s planos de lectura por mensaje) a ~15 s,
+  // con 2–4,5 s de lectura por mensaje según su largo.
+  // El resto de reglas, intactas: los avisos del sistema
+  // entran por la misma cola con su espera breve de siempre
+  // (mantienen su sitio en la conversación y no marcan ritmo
+  // de lectura); el eco de la respuesta de Jose NO pasa por la
+  // cola (ui.raw directo en choose/assign: aparece al instante,
+  // no es material de lectura); el historial que restaura el
+  // autoguardado tampoco (applySave lo vuelca entero de una
+  // vez: es historia ya vivida); y tocar el chat sigue
+  // acelerando todo (ui.fast), como hasta ahora. Las esperas
+  // van con G.wait: la PAUSA congela la cadencia igual que
+  // congela el resto del juego.
+  const CHAT_PACE = {
+    typeBase: 0.45, typePerChar: 0.013, typeMin: 0.5, typeMax: 1.4, // «escribiendo…» según el largo del mensaje que llega
+    readBase: 0.35, readPerChar: 0.04, readMin: 0.8, readMax: 3.0,  // pausa para LEER el mensaje recién mostrado, según su largo
+    sysDelay: 0.5,                                                  // espera breve de los avisos del sistema
+    fast: 0.05,                                                     // con ui.fast (toque en el chat) todo baja a esto
+  };
+  const chatTypeTime = (len) => clamp(CHAT_PACE.typeBase + len * CHAT_PACE.typePerChar, CHAT_PACE.typeMin, CHAT_PACE.typeMax);
+  const chatReadTime = (len) => clamp(CHAT_PACE.readBase + len * CHAT_PACE.readPerChar, CHAT_PACE.readMin, CHAT_PACE.readMax);
+  const chatQ = [];      // mensajes en espera de aparecer: { m, res }
+  let chatBusy = false;  // la bomba está drenando
+  let chatGen = 0;       // generación de la cola: al descartarla, la bomba vieja se retira sin pintar
+  let chatTyping = null; // la fila «escribiendo…» visible (para retirarla si la cola se descarta)
+  let chatWaiters = [];  // { gen, res } de whenChatIdle en espera
+  const chatIdleNow = () => !chatBusy && chatQ.length === 0;
+  function chatSettled() { // la cola quedó vacía: despierta a las decisiones que esperaban su turno
+    if (!chatIdleNow()) return;
+    const w = chatWaiters.filter((x) => x.gen === chatGen); chatWaiters = [];
+    w.forEach((x) => x.res());
+  }
+  // Descarta la cola SIN resolver lo pendiente (la misma
+  // semántica de congelado que G.dropTimers: la cadena que
+  // esperaba esos mensajes queda detenida para siempre y no
+  // puede resucitar en el contexto nuevo). Se llama en cada
+  // transición que abandona la conversación: entrar a la
+  // práctica, entrar a «La Cita», cargar una partida y empezar
+  // el minuto de recolección de una partida (nueva o reanudada).
+  function flushChatQueue() {
+    chatGen++;
+    chatQ.length = 0;
+    chatWaiters = []; // los que esperaban a la cola vieja quedan congelados con su cadena, no despiertan en el contexto nuevo
+    if (chatTyping) { chatTyping.remove(); chatTyping = null; }
+    chatBusy = false;
+  }
+  // Muestra UN mensaje de la cola y devuelve su largo si era de
+  // un personaje (marca el ritmo de lectura) o -1 si no (sistema,
+  // roomie ausente que huyó, personaje desconocido, o descarte
+  // a mitad de la espera: en ese caso la bomba aborta sin
+  // pintar ni resolver).
+  async function showChatItem(m, gen) {
+    if (m.who === 'sistema') { await G.wait(ui.fast ? CHAT_PACE.fast : CHAT_PACE.sysDelay); if (gen !== chatGen) return -1; ui.system(m.text); return -1; }
+    // Los roomies que NO fueron reclutados huyeron al llegar Ximena: no
+    // participan en el chat de la run (sus líneas se omiten; si el guion
+    // los menciona es como ausentes). Ximena, José y Pollito no son
+    // roomies reclutables y siempre pueden hablar.
+    if (S.party.length && G.PLAYABLE.includes(m.who) && !S.party.includes(m.who)) return -1;
+    // Personajes especiales (Alebrije/Teodora): no están en G.CHARS
+    // ni tienen hoja definida; su nombre/color salen de G.SPECIALS y
+    // su avatar es su sprite diseñado vía G.specialURL.
+    const ch = G.CHARS[m.who] || (G.SPECIALS && G.SPECIALS[m.who]);
+    if (!ch) return -1;
+    const typing = ui.raw(`<div class="typing">${ch.name} está escribiendo…</div>`);
+    chatTyping = typing;
+    await G.wait(ui.fast ? CHAT_PACE.fast : chatTypeTime(m.text.length));
+    if (chatTyping === typing) chatTyping = null;
+    typing.remove();
+    if (gen !== chatGen) return -1; // la cola se descartó durante la espera: este mensaje ya no pertenece a la pantalla
+    ui.raw(`<div class="msg ${m.direct ? 'direct' : ''}"><img class="av" src="${G.CHARS[m.who] ? Sp.portrait(m.who, m.mood) : G.specialURL(m.who)}" alt=""><div class="bubble"><b style="color:${ch.color}">${ch.name}${m.direct ? ' <i>· chat directo</i>' : ''}</b>${m.text}</div></div>`);
+    G.sfx('msg');
+    return m.text.length;
+  }
+  async function pumpChat(gen) {
+    while (chatQ.length) {
+      if (gen !== chatGen) return; // cola descartada: la bomba vieja se retira en silencio
+      const it = chatQ[0];
+      const shownLen = await showChatItem(it.m, gen);
+      if (gen !== chatGen) return; // descarte durante la espera: ni pintar de más ni resolver (cadena congelada)
+      chatQ.shift();
+      it.res(); // la promesa de ui.post se resuelve cuando su mensaje APARECE
+      // Pausa de lectura del mensaje recién mostrado, solo si
+      // la conversación sigue: el siguiente empieza después.
+      if (shownLen >= 0 && chatQ.length) await G.wait(ui.fast ? CHAT_PACE.fast : chatReadTime(shownLen));
+    }
+    if (gen === chatGen) { chatBusy = false; chatSettled(); }
+  }
+
   const ui = (G.ui = {
     fast: false,
     refreshHUD() {
@@ -372,27 +485,40 @@
     },
     system(text) { ui.raw(`<div class="sys">${text}</div>`); },
     header(kind, title) { ui.raw(`<div class="evhead"><span>${kind}</span>${title}</div>`); },
-    async post(m) {
-      if (m.who === 'sistema') { await G.wait(ui.fast ? 0.05 : 0.5); ui.system(m.text); return; }
-      // Los roomies que NO fueron reclutados huyeron al llegar Ximena: no
-      // participan en el chat de la run (sus líneas se omiten; si el guion
-      // los menciona es como ausentes). Ximena, José y Pollito no son
-      // roomies reclutables y siempre pueden hablar.
-      if (S.party.length && G.PLAYABLE.includes(m.who) && !S.party.includes(m.who)) return;
-      // Personajes especiales (Alebrije/Teodora): no están en G.CHARS
-      // ni tienen hoja definida; su nombre/color salen de G.SPECIALS y
-      // su avatar es su sprite diseñado vía G.specialURL.
-      const ch = G.CHARS[m.who] || (G.SPECIALS && G.SPECIALS[m.who]);
-      if (!ch) return;
-      const typing = ui.raw(`<div class="typing">${ch.name} está escribiendo…</div>`);
-      await G.wait(ui.fast ? 0.05 : clamp(0.45 + m.text.length * 0.013, 0.5, 1.4));
-      typing.remove();
-      ui.raw(`<div class="msg ${m.direct ? 'direct' : ''}"><img class="av" src="${G.CHARS[m.who] ? Sp.portrait(m.who, m.mood) : G.specialURL(m.who)}" alt=""><div class="bubble"><b style="color:${ch.color}">${ch.name}${m.direct ? ' <i>· chat directo</i>' : ''}</b>${m.text}</div></div>`);
-      G.sfx('msg');
-      await G.wait(ui.fast ? 0.05 : 0.35);
+    // Todo mensaje entra por la COLA de cadencia (ver «Cadencia
+    // de lectura del chat»): la promesa se resuelve cuando el
+    // mensaje APARECE en pantalla — o cuando se salta sin pintar
+    // (roomie que huyó, personaje desconocido) —, así que quien
+    // esperaba el post sigue esperando exactamente lo mismo que
+    // antes, pero ahora con ritmo de lectura entre mensajes.
+    post(m) {
+      return new Promise((res) => {
+        chatQ.push({ m, res });
+        if (!chatBusy) { chatBusy = true; pumpChat(chatGen); }
+      });
     },
-    async postAll(list) { for (const m of list) await ui.post(m); ui.fast = false; },
+    // Encola la ráfaga ENTERA antes de esperar: si se esperara
+    // mensaje a mensaje, la cola nunca tendría más de uno y la
+    // pausa de lectura (que corre «si hay más en cola») no
+    // existiría. El orden de aparición es el de la lista.
+    async postAll(list) { await Promise.all(list.map((m) => ui.post(m))); ui.fast = false; },
+    // Las decisiones esperan su turno: se resuelve cuando la
+    // cola terminó de aparecer (o ya estaba vacía). La insignia
+    // y la pastilla de decisión pendiente nacen de phone.decision
+    // y del montaje, que choose/assign hacen DESPUÉS de esto:
+    // cuentan solo mensajes ya aparecidos, nunca encolados.
+    whenChatIdle() {
+      if (chatIdleNow()) return Promise.resolve();
+      return new Promise((res) => chatWaiters.push({ gen: chatGen, res }));
+    },
+    chatPending() { return chatQ.length; }, // mensajes aún sin aparecer (lo ejercita el humo)
     choose(options, timer) {
+      // La decisión espera su turno (cadencia del chat): no se
+      // monta —ni la insignia avisa— hasta que los mensajes que
+      // la preceden han terminado de aparecer: la razón se lee
+      // antes de poder responder, y el temporizador de la
+      // decisión (si lo hay) no corre mientras el chat aún habla.
+      if (!chatIdleNow()) return ui.whenChatIdle().then(() => ui.choose(options, timer));
       return new Promise((res) => {
         phone.decision(true); // decisión pendiente: la máquina avisa según el modo (escritorio: muestra el chat y no lo oculta; modo manual: solo la insignia «!»)
         const block = el('div', 'decision'); let tm = null, left = timer;
@@ -416,6 +542,9 @@
     // partners reclutados); antes de que exista party (práctica/?duelo=)
     // se ofrece el roster completo.
     assign(prompt, info) {
+      // Como choose: la asignación espera a que la conversación
+      // termine de aparecer antes de montarse (ver ui.choose).
+      if (!chatIdleNow()) return ui.whenChatIdle().then(() => ui.assign(prompt, info));
       return new Promise((res) => {
         phone.decision(true); // asignación pendiente: misma regla de aviso que ui.choose
         const block = el('div', 'decision');
@@ -440,6 +569,7 @@
     },
   });
   ui.phone = phone; // la máquina de estados del teléfono (también la ejercita el humo)
+  ui.chatPace = CHAT_PACE; // las constantes de la cadencia de lectura (las fija el humo; un solo sitio para ajustar el ritmo)
   ui.decisionPillSync = syncDecisionPill; // la pastilla de decisión pendiente en el flujo (también la ejercita el humo)
   phone.paint(); // arranca oculto (clase .ph-off) y sin contador
   const phoneBtn = $('#phonebtn');
@@ -548,6 +678,7 @@
   // No crea escenas ni mueve el flujo: de eso se encarga tryResume
   // según sv.at.
   function applySave(sv) {
+    flushChatQueue(); // el historial restaurado aparece entero al instante (no pasa por la cola de cadencia) y ningún mensaje en vuelo de la sesión anterior puede pintar sobre él
     Object.assign(S, JSON.parse(JSON.stringify(S_INIT)), JSON.parse(JSON.stringify(sv.state)));
     unmountDecision(); // en un punto de control no hay decisión viva; por si acaso, un bloque restaurado sería inerte
     phone.reset();
@@ -1202,6 +1333,7 @@
     // Es solo cosmética de 0,6 s; ninguna lógica depende de él.
     setTimeout(() => {
       G.dropTimers(); // la historia no puede resucitar dentro del easter egg
+      flushChatQueue(); // la cola de cadencia de la historia tampoco: ningún mensaje suyo puede aparecer dentro de la cita
       phone.reset(); // en la cita el teléfono ni existe (CSS), pero el estado queda limpio
       G.paused = false; document.body.classList.remove('paused');
       pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
@@ -1219,7 +1351,7 @@
     // Desde el título (fase 'title' o ya en 'practice') no hay
     // partida cargada: el guardado queda intacto.
     if (S.phase === 'collect' || S.phase === 'arrival' || S.phase === 'act2' || S.phase === 'reveal') clearSave();
-    if (!G.practiceMode) { G.practiceMode = true; G.dropTimers(); unmountDecision(); phone.reset(); }
+    if (!G.practiceMode) { G.practiceMode = true; G.dropTimers(); flushChatQueue(); unmountDecision(); phone.reset(); }
     G.paused = false; document.body.classList.remove('paused');
     pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
     S.phase = 'practice';
@@ -1691,9 +1823,14 @@
 
   // ---------- Actos ----------
   async function actCollect() {
-    S.phase = 'collect'; if (G.Music) G.Music.play('collect'); ui.refreshHUD(); msgs.innerHTML = '';
+    S.phase = 'collect'; if (G.Music) G.Music.play('collect'); ui.refreshHUD(); flushChatQueue(); msgs.innerHTML = '';
     ui.header('Acto 0', '1 minuto para la fiesta');
-    ['majo|Ximena sale de guardia y viene para acá. Tenemos UN minuto.', 'fatima|El pastel quedó en algún lado. No me miren así.', 'majo|Agarren todo lo que sirva y guárdenlo en el armario del pasillo. Lo que no esté guardado cuando llegue, lo va a ver.', 'saulo|Y cuidado con Pollito y con José. Presiento que hoy van a ser nuestros jefes finales.'].forEach((l) => { const [w, t] = l.split('|'); ui.raw(`<div class="msg"><img class="av" src="${Sp.portrait(w)}" alt=""><div class="bubble"><b style="color:${G.CHARS[w].color}">${G.CHARS[w].name}</b>${t}</div></div>`); });
+    // La conversación de apertura entra por la COLA de cadencia
+    // (antes se volcaba con ui.raw: los 4 mensajes en el mismo
+    // frame, imposibles de leer). No se espera: el minuto
+    // arranca ya y la conversación va cayendo con su ritmo
+    // mientras Jose juega (tocar el chat la acelera, ui.fast).
+    ['majo|Ximena sale de guardia y viene para acá. Tenemos UN minuto.', 'fatima|El pastel quedó en algún lado. No me miren así.', 'majo|Agarren todo lo que sirva y guárdenlo en el armario del pasillo. Lo que no esté guardado cuando llegue, lo va a ver.', 'saulo|Y cuidado con Pollito y con José. Presiento que hoy van a ser nuestros jefes finales.'].forEach((l) => { const [w, t] = l.split('|'); ui.post({ who: w, text: t }); });
     G.captureKeys = true; $('#phone').classList.add('dim');
     let scene;
     const res = await new Promise((r) => G.setScene((scene = new Sc.CollectScene(S.player, r))));

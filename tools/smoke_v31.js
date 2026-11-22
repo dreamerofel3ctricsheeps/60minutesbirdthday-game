@@ -3852,6 +3852,97 @@ const tick = () => new Promise((r) => setImmediate(r));
     phAD.reset();
   }
 
+  // --- Sección AD: cadencia de lectura del chat (pedido de Jose,
+  // 2026-11-22: «cuando hablan varias personas los mensajes
+  // aparecen al unísono y no me permite leer tranquilo»). Todos los
+  // mensajes de personaje pasan por UNA cola (ui.post encola y la
+  // bomba muestra de uno en uno): «escribiendo…» según el largo
+  // del que llega + pausa de LECTURA según el largo del recién
+  // mostrado, ambas en CHAT_PACE. Las decisiones esperan a que la
+  // cola drene; el eco propio es instantáneo; el historial
+  // restaurado no pasa por la cola; al abandonar la historia la
+  // cola se descarta sin fantasmas. En el arnés G.wait resuelve al
+  // instante, así que el escalonado se verifica por ESTADO (la
+  // cola retiene y va soltando), no por reloj de pared.
+  {
+    console.log('\nAD) Cadencia de lectura del chat — los mensajes ya no caen al unísono');
+    const gameAD = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const DAD = G.debug;
+    const msgsAD = documentFake.querySelector('#msgs');
+    const msgRowsAD = () => msgsAD.children.filter((c) => (c._html || '').includes('class="msg'));
+    const decBlocksAD = () => queryWithin(msgsAD, '.decision', true).length;
+    // Fuente: la cola, sus constantes y los enganches están donde deben
+    check('cadencia: las constantes del ritmo viven en UN solo sitio (CHAT_PACE: tecleo y lectura, base + por carácter + topes)',
+      gameAD.includes('const CHAT_PACE = {') && gameAD.includes('typePerChar') && gameAD.includes('readPerChar') && gameAD.includes('readMax'), '');
+    check('cadencia: choose y assign esperan a que la cola drene antes de montarse (whenChatIdle)',
+      gameAD.includes('ui.whenChatIdle().then(() => ui.choose') && gameAD.includes('ui.whenChatIdle().then(() => ui.assign'), '');
+    const iPracAD = gameAD.indexOf('function enterPractice');
+    const pracBodyAD = iPracAD >= 0 ? gameAD.slice(iPracAD, gameAD.indexOf('function duelListScreen', iPracAD)) : '';
+    const iApplyAD = gameAD.indexOf('function applySave');
+    const applyBodyAD = iApplyAD >= 0 ? gameAD.slice(iApplyAD, gameAD.indexOf('function buildRestHome', iApplyAD)) : '';
+    check('cadencia: la cola se descarta al abandonar la historia (práctica), al cargar una partida (applySave) y al abrir la recolección',
+      pracBodyAD.includes('flushChatQueue()') && applyBodyAD.includes('flushChatQueue()') && gameAD.includes("ui.refreshHUD(); flushChatQueue(); msgs.innerHTML = '';"), '');
+    check('cadencia: la conversación de apertura de la recolección entra por la cola (ya no se vuelca con ui.raw)',
+      gameAD.includes('ui.post({ who: w, text: t })') && !gameAD.includes('src="${Sp.portrait(w)}"'), '');
+    // Las constantes, vistas desde fuera: la pausa de lectura puede
+    // superar al tecleo y crece con el largo (eso es «leer tranquilo»)
+    const paceAD = G.ui.chatPace;
+    check('cadencia: CHAT_PACE expuesto y sano (la lectura manda: su tope supera al del tecleo y ambos ritmos crecen por carácter)',
+      !!paceAD && paceAD.readMax > paceAD.typeMax && paceAD.readPerChar > 0 && paceAD.typePerChar > 0 && paceAD.readMin >= paceAD.typeMin, '');
+    // Comportamiento: una ráfaga de 3 NO aparece de golpe
+    G.ui.phone.reset(); G.ui.fast = false;
+    G.practiceMode = false; // la sección AC terminó en práctica: aquí se prueba el chat de la HISTORIA (en práctica, finish() de choose se apaga a propósito)
+    S.player = 'saulo'; S.party = ['saulo', 'majo', 'natalia'];
+    const baseMsgAD = msgRowsAD().length;
+    const p1AD = G.ui.post({ who: 'majo', text: 'Primero de la ráfaga de prueba, con su largo.' });
+    const p2AD = G.ui.post({ who: 'saulo', text: 'Segundo de la ráfaga.' });
+    const p3AD = G.ui.post({ who: 'natalia', text: 'Tercero y último de la ráfaga.' });
+    check('cadencia: al encolar 3 mensajes, ninguno aparece aún (la cola los retiene: pending = 3, solo el «escribiendo…» del primero)',
+      msgRowsAD().length === baseMsgAD && G.ui.chatPending() === 3
+      && msgsAD.children.filter((c) => (c._html || '').includes('está escribiendo')).length === 1, 'pending=' + G.ui.chatPending());
+    await Promise.all([p1AD, p2AD, p3AD]); await tick();
+    const textsAD = msgRowsAD().map((c) => c._html);
+    const i1AD = textsAD.findIndex((h) => h.includes('Primero de la ráfaga'));
+    const i2AD = textsAD.findIndex((h) => h.includes('Segundo de la ráfaga'));
+    const i3AD = textsAD.findIndex((h) => h.includes('Tercero y último'));
+    check('cadencia: drenada la cola, los 3 mensajes están y EN ORDEN (la promesa de cada post se resolvió al aparecer el suyo)',
+      i1AD >= 0 && i2AD > i1AD && i3AD > i2AD && G.ui.chatPending() === 0, `i=${i1AD},${i2AD},${i3AD} pending=${G.ui.chatPending()}`);
+    // La decisión espera su turno: con la cola ocupada no se monta
+    const baseDecAD = decBlocksAD();
+    const q1AD = G.ui.post({ who: 'majo', text: 'Mensaje previo a la decisión, todavía en cola.' });
+    const q2AD = G.ui.post({ who: 'saulo', text: 'Otro mensaje previo, también en cola.' });
+    let chosenAD = -1;
+    const pDecAD = G.ui.choose([{ label: 'Decisión AD A' }, { label: 'Decisión AD B' }]).then((i) => { chosenAD = i; });
+    check('cadencia: con mensajes en cola, la decisión NO se monta ni la insignia avisa (espera a que la conversación aparezca)',
+      decBlocksAD() === baseDecAD && G.ui.phone.state().pending === false && G.ui.chatPending() === 2, 'pending=' + G.ui.chatPending());
+    await Promise.all([q1AD, q2AD]); await tick(); await tick();
+    check('cadencia: drenada la cola, la decisión se monta y la máquina la marca pendiente',
+      decBlocksAD() === baseDecAD + 1 && G.ui.phone.state().pending === true, '');
+    const optAD = queryWithin(msgsAD, '.opt', true).find((c) => c.onclick);
+    if (optAD) optAD.onclick();
+    const lastRowAD = msgsAD.children[msgsAD.children.length - 1];
+    check('cadencia: el eco de la respuesta aparece AL INSTANTE (ui.raw directo, sin pasar por la cola) y el bloque sale del flujo',
+      !!lastRowAD && (lastRowAD._html || '').includes('class="mine"') && (lastRowAD._html || '').includes('Decisión AD A')
+      && decBlocksAD() === baseDecAD && G.ui.chatPending() === 0, '');
+    await pDecAD;
+    check('cadencia: la promesa de la decisión se resolvió con la opción tocada', chosenAD === 0, 'chosen=' + chosenAD);
+    // El historial restaurado NO pasa por la cola: entero y al instante
+    const svAD = { v: 1, at: 'night', storyIdx: 0, state: JSON.parse(JSON.stringify(S)), chat: '<div class="row"><div class="msg"><div class="bubble">Historial restaurado AD</div></div></div>', dict: [] };
+    DAD.applySave(svAD);
+    check('cadencia: el historial del autoguardado aparece entero al instante, sin encolar (historia ya vivida)',
+      msgsAD.innerHTML.includes('Historial restaurado AD') && G.ui.chatPending() === 0, '');
+    // Descarte limpio: lo encolado al abandonar la historia no aparece jamás
+    const ghostBaseAD = msgRowsAD().length;
+    let ghostResAD = false;
+    const g1AD = G.ui.post({ who: 'majo', text: 'Mensaje fantasma AD que no debe aparecer.' });
+    g1AD.then(() => { ghostResAD = true; });
+    DAD.enterPractice();
+    const pendingTrasAD = G.ui.chatPending();
+    await tick(); await tick();
+    check('cadencia: al entrar a práctica la cola se descarta (pending 0) y el mensaje en vuelo NO aparece ni su promesa se resuelve (sin fantasmas)',
+      pendingTrasAD === 0 && msgRowsAD().length === ghostBaseAD && ghostResAD === false, `pending=${pendingTrasAD} resuelto=${ghostResAD}`);
+  }
+
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR FATAL en la prueba:', e); process.exit(2); });
