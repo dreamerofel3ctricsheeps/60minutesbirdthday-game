@@ -168,6 +168,13 @@ body.touch-on #touchpad { display: block; }
    así que la regla mira DENTRO de #stage con :has() y apaga a su
    hermana siguiente, que es donde quedó la capa. */
 #stage:has(> #overlay.show) ~ #touchpad, #stage:has(> #pauseov.show) ~ #touchpad { display: none !important; }
+/* EXCEPCIÓN (pedido de Jose, 2026-11-22): con el carrusel de selección
+   abierto, el joystick NAVEGA el menú — si la capa se ocultara no
+   habría forma de empujarlo. Mientras el carrusel vive, game.js marca
+   la capa con .nav-open y esta regla (más específica que la de arriba)
+   la mantiene visible; solo con la capa táctil activa (body.touch-on),
+   en escritorio no aparece nada nuevo. */
+body.touch-on #stage:has(> #overlay.show) ~ #touchpad.nav-open { display: block !important; }
 /* Joystick circular analógico (reemplaza al D-pad de flechas):
    base circular semitransparente en la esquina inferior izquierda
    y perilla que sigue el dedo dentro del radio (la mueve game.js
@@ -265,7 +272,25 @@ body.paused #phone, body.paused #inv { pointer-events: none; filter: saturate(.5
 .car .pcard { flex: none; width: 248px; }
 .car.slim .pcard { width: 150px; }
 .car.slim .pcard img { height: 104px; height: clamp(72px, 26cqh, 104px); }
-.cnav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; background: #17122a; border: 3px solid var(--yellow); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 3; box-shadow: 0 4px 0 #120f1b; padding: 0; }
+/* Los botones ‹ › van anclados al CENTRO DEL RETRATO de la tarjeta
+   (padding de la pista 8 + padding de la tarjeta 10 + media imagen),
+   NO al 50% del carrusel: con top:50% el centro caía a media FICHA
+   completa, y en pantallas horizontales bajas la ficha (retrato +
+   4 stats + habilidad + defecto, ~400px) es mucho más alta que el
+   modal — que vive capado al alto del escenario con overflow
+   oculto (.noscroll) — así que los botones quedaban ENTEROS bajo
+   el borde inferior visible y el recorte se los comía: en el
+   teléfono de Jose no se veía ni un píxel de su borde amarillo
+   (bug 2026-11-22). El retrato siempre está en la zona visible
+   (el recorte solo muerde por abajo), así que anclar ahí los deja
+   siempre a la vista. El clamp usa la MISMA fórmula cqh que la
+   altura del retrato (.pcard img: clamp(96px, 36cqh, 150px)), a
+   la mitad: centro = 18 + clamp(48px, 18cqh, 75px). */
+.cnav { position: absolute; top: 84px; top: clamp(66px, 18cqh + 18px, 93px); transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; background: #17122a; border: 3px solid var(--yellow); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 3; box-shadow: 0 4px 0 #120f1b; padding: 0; }
+.car.slim .cnav { top: 62px; top: clamp(54px, 13cqh + 18px, 70px); } /* retrato slim: clamp(72px, 26cqh, 104px), misma cuenta */
+/* Con la capa táctil activa los ‹ › crecen a 52px: blanco cómodo
+   para el pulgar (en escritorio quedan en sus 44px de siempre). */
+body.touch-on .cnav { width: 52px; height: 52px; }
 .cnav.prev { left: -24px; }
 .cnav.next { right: -24px; }
 .cnav i { display: block; width: 11px; height: 11px; }

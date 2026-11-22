@@ -93,6 +93,17 @@
   }
   let joyVec = { x: 0, y: 0, mag: 0 };
   const joyDirs = { left: false, right: false, up: false, down: false };
+  // Avisos de «flecha recién derivada» del joystick (onJoyPress):
+  // los menús DOM (el carrusel de selección de personaje) escuchan
+  // el TECLADO por eventos keydown, y el joystick nunca dispara
+  // eventos de teclado — alimenta este estado interno vía joySet.
+  // Sin un aviso, el carrusel era inavegable con el joystick aunque
+  // las flechas derivadas existieran (bug reportado por Jose,
+  // 2026-11-22). Los suscriptores reciben la tecla lógica ('left',
+  // 'right', 'up', 'down') SOLO al cruzar el umbral: un empuje =
+  // un aviso, y mantener el empuje NO repite (hay que volver bajo
+  // el umbral para rearmar) — la misma histéresis de joyDirs.
+  const joyPressCbs = new Set();
   G.input = {
     axis() {
       // Con el joystick activo, el eje ES el vector analógico:
@@ -132,10 +143,13 @@
       joyVec = { x, y, mag: Math.min(1, Math.hypot(x, y)) };
       const der = { left: x < -JOY_AXIS, right: x > JOY_AXIS, up: y < -JOY_AXIS, down: y > JOY_AXIS };
       for (const k in der) {
-        if (der[k] && !joyDirs[k]) { joyDirs[k] = true; G.input.touchDown(k, JOY_PID); }
+        if (der[k] && !joyDirs[k]) { joyDirs[k] = true; G.input.touchDown(k, JOY_PID); for (const cb of [...joyPressCbs]) cb(k); }
         else if (!der[k] && joyDirs[k]) { joyDirs[k] = false; G.input.touchUp(k, JOY_PID); }
       }
     },
+    // Suscripción a las flechas derivadas del joystick (ver la nota
+    // junto a joyPressCbs): devuelve la función para desuscribirse.
+    onJoyPress(cb) { joyPressCbs.add(cb); return () => { joyPressCbs.delete(cb); }; },
     joyState: () => ({ x: joyVec.x, y: joyVec.y, mag: joyVec.mag }),
     joyVector,
     JOY_DEAD,

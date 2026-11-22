@@ -730,10 +730,19 @@
   }
   // Teclado del carrusel mientras la pantalla vive: ←/→ mueven la vista.
   // Se desactiva al resolver (flag + removeEventListener donde exista).
+  // El JOYSTICK también navega (pedido de Jose, 2026-11-22): no dispara
+  // keydown, así que se escucha el aviso de flecha derivada de
+  // G.input.onJoyPress (un empuje = un paso; mantener no repite).
+  // Y mientras el carrusel vive, #touchpad lleva la marca .nav-open:
+  // la regla CSS que oculta la capa táctil con un modal abierto hace
+  // una excepción para ella, porque sin joystick visible no habría
+  // forma de empujarlo para navegar esta pantalla.
   function charKeys(car, off) {
     const h = (e) => { if (off()) return; if (e.code === 'ArrowLeft') car.step(-1); else if (e.code === 'ArrowRight') car.step(1); };
     window.addEventListener('keydown', h);
-    return () => { if (window.removeEventListener) window.removeEventListener('keydown', h); };
+    const unJoy = G.input.onJoyPress((k) => { if (off()) return; if (k === 'left') car.step(-1); else if (k === 'right') car.step(1); });
+    const pad = $('#touchpad'); if (pad) pad.classList.add('nav-open');
+    return () => { if (window.removeEventListener) window.removeEventListener('keydown', h); unJoy(); if (pad) pad.classList.remove('nav-open'); };
   }
 
   function pickCharScreen(ev) {
@@ -882,7 +891,7 @@
       const modal = el('div', 'modal wide noscroll');
       modal.appendChild(el('h2', '', '¿A quién controlas en el minuto de recolección?'));
       modal.appendChild(car.node); modal.appendChild(car.dots);
-      modal.appendChild(el('p', 'dim', 'Usa los botones de los lados (o las flechas ← →) para ver a todos. En el departamento estarán los 7 roomies. Durante el minuto podrás cargar hasta <b>3 partners</b> al hombro y meterlos en el armario: ellos se quedan para toda la noche. Los demás… ya verás.'));
+      modal.appendChild(el('p', 'dim', 'Usa los botones de los lados (o las flechas ← →, o el joystick) para ver a todos. En el departamento estarán los 7 roomies. Durante el minuto podrás cargar hasta <b>3 partners</b> al hombro y meterlos en el armario: ellos se quedan para toda la noche. Los demás… ya verás.'));
       overlay.innerHTML = ''; overlay.appendChild(modal); overlay.classList.add('show');
       function finish(id) { if (done) return; done = true; un(); overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok'); res(id); }
     });

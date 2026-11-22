@@ -40,7 +40,8 @@
       con su posición, lados alternos) y termina en la puerta
       principal (510, 706); la selección de protagonista y el
       selector de práctica usan un carrusel con botones ‹ ›,
-      puntos y flechas del teclado, sin ninguna barra de scroll,
+      puntos, flechas del teclado y el joystick táctil (un empuje =
+      un paso, con histéresis), sin ninguna barra de scroll,
       desde el que se alcanzan los 7 roomies. Y el STAGING de la
       llegada: Ximena parada en (510, 548) se ve ENTERA — ningún
       presente VISIBLE en su caja de visión (|x-510| < 80 con
@@ -972,6 +973,37 @@ const tick = () => new Promise((r) => setImmediate(r));
     backBtn.onclick(); await pBack;
     check('práctica: el botón Volver del carrusel resuelve null (vuelve a la lista)', backRes === null, 'res=' + backRes);
     G.menuOpen = false;
+
+    // --- El joystick también navega el carrusel (pedido de Jose,
+    // 2026-11-22): en su teléfono los botones ‹ › quedaban recortados
+    // fuera del área visible del modal y no podía cambiar de
+    // personaje. Dos frentes: los botones se anclan al centro del
+    // retrato (zona siempre visible) y el joystick mueve la vista.
+    const cssTxtI = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    check('carrusel táctil: los ‹ › se anclan al centro del retrato (top por clamp cqh, ya NO al 50% del carrusel, que el recorte del modal se comía)',
+      cssTxtI.includes('top: clamp(66px, 18cqh + 18px, 93px)') && cssTxtI.includes('top: clamp(54px, 13cqh + 18px, 70px)'), '');
+    check('carrusel táctil: con la capa táctil activa los ‹ › crecen a 52px y la capa NO se oculta con el carrusel abierto (excepción .nav-open)',
+      cssTxtI.includes('body.touch-on .cnav') && cssTxtI.includes('#touchpad.nav-open'), '');
+    let joyRes = 'pendiente';
+    const pJoy = G.debug.selectChar().then((id) => { joyRes = id; });
+    await tick(); await tick();
+    const modalJoy = overlayEl.children[0];
+    const trackJoy = modalJoy && queryWithin(modalJoy, '.ctrack', false);
+    const padEl = documentFake.querySelector('#touchpad');
+    check('joystick: con el carrusel abierto la capa táctil queda marcada .nav-open (no se oculta)', !!padEl && padEl._classes.has('nav-open'));
+    G.input.joySet(0.9, 0); // empuje a la derecha: cruza el umbral de flecha
+    check('joystick: un empuje a la derecha mueve el carrusel UN paso', !!trackJoy && trackJoy.style.transform === 'translateX(-260px)', trackJoy && trackJoy.style.transform);
+    G.input.joySet(0.95, 0); // el dedo sigue empujando: no debe repetir
+    check('joystick: mantener el empuje NO repite pasos (histéresis del umbral)', !!trackJoy && trackJoy.style.transform === 'translateX(-260px)', trackJoy && trackJoy.style.transform);
+    G.input.joySet(0, 0); G.input.joySet(-0.9, 0); // soltar rearma; empuje a la izquierda
+    check('joystick: tras soltar, un empuje a la izquierda retrocede un paso', !!trackJoy && trackJoy.style.transform === 'translateX(0px)', trackJoy && trackJoy.style.transform);
+    G.input.joySet(0, 0);
+    const cardsJoy = modalJoy ? queryWithin(modalJoy, '.pcard', true) : [];
+    cardsJoy[0].onclick(); await pJoy;
+    check('joystick: tocar una tarjeta sigue eligiendo tras navegar con el joystick', joyRes === G.PLAYABLE[0], 'res=' + joyRes);
+    check('joystick: al cerrar el selector la marca .nav-open se retira de la capa táctil', !!padEl && !padEl._classes.has('nav-open'));
+    G.input.joySet(0.9, 0); G.input.joySet(0, 0); // sin pantalla viva: no debe lanzar ni mover nada
+    check('joystick: sin carrusel abierto, empujar no lanza errores ni deja suscripciones vivas', true);
   }
 
   // ================= J) Spawns seguros: nadie nace dentro de un mueble =====
