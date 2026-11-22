@@ -2771,8 +2771,18 @@
   // por código en canvas (rocketBackCv/rocketSideCv) y Jose ordenó
   // diseñarlos como IMAGEN desde la hoja aprobada
   // (files/diseno-j1407b/cohete-items-j1407b-v1.webp). Los 6 PNG con
-  // alfa viven en assets/img/ y se cargan con Image() y la ruta
-  // relativa de la app: el mismo patrón que G.iconImg (world.js).
+  // alfa viven en assets/img/ (la fuente de diseño) y viajan al juego
+  // como DATA URIs en G.ROCKET_DATA (js/rocket-sheets.js, generado por
+  // tools/mkrockets.py), el mismo patrón que las hojas definidas.
+  // POR QUÉ NO rutas de archivo (bug del "contador 4", 2026-11-21):
+  // la primera versión cargaba 'assets/img/cohete-*.png' con Image();
+  // al correr el juego desde file:// (la copia local de Jose), Chrome
+  // trata esa imagen como cross-origin y texImage2D lanza
+  // SecurityError en cuanto termina de cargar y se sube a WebGL
+  // dentro de draw() — y como frame() agendaba el requestAnimationFrame
+  // DESPUÉS de draw(), la excepción mataba el bucle y la carrera se
+  // congelaba en el contador inicial para siempre. Las data URIs no
+  // tienen origen: seguras en WebGL desde cualquier esquema.
   // La trasera party muestra las NUCAS con casco de piloto y
   // copiloto (nunca caras); la rival, el casco de Jose de espaldas y
   // la nuca atigrada de Pollito en la ventanilla — y su Actor
@@ -2784,7 +2794,8 @@
   const rocketImgs = {};
   function rocketImg(name) {
     if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
-    if (!rocketImgs[name]) { const im = new Image(); im.src = 'assets/img/' + name + '.png'; rocketImgs[name] = im; }
+    if (!G.ROCKET_DATA || !G.ROCKET_DATA[name]) return null; // sin rocket-sheets.js cargado: no reventar
+    if (!rocketImgs[name]) { const im = new Image(); im.src = G.ROCKET_DATA[name]; rocketImgs[name] = im; }
     return rocketImgs[name];
   }
   function rocketPreload() { for (const n of ROCKET_FILES) rocketImg(n); }
