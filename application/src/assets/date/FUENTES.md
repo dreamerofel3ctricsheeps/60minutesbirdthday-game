@@ -22,6 +22,13 @@
   que vuele hacia la derecha (en la foto el morro apunta a la
   izquierda); el rótulo de la aerolínea queda espejado, irrelevante a
   la escala lejana a la que se dibuja. Salida: 760 × 227.
+- **Reuso (escena 3, «Aeropuerto»):** el mismo recorte, sin
+  procesado nuevo, se dibuja grande (~420 px de ancho) FUERA del
+  ventanal continuo de la terminal, rodando lento por la pista
+  (taxiing: capa con parallax 0,15, deriva de 18 px/s y ciclo de
+  140 s con espera fuera de escena). El interior de la terminal
+  se dibuja por código sobre él, de modo que se ve «a través»
+  de los ventanales.
 
 ## vocho.png — El vocho que maneja Pollito
 - **Foto original:** «Blue Volkswagen Beetle side view.jpg» (2888 × 1392)

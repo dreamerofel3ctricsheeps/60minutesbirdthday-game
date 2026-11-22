@@ -34,11 +34,23 @@
       cruza a la franja de San Ángel (3900 px, mismo modo libre),
       el cameo de Manolo y María con Chuy se dispara por cámara
       (pan > 900) y camina a la izquierda una sola vez por
-      visita, las velas parpadean, la Puerta del árbol devuelve
-      a la plaza, y la carpeta sanangel/ quedó VERSIONADA por
-      decisión expresa de Jose (commit 5599034, integrado tal
-      cual); la vista sanangel-vista.png sigue fuera del repo
-      y el humo lo verifica.
+      visita, las velas parpadean, la Puerta del árbol cruza al
+      AEROPUERTO (escena 3; la vuelta completa se verifica en
+      la sección L), y la carpeta sanangel/ quedó VERSIONADA
+      por decisión expresa de Jose (commit 5599034, integrado
+      tal cual); la vista sanangel-vista.png sigue fuera del
+      repo y el humo lo verifica.
+   L) Escena 3 «Aeropuerto»: franja de 3600 px (24 s × PACE)
+      con la cadena de Puertas plaza → San Ángel → aeropuerto
+      y sus vueltas (árbol→aero, entrada del aero→San Ángel
+      junto al árbol, salida del aero→San Ángel por ahora), el
+      avión reutilizado rodando FUERA del ventanal (aeroPlaneXAt
+      monótona, lenta y visible a través de la banda de cristal
+      en algún punto del paseo) y la cinta caminadora que
+      acelera DE VERDAD: el activo se desplaza ~240 px en 1 s
+      sobre la banda contra ~150 fuera, la banda sola lo
+      arrastra ~90 px sin input, y el seguidor también la
+      recibe (su caminata a su puesto se frena ~90 px/s).
    K) Audio (pedidos de Jose): el archivo de la canción trae
       ~4 s de silencio inicial → AUDIO_SKIP=4: al arrancar se
       salta a esa posición (con re-aplicación ÚNICA si el
@@ -587,7 +599,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('el brillo de las velas varía con el tiempo (parpadeo) y se mantiene en rango [0,3, 1,05]',
     g0 !== g1 && [g0, g1, g2].every((g) => g >= 0.3 && g <= 1.05), `g=${g0.toFixed(2)}/${g1.toFixed(2)}/${g2.toFixed(2)}`);
   ang.draw(0.016); // San Ángel se dibuja sin explotar (sin assets locales: guardas imgOk)
-  // Viaje de vuelta por la Puerta del árbol.
+  // Viaje por la Puerta del árbol: la cadena avanzó y ahora
+  // cruza al AEROPUERTO (escena 3), ya no de vuelta a la plaza.
+  // La vuelta completa (aero → San Ángel → plaza) se verifica
+  // en la sección L.
   if (AF.active !== 'ximena') ang.switchActive();
   const AX2 = AF.chars.ximena;
   AX2.x = ang.exitDoorX - 10; AX2.y = ang.groundY;
@@ -595,9 +610,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('junto a la Puerta del árbol se ofrece cruzarla (nearDoor)', ang.nearDoor === true);
   key('Space', true); ang.update(0.016); key('Space', false);
   for (let i = 0; i < 25 && G.scene === ang; i++) ang.update(0.05);
-  check('la Puerta del árbol devuelve a la plaza, en modo libre y con el estado plaza-arrived',
-    G.scene === sc && sc.phase === 'free' && DM.state.state === 'plaza-arrived', 'state=' + DM.state.state + ', phase=' + sc.phase);
-  sc.draw(0.016); // de vuelta en la plaza, el dibujo sigue sano
+  const aer = G.scene;
+  check('la Puerta del árbol cruza al AEROPUERTO (escena 3) y el estado del modo lo refleja',
+    aer !== ang && !!aer && aer.id === 'aero' && DM.state.state === 'aero', 'id=' + (aer && aer.id) + ', state=' + DM.state.state);
+  for (let i = 0; i < 25 && aer.phase !== 'free'; i++) aer.update(0.05);
+  check('el aeropuerto amanece en modo libre tras ~1 s de luz (sin paneo largo)', aer.phase === 'free', 'phase=' + aer.phase);
+  aer.draw(0.016); // el aeropuerto se dibuja sin explotar
   // La carpeta de recortes está registrada y, desde el commit
   // 5599034 de Jose («chore: add assets», integrado tal cual por
   // su decisión expresa del 2026-11-21), VERSIONADA en el repo:
@@ -618,6 +636,135 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     fuentes.includes('sanangel/') && fuentes.includes('Libro de la Vida'));
   check('date.js referencia los recortes de San Ángel y los dibuja solo si cargaron (imgOk)',
     ['sanangel/pileta.png', 'sanangel/arbol.png', 'sanangel/manolo.png', 'sanangel/maria.png', 'sanangel/chuy.png', 'sanangel/vela-a.png', 'sanangel/casas-full.png'].every((f) => dateSrc.includes(f)) && dateSrc.includes('imgOk(saPileta)'));
+
+  console.log('\nL) Escena 3 «Aeropuerto»: franja, ventanal y avión, cinta caminadora y cadena de Puertas');
+  // Se llega aquí desde la sección J: la escena activa es el
+  // aeropuerto (aer), recién cruzado por la Puerta del árbol y
+  // ya en modo libre junto a su Puerta de entrada.
+  const AE = DM.debug.AERO, EF = aer.free, EX = EF.chars.ximena, EJ = EF.chars.jose;
+  check('la franja del aeropuerto mide 3600 px (24 s × PACE, el w de su tabla; cámara 0..2960) y sale de DATE_SCENES',
+    aer.worldW === 3600 && aer.worldW === DM.scenes.find((s) => s.id === 'aero').w && (aer.worldW - 640) === 2960 &&
+    AE.worldW === aer.worldW, 'worldW=' + aer.worldW);
+  check('Puertas del aeropuerto: entrada en x=90 y salida en el tramo final (3400–3600)',
+    aer.entryDoorX === 90 && aer.exitDoorX >= 3400 && aer.exitDoorX <= 3600,
+    `entry=${aer.entryDoorX}, exit=${aer.exitDoorX}`);
+  check('se llega junto a la Puerta de entrada (los personajes parten del primer tramo de la franja)',
+    EX.x < 400 && EJ.x < 500, `ximena=${EX.x}, jose=${EJ.x}`);
+  // La cámara llega al fondo de la franja sin salirse.
+  EX.x = aer.worldW - 100; EX.y = aer.groundY;
+  for (let i = 0; i < 30; i++) aer.update(0.05);
+  check('la cámara se asienta al fondo de la franja (pan > 2600, sin pasar de 2960)', aer.pan > 2600 && aer.pan <= 2960.01, `pan=${aer.pan.toFixed(0)}`);
+  let aerDrawOk = true;
+  for (const p of [0, 900, 1800, 2960]) { aer.pan = p; try { aer.draw(0.016); } catch (e) { aerDrawOk = false; } }
+  check('draw() del aeropuerto no explota en ningún punto del paseo (pan 0/900/1800/2960)', aerDrawOk);
+  // El avión: el MISMO recorte de la plaza, grande (~420 px) y
+  // con parallax bajo (0,15), rodando FUERA del ventanal.
+  const px = DM.debug.aeroPlaneXAt;
+  check('el avión del aeropuerto es grande (~420 px) y de parallax bajo (0,15), con su base sobre la pista (y≈206)',
+    AE.avion.w === 420 && Math.abs(AE.avion.par - 0.15) < 1e-9 && AE.avion.baseY >= 195 && AE.avion.baseY <= 215,
+    `w=${AE.avion.w}, par=${AE.avion.par}, baseY=${AE.avion.baseY}`);
+  let monoP = true, prevP = null;
+  for (let t = 0; t <= 100; t += 1) { const x = px(t); if (prevP !== null && x < prevP - 1e-9) monoP = false; prevP = x; }
+  check('aeroPlaneXAt rueda monótona hacia la derecha en su taxi, lento (18 px/s de capa)',
+    monoP && Math.abs((px(20) - px(10)) / 10 - 18) < 0.01, `vel=${((px(20) - px(10)) / 10).toFixed(1)} px/s`);
+  check('el avión espera FUERA de escena al inicio del ciclo y en su pausa (invisible a cualquier cámara)',
+    px(0) + AE.avion.w / 2 < 0 && (px(120) - 2960 * AE.avion.par) - AE.avion.w / 2 > 640,
+    `inicio=${px(0)}, pausa=${px(120)}`);
+  // Visible a través del ventanal en algún (t, pan): su centro
+  // cae en pantalla y su caja vertical queda DENTRO de la banda
+  // de cristal (34..212), con la base sobre la pista.
+  let visOk = false;
+  for (let t = 0; t <= 100 && !visOk; t += 2) {
+    for (let pan = 0; pan <= 2960; pan += 40) {
+      const cx = px(t) - pan * AE.avion.par, h = AE.avion.w * 227 / 760, top = AE.avion.baseY - h;
+      if (cx > 0 && cx < 640 && top >= 30 && AE.avion.baseY <= 216) { visOk = true; break; }
+    }
+  }
+  check('el avión se ve a través del ventanal en algún punto del paseo (centro en pantalla, caja dentro de la banda de cristal)', visOk);
+  check('el aeropuerto reutiliza el recorte avion.png ya registrado (sin assets nuevos) y FUENTES.md anota el reuso',
+    dateSrc.includes('aeroPlaneXAt') && fuentes.includes('Reuso (escena 3'));
+  // La cinta caminadora: tramo central y empuje de +90 px/s.
+  check('la cinta caminadora cubre el tramo central (1200–2400) y empuja a +90 px/s; la escena la expone al motor (sc.belt)',
+    AE.belt.x0 === 1200 && AE.belt.x1 === 2400 && AE.belt.speed === 90 && aer.belt === AE.belt,
+    `belt=${AE.belt.x0}–${AE.belt.x1} @${AE.belt.speed}`);
+  // Fuera de la banda: 1 s a la derecha = solo el input (~150).
+  if (EF.active !== 'ximena') aer.switchActive();
+  EX.x = 600; EX.y = aer.groundY; EJ.x = 500; EJ.y = aer.groundY;
+  const off0 = EX.x;
+  key('ArrowRight', true);
+  for (let i = 0; i < 20; i++) aer.update(0.05);
+  key('ArrowRight', false);
+  check('fuera de la cinta, 1 s a la derecha desplaza ~150 px (solo el input)',
+    EX.x - off0 > 135 && EX.x - off0 < 165, `disp=${(EX.x - off0).toFixed(0)}`);
+  // Sobre la banda SIN input: la cinta sola arrastra ~90 px.
+  EX.x = 1500; EX.y = aer.groundY;
+  const dr0 = EX.x;
+  for (let i = 0; i < 20; i++) aer.update(0.05);
+  check('sobre la cinta, sin tocar nada, la banda arrastra al activo ~90 px en 1 s',
+    EX.x - dr0 > 70 && EX.x - dr0 < 110, `disp=${(EX.x - dr0).toFixed(0)}`);
+  // Sobre la banda CON input: input + cinta ≈ 240 px.
+  EX.x = 1500; EX.y = aer.groundY;
+  const on0 = EX.x;
+  key('ArrowRight', true);
+  for (let i = 0; i < 20; i++) aer.update(0.05);
+  key('ArrowRight', false);
+  check('sobre la cinta, 1 s a la derecha desplaza ~240 px (input 150 + cinta 90)',
+    EX.x - on0 > 215 && EX.x - on0 < 265, `disp=${(EX.x - on0).toFixed(0)}`);
+  // El SEGUIDOR también recibe la cinta: con Jose activo y
+  // quieto FUERA de la banda, Ximena camina a su puesto (a la
+  // izquierda, a 190 px/s) pero la banda le suma +90: su neto
+  // en 1 s es ≈ −100 px, no −190.
+  aer.switchActive(); // activo: Jose
+  EJ.x = 900; EJ.y = aer.groundY; EX.x = 1600; EX.y = aer.groundY; EX.follow = false;
+  const fo0 = EX.x;
+  for (let i = 0; i < 20; i++) aer.update(0.05);
+  check('el seguidor sobre la cinta camina a su puesto frenado por la banda (neto ≈ −100 px en 1 s, no −190)',
+    EX.x < fo0 - 40 && EX.x > fo0 - 160, `x ${fo0} → ${EX.x.toFixed(0)}`);
+  aer.switchActive(); // activo: Ximena otra vez
+  // Cadena de vueltas: la Puerta de ENTRADA del aeropuerto
+  // devuelve a San Ángel, junto a la Puerta del árbol.
+  EX.x = aer.entryDoorX - 10; EX.y = aer.groundY;
+  aer.update(0.05);
+  check('junto a la Puerta de entrada del aeropuerto se ofrece cruzarla (nearDoor)', aer.nearDoor === true && aer.nearDoorX === aer.entryDoorX);
+  key('Space', true); aer.update(0.016); key('Space', false);
+  check('ESPACIO en la Puerta de entrada inicia el cruce de vuelta (fase exitdoor)', aer.phase === 'exitdoor', 'phase=' + aer.phase);
+  for (let i = 0; i < 25 && G.scene === aer; i++) aer.update(0.05);
+  check('la Puerta de entrada del aeropuerto devuelve a San Ángel, junto a la Puerta del árbol',
+    G.scene === ang && DM.state.state === 'sanangel' && Math.abs(ang.free.chars[ang.free.active].x - ang.exitDoorX) < 220,
+    'state=' + DM.state.state + ', x=' + (G.scene === ang ? ang.free.chars[ang.free.active].x.toFixed(0) : '?'));
+  for (let i = 0; i < 25 && ang.phase !== 'free'; i++) ang.update(0.05);
+  // De nuevo al aeropuerto por la Puerta del árbol…
+  const SA2 = ang.free.chars[ang.free.active];
+  SA2.x = ang.exitDoorX - 10; SA2.y = ang.groundY;
+  ang.update(0.05);
+  key('Space', true); ang.update(0.016); key('Space', false);
+  for (let i = 0; i < 25 && G.scene === ang; i++) ang.update(0.05);
+  check('la Puerta del árbol vuelve a cruzar al aeropuerto (la cadena es estable en ambos sentidos)',
+    G.scene === aer && DM.state.state === 'aero', 'state=' + DM.state.state);
+  for (let i = 0; i < 25 && aer.phase !== 'free'; i++) aer.update(0.05);
+  // …y la Puerta de SALIDA del aeropuerto devuelve, POR AHORA,
+  // también a San Ángel junto al árbol (marcador hasta que
+  // exista la escena 4, el castillo flotante).
+  if (EF.active !== 'ximena') aer.switchActive();
+  EX.x = aer.exitDoorX - 10; EX.y = aer.groundY;
+  aer.update(0.05);
+  check('junto a la Puerta de salida del aeropuerto se ofrece cruzarla (nearDoor)', aer.nearDoor === true && aer.nearDoorX === aer.exitDoorX);
+  key('Space', true); aer.update(0.016); key('Space', false);
+  for (let i = 0; i < 25 && G.scene === aer; i++) aer.update(0.05);
+  check('la Puerta de salida del aeropuerto devuelve (por ahora) a San Ángel junto al árbol — marcador hasta la escena 4',
+    G.scene === ang && DM.state.state === 'sanangel' && Math.abs(ang.free.chars[ang.free.active].x - ang.exitDoorX) < 220,
+    'state=' + DM.state.state);
+  for (let i = 0; i < 25 && ang.phase !== 'free'; i++) ang.update(0.05);
+  // Cierre de la cadena: la Puerta de entrada de San Ángel
+  // sigue devolviendo a la plaza en modo libre.
+  const SA3 = ang.free.chars[ang.free.active];
+  SA3.x = ang.entryDoorX - 10; SA3.y = ang.groundY;
+  ang.update(0.05);
+  key('Space', true); ang.update(0.016); key('Space', false);
+  for (let i = 0; i < 25 && G.scene === ang; i++) ang.update(0.05);
+  check('la Puerta de entrada de San Ángel sigue devolviendo a la plaza en modo libre (cadena completa plaza ⇄ San Ángel ⇄ aeropuerto)',
+    G.scene === sc && sc.phase === 'free' && DM.state.state === 'plaza-arrived', 'state=' + DM.state.state + ', phase=' + sc.phase);
+  sc.draw(0.016); // de vuelta en la plaza, el dibujo sigue sano
 
   console.log('\nK) Audio: salto del silencio inicial (AUDIO_SKIP) y botón de silencio');
   // El <audio> del harness es un FakeEl: play/pause no existen

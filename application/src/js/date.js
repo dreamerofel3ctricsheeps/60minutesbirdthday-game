@@ -114,8 +114,8 @@
 
   // ---------- Estado propio del modo ----------
   const D = {
-    active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|sanangel|done
-    scene: null, plazaScene: null, angelScene: null,
+    active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|sanangel|aero|done
+    scene: null, plazaScene: null, angelScene: null, aeroScene: null,
     arrived: false, joseJoined: false,
     clockRunning: false, factor: 1, tap: false,
     muted: false, // preferencia de silencio del botón #dateMuteBtn (persiste entre escenas y reingresos de la sesión)
@@ -418,7 +418,38 @@
     return 0.72 + 0.28 * Math.sin(t * 6.3 + i * 1.93) * Math.sin(t * 2.7 + i * 0.71);
   }
 
-  // ---------- Motor de franja libre (compartido plaza ⇄ San Ángel) ----------
+  // ---------- Escena 3: AEROPUERTO (interior dibujado) ----------
+  // Terminal de mañana fría, sin assets nuevos: el interior se
+  // dibuja por código (paramétrico en pan) y el único recorte es
+  // el avión YA registrado (assets/date/avion.png, FUENTES.md),
+  // reutilizado grande FUERA del ventanal. Geometría: 3600 px de
+  // mundo (el w de su bloque en la tabla maestra: 24 s × PACE),
+  // Puerta de entrada a la izquierda (x=90) y de salida al final
+  // (x=3500). La cinta caminadora ocupa el trecho central
+  // (1200–2400) y empuja a +90 px/s a quien esté sobre ella (el
+  // motor compartido la aplica vía sc.belt, ver updateStripFree).
+  const AERO = {
+    worldW: sceneOf('aero').w, entryDoorX: 90, exitDoorX: 3500, groundY: 316, horizon: 240,
+    belt: { x0: 1200, x1: 2400, speed: 90 },
+    // El avión en rodaje (taxiing) por la pista: vive en su capa
+    // (parallax 0,15) y su x de capa avanza a 18 px/s durante
+    // 100 s — de −500 (fuera de escena a cualquier cámara) a
+    // 1300 (fuera por la derecha a cualquier cámara) — y espera
+    // ahí el resto del ciclo de 140 s. El salto de vuelta al
+    // inicio del ciclo ocurre con el avión invisible, así que
+    // nunca se le ve teletransportarse.
+    avion: { w: 420, par: 0.15, baseY: 206, ciclo: 140, taxi: 100, vel: 18, x0: -500, x1: 1300 },
+  };
+  // Centro del avión del aeropuerto (px de SU capa) en el
+  // tiempo t: monótono creciente durante el rodaje y quieto
+  // fuera de escena durante la espera del ciclo.
+  function aeroPlaneXAt(t) {
+    const f = AERO.avion, ph = ((t % f.ciclo) + f.ciclo) % f.ciclo;
+    if (ph >= f.taxi) return f.x1;
+    return f.x0 + ph * f.vel;
+  }
+
+  // ---------- Motor de franja libre (compartido plaza ⇄ San Ángel ⇄ aeropuerto) ----------
   // Las dos escenas 2D son franjas caminables con el mismo modo
   // libre: personaje activo con el input (TAB alterna), el otro
   // siguiendo a su puesto con histéresis, cámara que sigue al
@@ -440,6 +471,12 @@
   function animStepChar(ch, physically, dt) {
     if (physically) { ch.animWalk = true; ch.idleT = 0; }
     else if (ch.animWalk) { ch.idleT += dt; if (ch.idleT >= 0.12) ch.animWalk = false; }
+  }
+  // ¿Está el personaje sobre la cinta caminadora de la escena?
+  // (la banda vive sobre la línea de caminata: basta la x dentro
+  // del trecho y la y en la banda de pies de la franja).
+  function onBelt(sc, ch) {
+    return !!sc.belt && ch.x >= sc.belt.x0 && ch.x <= sc.belt.x1 && Math.abs(ch.y - sc.groundY) <= 40;
   }
   function updateStripFree(sc, dt) {
     const F = sc.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
@@ -476,6 +513,16 @@
       }
     }
     animStepChar(B, B.follow, dt);
+    // --- cinta caminadora opcional de la escena (sc.belt, el
+    // aeropuerto): quien esté SOBRE la banda recibe su deriva
+    // (+x) sumada a su movimiento, sea el activo o el seguidor.
+    // La deriva mueve la posición pero no cuenta como caminata
+    // (ni distancia ni ciclo): sobre una cinta real se desliza
+    // sin dar pasos.
+    if (sc.belt) {
+      if (onBelt(sc, A)) A.x = clampX(A.x + sc.belt.speed * dt);
+      if (onBelt(sc, B)) B.x = clampX(B.x + sc.belt.speed * dt);
+    }
     // --- la cámara sigue al activo dentro de la franja ---
     const camT = Math.max(0, Math.min(sc.worldW - 640, A.x - 320));
     sc.pan += (camT - sc.pan) * Math.min(1, dt * 6);
@@ -616,8 +663,10 @@
       // siempre, al final de la franja (mundo x=4250, ~100 px de
       // margen al borde), justo donde ancla la vista lejana de
       // San Ángel que se ve en el fondo (PLAZA_FX.vistaWorldX).
-      // Cruzarla lleva a la escena de San Ángel; su Puerta del
-      // árbol devuelve aquí.
+      // Cruzarla lleva a la escena de San Ángel; la cadena
+      // sigue desde ahí (la Puerta del árbol de San Ángel va al
+      // aeropuerto y las de allá devuelven a San Ángel, cuya
+      // Puerta de entrada trae de vuelta aquí).
       this.exitDoorX = PLAZA_FX.vistaWorldX; this.nearExit = false;
     }
     // Altura en pantalla (px lógicos) de un segmento vertical con
@@ -1039,6 +1088,18 @@
       this.pan = 0; this.nearDoor = false;
       this.resetCameo();
     }
+    // Llegada desde el aeropuerto: se reaparece junto a la
+    // Puerta del árbol (la del fondo de la franja), tras el
+    // fundido de luz de la salida de allá. El cameo NO se
+    // reinicia: es la misma visita a San Ángel.
+    enterFromAero() {
+      this.phase = 'light'; this.phaseT = 0;
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      A.x = this.exitDoorX - 70; A.y = this.groundY;
+      B.x = this.exitDoorX - 140; B.y = this.groundY; B.follow = false;
+      this.pan = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
+      this.nearDoor = false;
+    }
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
@@ -1052,10 +1113,14 @@
         return;
       }
       if (this.phase === 'exitdoor') {
-        // De vuelta a la plaza por la Puerta (la que se haya
-        // usado: la del árbol o la de entrada). Sin reloj nuevo.
+        // La Puerta usada manda en la cadena: la de ENTRADA
+        // vuelve a la plaza; la del ÁRBOL sigue el paseo al
+        // AEROPUERTO (escena 3). Sin reloj nuevo en ningún caso.
         this.phaseT += dt;
-        if (this.phaseT >= 1) travelTo('plaza');
+        if (this.phaseT >= 1) {
+          if (this.usedDoorX === this.exitDoorX) travelTo('aero');
+          else travelTo('plaza');
+        }
         return;
       }
       if (this.phase === 'free') {
@@ -1230,15 +1295,287 @@
     }
   }
 
-  // Viaje entre la plaza y San Ángel por la Puerta. NO toca el
-  // reloj ni la canción: si el audio ya terminó, las escenas
-  // siguen en silencio (nada de play() forzado).
-  function travelTo(dest) {
+  // =========================================================
+  // ESCENA 3: EL AEROPUERTO — terminal por capas (canvas 2D)
+  // El interior se dibuja por código en orden de profundidad:
+  // el EXTERIOR (cielo, pista y el avión en rodaje) se pinta
+  // primero y la terminal (cristal, montantes, pared, piso,
+  // cinta, columnas, letreros) SOBRE él, así el avión se ve
+  // «a través» del ventanal continuo. Luz fría de mañana, en
+  // contraste con el dorado de la plaza y el anochecer de San
+  // Ángel. Sin multitudes: solo Ximena y Jose, con el motor de
+  // franja compartido (esta escena aporta además su cinta).
+  // =========================================================
+  class AeroScene {
+    constructor() {
+      this.id = 'aero';
+      this.phase = 'light'; this.t = 0; this.phaseT = 0;
+      this.worldW = AERO.worldW; this.groundY = AERO.groundY; this.horizon = AERO.horizon;
+      this.entryDoorX = AERO.entryDoorX; this.exitDoorX = AERO.exitDoorX;
+      this.belt = AERO.belt; // la cinta caminadora (el motor la aplica vía sc.belt)
+      this.pan = 0; this.joseExpr = 'happy';
+      this.nearDoor = false; this.nearDoorX = this.entryDoorX; this.usedDoorX = this.entryDoorX;
+      this.free = makeStripChars(210, 280, this.groundY);
+      // Maletas sueltas repartidas por la terminal (props
+      // decorativos, sin colisión como en las demás franjas):
+      // se ordenan por Y con los personajes al dibujar.
+      this.bags = [
+        { x: 350, y: 322, w: 26, color: '#c65b4e' },
+        { x: 388, y: 330, w: 20, color: '#4e7fc6' },
+        { x: 980, y: 332, w: 24, color: '#5aa469' },
+        { x: 2650, y: 324, w: 27, color: '#d9a441' },
+        { x: 3050, y: 332, w: 22, color: '#7a5fa8' },
+        { x: 3350, y: 326, w: 25, color: '#4fa8a0' },
+      ];
+      // El carrito de equipaje, ya pasado el trecho de la cinta.
+      this.cartX = 2780; this.cartY = 332;
+      // Letreros colgantes de salidas (x de mundo).
+      this.signsX = [800, 2050, 3150];
+    }
+    switchActive() {
+      if (this.phase !== 'free') return;
+      this.free.active = this.free.active === 'ximena' ? 'jose' : 'ximena';
+      if (G.input && G.input.flush) G.input.flush();
+    }
+    // Llegada desde San Ángel (por su Puerta del árbol): fundido
+    // de luz (~1 s) y la escena queda explorable en modo libre.
+    enterFromSanAngel() {
+      this.phase = 'light'; this.phaseT = 0;
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      A.x = this.entryDoorX + 120; A.y = this.groundY;
+      B.x = this.entryDoorX + 190; B.y = this.groundY; B.follow = false;
+      this.pan = 0; this.nearDoor = false;
+    }
+    beginExit() {
+      if (this.phase !== 'free') return;
+      this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
+      G.sfx('door');
+    }
+    update(dt) {
+      this.t += dt;
+      if (this.phase === 'light') {
+        this.phaseT += dt;
+        if (this.phaseT >= 1) { this.phase = 'free'; this.phaseT = 0; }
+        return;
+      }
+      if (this.phase === 'exitdoor') {
+        // AMBAS Puertas del aeropuerto devuelven por ahora a
+        // San Ángel, junto a su Puerta del árbol: la de SALIDA
+        // seguirá al castillo flotante cuando exista la escena
+        // 4 — hoy es un MARCADOR, no la conexión definitiva.
+        this.phaseT += dt;
+        if (this.phaseT >= 1) travelTo('sanangel', 'tree');
+        return;
+      }
+      if (this.phase === 'free') {
+        this.phaseT += dt;
+        this.updateFree(dt);
+      }
+    }
+    updateFree(dt) {
+      const F = this.free, A = F.chars[F.active];
+      const dE = Math.abs(A.x - this.entryDoorX), dX = Math.abs(A.x - this.exitDoorX);
+      this.nearDoor = Math.min(dE, dX) < 58 && Math.abs(A.y - this.groundY) < 40;
+      this.nearDoorX = dE <= dX ? this.entryDoorX : this.exitDoorX;
+      if (this.nearDoor && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
+      updateStripFree(this, dt);
+    }
+    draw(dt) {
+      const c = G.ovCtx; if (!c) return;
+      c.setTransform(2, 0, 0, 2, 0, 0);
+      c.clearRect(0, 0, 640, 360);
+      const t = this.t, pan = this.pan, groundY = this.groundY, horizon = this.horizon;
+      const winTop = 34, winBot = 212; // la banda del ventanal continuo
+      // ===== el EXTERIOR, detrás del cristal =====
+      // cielo claro de mañana sobre la banda de cristal
+      const sky = c.createLinearGradient(0, 0, 0, winBot);
+      sky.addColorStop(0, '#a8cbe4'); sky.addColorStop(0.6, '#d9ecf5'); sky.addColorStop(1, '#f2e3c2');
+      c.fillStyle = sky; c.fillRect(0, 0, 640, winBot);
+      // el campo de vuelo: franja verde lejana y la pista, con
+      // su línea central desfilando al parallax del exterior
+      c.fillStyle = '#a9bf9a'; c.fillRect(0, 168, 640, 20);
+      c.fillStyle = '#98a2a9'; c.fillRect(0, 188, 640, winBot - 188);
+      c.fillStyle = 'rgba(255,255,255,0.55)';
+      const dashOff = -(((pan * AERO.avion.par) % 46) + 46) % 46;
+      for (let x = dashOff; x < 640; x += 46) c.fillRect(x, 198, 22, 3);
+      // EL AVIÓN (el mismo recorte de la plaza, ya registrado),
+      // grande y rodando lento por la pista, FUERA del ventanal
+      if (imgOk(avionImg)) {
+        const aw = AERO.avion.w, ah = aw * avionImg.naturalHeight / avionImg.naturalWidth;
+        const ax = aeroPlaneXAt(t) - pan * AERO.avion.par;
+        if (ax + aw / 2 > -10 && ax - aw / 2 < 650) c.drawImage(avionImg, ax - aw / 2, AERO.avion.baseY - ah, aw, ah);
+      }
+      // el cristal: un velo frío sobre todo el exterior
+      c.fillStyle = 'rgba(190,218,238,0.16)'; c.fillRect(0, winTop, 640, winBot - winTop);
+      // ===== la TERMINAL, sobre el exterior =====
+      // techo con sus tiras de luz (paramétricas en pan)
+      c.fillStyle = '#dde4e8'; c.fillRect(0, 0, 640, winTop);
+      c.fillStyle = 'rgba(255,255,246,0.85)';
+      const lightOff = -(pan % 220);
+      for (let x = lightOff; x < 640; x += 220) c.fillRect(x + 30, 12, 90, 7);
+      // montantes del ventanal: viven en el mundo (parallax 1),
+      // se mueven con la cámara y el exterior se ve ENTRE ellos;
+      // los rieles horizontales son continuos en pantalla
+      c.fillStyle = '#5b6a72';
+      const mull0 = Math.floor(pan / 110) * 110;
+      for (let wx = mull0; wx < pan + 640 + 110; wx += 110) c.fillRect(wx - pan - 3, winTop, 6, winBot - winTop);
+      c.fillRect(0, winTop - 4, 640, 6); c.fillRect(0, winBot - 2, 640, 6);
+      // pared bajo el ventanal, con sus paneles
+      const wall = c.createLinearGradient(0, winBot, 0, horizon);
+      wall.addColorStop(0, '#ccd6db'); wall.addColorStop(1, '#aebbc2');
+      c.fillStyle = wall; c.fillRect(0, winBot, 640, horizon - winBot);
+      c.strokeStyle = 'rgba(90,110,120,0.35)'; c.lineWidth = 1;
+      const seamOff = -(pan % 130);
+      for (let x = seamOff; x < 640; x += 130) { c.beginPath(); c.moveTo(x, winBot + 4); c.lineTo(x, horizon - 3); c.stroke(); }
+      // piso claro y pulido, con su retícula tenue
+      const fl = c.createLinearGradient(0, horizon, 0, 360);
+      fl.addColorStop(0, '#e9edee'); fl.addColorStop(1, '#bfc9ce');
+      c.fillStyle = fl; c.fillRect(0, horizon, 640, 360 - horizon);
+      c.strokeStyle = 'rgba(90,110,120,0.20)';
+      const tileOff = -(pan % 46);
+      for (let x = tileOff; x < 640; x += 46) { c.beginPath(); c.moveTo(x, horizon + 3); c.lineTo(x - 12, 360); c.stroke(); }
+      for (const y of [262, 288, 318, 352]) { c.beginPath(); c.moveTo(0, y); c.lineTo(640, y); c.stroke(); }
+      // la CINTA CAMINADORA sobre la línea de caminata (trecho
+      // central de la franja): banda oscura con bordes de
+      // seguridad y flechas que desfilan en su dirección (+x,
+      // la misma de la deriva que aplica el motor)
+      const bx0 = this.belt.x0 - pan, bx1 = this.belt.x1 - pan;
+      if (bx1 > -10 && bx0 < 650) {
+        const by0 = groundY - 15, by1 = groundY + 17;
+        c.fillStyle = '#3d4a52'; c.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+        c.fillStyle = '#d9a83c'; c.fillRect(bx0, by0, bx1 - bx0, 3); c.fillRect(bx0, by1 - 3, bx1 - bx0, 3);
+        c.fillStyle = 'rgba(255,255,255,0.45)';
+        const chOff = (t * this.belt.speed) % 46;
+        for (let x = bx0 - 46 + chOff; x < bx1 - 8; x += 46) {
+          if (x < bx0 + 2) continue;
+          c.beginPath(); c.moveTo(x, by0 + 8); c.lineTo(x + 9, (by0 + by1) / 2); c.lineTo(x, by1 - 8); c.lineTo(x + 3.5, (by0 + by1) / 2); c.closePath(); c.fill();
+        }
+      }
+      // columnas de la terminal (mundo, una cada 700 px)
+      for (let wx = 500; wx < this.worldW; wx += 700) {
+        const sx = wx - pan;
+        if (sx < -50 || sx > 690) continue;
+        c.fillStyle = '#d3dbdf'; c.fillRect(sx - 15, 26, 30, groundY - 20);
+        c.fillStyle = 'rgba(90,110,120,0.25)'; c.fillRect(sx - 15, 26, 6, groundY - 20);
+        c.fillStyle = 'rgba(255,255,255,0.5)'; c.fillRect(sx + 9, 26, 5, groundY - 20);
+        c.fillStyle = '#aebbc2'; c.fillRect(sx - 18, 26, 36, 10); // capitel
+      }
+      // letreros colgantes de salidas (mundo)
+      for (const wx of this.signsX) {
+        const sx = wx - pan;
+        if (sx < -90 || sx > 730) continue;
+        this.drawSign(c, sx);
+      }
+      // las dos Puertas de la franja (la misma Puerta de siempre)
+      const usedOpen = this.phase === 'exitdoor' ? Math.min(1, this.phaseT) : 0;
+      const entryOpen = this.phase === 'light' && this.phaseT < 0.9 ? 1 - this.phaseT / 0.9 : (this.usedDoorX === this.entryDoorX ? usedOpen : 0);
+      drawDoor2DAt(c, this.entryDoorX - pan, groundY, entryOpen);
+      drawDoor2DAt(c, this.exitDoorX - pan, groundY, this.usedDoorX === this.exitDoorX ? usedOpen : 0);
+      // capa ordenada por Y: las maletas, el carrito y los
+      // personajes (la pileta de San Ángel manda este patrón)
+      const items = [];
+      for (const b of this.bags) items.push({ y: b.y, fn: () => this.drawSuitcase(c, b.x - pan, b.y, b.w, b.color) });
+      items.push({ y: this.cartY, fn: () => this.drawCart(c, pan) });
+      const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
+      for (const ch of chars) {
+        items.push({
+          y: ch.y, fn: () => {
+            // el reflejo suave del piso pulido: la elipse tenue
+            // común, acorde a interior
+            c.fillStyle = 'rgba(25,35,50,0.16)';
+            c.beginPath(); c.ellipse(ch.x - pan, ch.y + 3, 19, 4.5, 0, 0, 6.3); c.fill();
+            let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
+            if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = walkIdxFor(ch.id, ch.dist); bobY = 0; }
+            drawChar2DAt(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
+          },
+        });
+      }
+      items.sort((a, b) => a.y - b.y);
+      for (const it of items) it.fn();
+      if (this.phase === 'free' && this.nearDoor) G.prompt(c, 'ESPACIO: cruzar la Puerta', this.nearDoorX - pan, groundY - 96);
+      // luz de la Puerta: se disipa al llegar, crece al salir
+      if (this.phase === 'light') { c.fillStyle = `rgba(255,244,214,${(1 - Math.min(1, this.phaseT)).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+      if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+    }
+    // Una maleta con ruedas y asa, en el lenguaje plano con
+    // borde de los props dibujados del juego.
+    drawSuitcase(c, cx, baseY, w, color) {
+      if (cx < -40 || cx > 680) return;
+      const h = w * 1.22;
+      c.fillStyle = 'rgba(25,35,50,0.15)';
+      c.beginPath(); c.ellipse(cx, baseY + 2, w * 0.55, 3.5, 0, 0, 6.3); c.fill();
+      c.fillStyle = color;
+      c.beginPath();
+      if (c.roundRect) c.roundRect(cx - w / 2, baseY - h, w, h - 3, 4); else c.rect(cx - w / 2, baseY - h, w, h - 3);
+      c.fill();
+      c.strokeStyle = 'rgba(20,26,34,0.55)'; c.lineWidth = 1.4; c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.20)'; c.fillRect(cx - 2, baseY - h + 3, 4, h - 9); // la correa central
+      c.strokeStyle = 'rgba(20,26,34,0.7)'; c.lineWidth = 1.6;
+      c.beginPath(); c.moveTo(cx - w * 0.18, baseY - h); c.lineTo(cx - w * 0.18, baseY - h - 5); c.lineTo(cx + w * 0.18, baseY - h - 5); c.lineTo(cx + w * 0.18, baseY - h); c.stroke(); // el asa
+      c.fillStyle = '#22282e';
+      c.beginPath(); c.arc(cx - w * 0.3, baseY - 1.5, 2.4, 0, 6.3); c.arc(cx + w * 0.3, baseY - 1.5, 2.4, 0, 6.3); c.fill(); // las ruedas
+    }
+    // El carrito de equipaje: bastidor de postes y barra, la
+    // plataforma y tres maletas apiladas de mayor a menor.
+    drawCart(c, pan) {
+      const cx = this.cartX - pan, baseY = this.cartY;
+      if (cx < -70 || cx > 710) return;
+      c.fillStyle = 'rgba(25,35,50,0.15)';
+      c.beginPath(); c.ellipse(cx, baseY + 2, 34, 4, 0, 0, 6.3); c.fill();
+      c.strokeStyle = '#7d8890'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(cx - 24, baseY); c.lineTo(cx - 24, baseY - 104); c.moveTo(cx + 24, baseY); c.lineTo(cx + 24, baseY - 104); c.stroke();
+      c.fillStyle = '#7d8890'; c.fillRect(cx - 27, baseY - 3, 54, 4); // la plataforma
+      this.drawSuitcase(c, cx - 3, baseY - 5, 34, '#4e7fc6');
+      this.drawSuitcase(c, cx - 1, baseY - 5 - 38, 29, '#c65b4e');
+      this.drawSuitcase(c, cx + 1, baseY - 5 - 38 - 32, 24, '#5aa469');
+      c.strokeStyle = '#7d8890'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(cx - 24, baseY - 104); c.lineTo(cx + 24, baseY - 104); c.stroke(); // la barra de empuje
+    }
+    // Letrero colgante de salidas: dos varillas desde el techo,
+    // tablero oscuro, pictograma de avión despegando dibujado
+    // por código, el texto «Salidas» y una flecha (sin emojis).
+    drawSign(c, cx) {
+      c.strokeStyle = 'rgba(60,72,80,0.8)'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(cx - 44, 0); c.lineTo(cx - 44, 40); c.moveTo(cx + 44, 0); c.lineTo(cx + 44, 40); c.stroke();
+      c.fillStyle = '#22303a';
+      c.beginPath();
+      if (c.roundRect) c.roundRect(cx - 66, 40, 132, 42, 6); else c.rect(cx - 66, 40, 132, 42);
+      c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1; c.stroke();
+      // el pictograma: un avión en diagonal de despegue
+      c.save(); c.translate(cx - 42, 61); c.rotate(-0.55);
+      c.fillStyle = '#f4f8fa';
+      c.beginPath(); c.ellipse(0, 0, 13, 3.4, 0, 0, 6.3); c.fill(); // fuselaje
+      c.beginPath(); c.moveTo(-1, 1); c.lineTo(6, 10); c.lineTo(10, 1); c.closePath(); c.fill(); // ala
+      c.beginPath(); c.moveTo(-12, -1); c.lineTo(-8, -8); c.lineTo(-6, -1); c.closePath(); c.fill(); // cola
+      c.restore();
+      c.fillStyle = '#f4f8fa'; c.font = 'bold 13px sans-serif'; c.textAlign = 'left';
+      c.fillText('Salidas', cx - 22, 66);
+      c.strokeStyle = '#ffd23f'; c.lineWidth = 2.4;
+      c.beginPath(); c.moveTo(cx + 34, 61); c.lineTo(cx + 54, 61); c.moveTo(cx + 47, 54); c.lineTo(cx + 55, 61); c.lineTo(cx + 47, 68); c.stroke(); // la flecha
+    }
+  }
+
+  // Viajes entre escenas por la Puerta (la cadena del paseo:
+  // plaza ⇄ San Ángel ⇄ aeropuerto). NO tocan el reloj ni la
+  // canción: si el audio ya terminó, las escenas siguen en
+  // silencio (nada de play() forzado). `at` distingue la llegada
+  // a San Ángel: 'plaza' = por su Puerta de entrada (desde la
+  // plaza); 'tree' = junto a su Puerta del árbol (desde el
+  // aeropuerto, cuyas dos Puertas devuelven ahí por ahora).
+  function travelTo(dest, at) {
     if (dest === 'sanangel') {
       if (!D.angelScene) D.angelScene = new SanAngelScene();
       D.scene = D.angelScene;
-      D.angelScene.enterFromPlaza();
+      if (at === 'tree') D.angelScene.enterFromAero();
+      else D.angelScene.enterFromPlaza();
       D.state = 'sanangel';
+      G.setScene(D.scene);
+    } else if (dest === 'aero') {
+      if (!D.aeroScene) D.aeroScene = new AeroScene();
+      D.scene = D.aeroScene;
+      D.aeroScene.enterFromSanAngel();
+      D.state = 'aero';
       G.setScene(D.scene);
     } else {
       D.scene = D.plazaScene;
@@ -1256,7 +1593,7 @@
     if (G.S) G.S.phase = 'date';
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.add('date-mode');
     D.scene = new DateScene(onDone);
-    D.plazaScene = D.scene; D.angelScene = null;
+    D.plazaScene = D.scene; D.angelScene = null; D.aeroScene = null;
     G.setScene(D.scene);
   }
   function stop() {
@@ -1265,7 +1602,7 @@
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('date-mode');
     W.closet.target = 0; W.xDoorOpen = false;
-    D.scene = null; D.plazaScene = null; D.angelScene = null;
+    D.scene = null; D.plazaScene = null; D.angelScene = null; D.aeroScene = null;
   }
   G.DateMode = {
     start, stop, setPaused, verify: verifyCode, dateNow,
@@ -1276,7 +1613,7 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, candleGlow, travelTo, PACE,
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt,
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.
