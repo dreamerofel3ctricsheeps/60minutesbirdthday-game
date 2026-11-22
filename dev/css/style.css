@@ -600,3 +600,60 @@ body.date-mode #dateMuteBtn { display: flex; }
     transition: opacity .35s ease; }
   #inv.chrome-off { opacity: 0; }
 }
+
+/* ---------- Modo vertical: HUD y elección COMPACTOS ----------
+   Playtest de Jose en su iPhone en vertical (captura IMG_7628,
+   2026-11-22): la distribución le gusta (juego arriba, chat en
+   el medio, banda de controles abajo), pero el HUD apilaba
+   marca/botones + SOSPECHA + SUEÑO + RUIDO/FIESTA en ~4 filas
+   (~145px) y la elección de personaje (tarjetas con retrato de
+   52px y los stats en dos líneas) cubría casi todo el chat.
+   Aquí SOLO cambia el retrato (las mismas consultas que espeja
+   el portraitMQ de game.js): horizontal y escritorio quedan
+   byte a byte como estaban.
+   HUD: fila de botones delgada + DOS filas de medidores en
+   rejilla 2×2, sin perder ningún dato — Sospecha con su %,
+   Sueño con segmentos y estado, Ruido con su % y Fiesta con
+   barra y estrellas. La marca se reduce a icono + «1 MINUTO»
+   (el font-size:0 de .brand apaga el texto suelto «PARA LA
+   FIESTA» y el <b> recupera su talla). El medidor de sueño
+   sigue el tratamiento ya aceptado en el compacto horizontal:
+   fuera la etiqueta larga, segmentos algo menores y el estado
+   con ellipsis en vez del min-width:128px de la regla base
+   (que aquí también lo habría hecho invadir al vecino).
+   Elección: las tarjetas de personaje (.card, SOLO las usa
+   ui.assign — el carrusel es .pcard y las opciones de texto
+   son .opt, intactas) pasan a FILAS horizontales: retrato de
+   38px, nombre y una sola línea de stats·nota (la nota larga
+   se recorta con ellipsis; las cortas — «Suma ruido», «Bonus
+   por objeto» — caben enteras), el % de probabilidad a la
+   derecha, alto mínimo de 48px como objetivo táctil y el
+   foco/hover se sigue marcando con el borde amarillo (fuera
+   el levantado translateY, que en una lista no significa
+   nada). Una elección de 4 roomies pasa de ~410px (captura
+   de Jose) a ~250px: el chat conserva contexto sobre ella. */
+@media (max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait) {
+  /* HUD: botones en una fila delgada y medidores 2×2 */
+  #hud { gap: 6px 8px; padding: 6px 10px; }
+  .brand { font-size: 0; letter-spacing: 0; }
+  .brand b { font-size: 12px; letter-spacing: .5px; }
+  .brandico { width: 19px; height: 19px; }
+  #pausebtn, #settingsbtn, #phonebtn { padding: 5px 9px; font-size: 12px; }
+  #hud .meter { flex: 1 0 47%; grid-template-columns: auto 1fr auto; gap: 5px; min-width: 0; }
+  .meter label { font-size: 10px; letter-spacing: 0; }
+  .meter .val { min-width: 0; font-size: 11px; }
+  #m-sleep label { display: none; }
+  #m-sleep .val { min-width: 0; max-width: 104px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .segs { gap: 2px; }
+  .seg { width: 9px; height: 11px; }
+  /* Elección de personaje: filas compactas en vez de tarjetas */
+  .cards { flex-direction: column; gap: 5px; }
+  .card { flex-direction: row; align-items: center; text-align: left; gap: 8px; padding: 5px 9px; min-height: 48px; }
+  .card img { width: 38px; height: 38px; flex: none; }
+  .card b { font-size: 14px; white-space: nowrap; }
+  .card small { text-align: left; font-size: 10.5px; white-space: nowrap; }
+  .card small.note { min-height: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .card strong { margin-left: auto; font-size: 15px; }
+  .card:hover:not(:disabled) { transform: none; }
+  .card:focus-visible { border-color: var(--yellow); outline: none; }
+}
