@@ -437,7 +437,7 @@
     pizza: 'Baja la pizza por la escalera cuidando el equilibrio.',
     sonambula: 'Llega hasta Ximena sonámbula antes que José.',
     memoria: 'Da vuelta las cajas y junta más parejas que José.',
-    imagen: 'Dos paneles iguales y uno distinto: señálalo antes que José. Carrera a 5 puntos.',
+    imagen: 'Las imágenes se destapan poco a poco tras una cubierta: al revelarse, señala el panel distinto antes que José. Carrera a 5 puntos.',
     cactus: 'Esquiva los cactus rodantes y sobrevive la ronda.',
     cactus2: 'Carrera lateral en el mismo carril que Pollito: salta los cactus que ruedan de izquierda a derecha. Ojo con los cambios de velocidad y de gravedad.',
     repisas: 'Escalada infinita por el librero sin techo: gana quien suba más alto en 60 s.',

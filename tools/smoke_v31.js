@@ -1174,9 +1174,40 @@ const tick = () => new Promise((r) => setImmediate(r));
     }
     check('imagen: TODA ronda tiene exactamente UNA imagen distinta (garantizado por construcción)', allOneDiff);
     check('imagen: la sutileza crece por rondas (color → cantidad/accesorio → raya/adorno/espejo)', levelsOk);
+    // --- La imagen distinta: FASE DE DESTAPE (cubierta estilo Mario Party) ---
+    {
+      const d = new Sc.ImageDuel('natalia', () => {});
+      d.st = 'play';
+      check('imagen: la ronda NACE cubierta (fase uncover, fracción visible 0)', d.phase === 'uncover' && d.visibleFrac() === 0, `phase=${d.phase} frac=${d.visibleFrac()}`);
+      check('imagen: el orden de destape es UNA permutación de las 24 celdas (una sola máscara, compartida por los 3 paneles)',
+        d.maskPos.length === 24 && new Set(d.maskPos).size === 24 && d.maskPos.every((v) => v >= 0 && v < 24),
+        JSON.stringify(d.maskPos));
+      // cellCover(cell) no recibe el panel: la opacidad de cada celda es la
+      // misma en los 3 paneles en todo instante POR CONSTRUCCIÓN; aquí se
+      // verifica la progresión temporal de esa única máscara.
+      const fr = [];
+      for (let s = 0; s < 7; s++) { for (let i = 0; i < 20; i++) d.update(0.05); fr.push(d.visibleFrac()); }
+      check('imagen: durante el destape la fracción visible CRECE en cada segundo muestreado (ni todo al principio ni todo al final)',
+        fr.every((v, i) => i === 0 || v > fr[i - 1]) && fr[0] > 0 && fr[0] < 0.45 && fr[6] > 0.8, fr.map((v) => v.toFixed(2)).join(','));
+      for (let i = 0; i < 10 && d.phase === 'uncover'; i++) d.update(0.05); // margen por la suma flotante de dt
+      check('imagen: a los ~7 s la cubierta desaparece y se abre la elección (fase show; el reloj de José arranca de cero)',
+        d.phase === 'show' && d.phaseT < 0.6 && d.josePick === null, `phase=${d.phase} phaseT=${d.phaseT} josePick=${d.josePick}`);
+    }
+    {
+      // entrada bloqueada durante el destape: ni el jugador ni José resuelven
+      const d = new Sc.ImageDuel('natalia', () => {});
+      d.st = 'play'; d.joseAt = 0; d.joseAcc = 1; // José «listo para responder ya»… pero la fase manda
+      d.choose(d.diffIdx); // acierto durante el destape: NO cuenta ni penaliza
+      d.clickIdx = d.diffIdx; // ni un clic encolado
+      for (let i = 0; i < 60; i++) d.update(0.05); // ~3 s de destape
+      check('imagen: elegir durante el destape NO resuelve la ronda ni mueve puntos (jugador ni José)',
+        d.phase === 'uncover' && d.pPick === null && d.josePick === null && d.pw === 0 && d.bw === 0 && d.clickIdx === -1,
+        `phase=${d.phase} pPick=${d.pPick} josePick=${d.josePick} pw=${d.pw} bw=${d.bw} clickIdx=${d.clickIdx}`);
+    }
+    const skipUncover = (d) => { for (let i = 0; i < 300 && d.phase === 'uncover'; i++) d.update(0.05); }; // deja correr la cuenta atrás del destape
     const playImg = (mutate) => {
       const d = new Sc.ImageDuel('natalia', () => {});
-      d.st = 'play'; mutate(d);
+      d.st = 'play'; skipUncover(d); mutate(d);
       for (let i = 0; i < 400 && (d.st === 'play' || d.st === 'rend'); i++) d.update(0.05); // hasta que la ronda puntuada/anulada AVANZA
       return d;
     };
@@ -1241,9 +1272,11 @@ const tick = () => new Promise((r) => setImmediate(r));
         rd.draw(0.016);
         check('draw sin errores: carrera con banner de gravedad lunar y cactus avisando', true);
         const id2 = new Sc.ImageDuel('natalia', () => {});
-        id2.st = 'play'; id2.draw(0.016);
+        id2.st = 'play'; id2.draw(0.016); // destape con la cubierta entera
+        id2.uncoverT = 3.5; id2.draw(0.016); // destape a medias: losetas desvaneciéndose
+        id2.phase = 'show'; id2.draw(0.016);
         id2.phase = 'reveal'; id2.pPick = (id2.diffIdx + 1) % 3; id2.josePick = id2.diffIdx; id2.draw(0.016);
-        check('draw sin errores: imagen distinta en muestra y en revelado (marco dorado)', true);
+        check('draw sin errores: imagen distinta en destape, en muestra y en revelado (marco dorado)', true);
         const bd = new Sc.BalloonDuel('natalia', () => {});
         bd.st = 'play'; bd.draw(0.016);
         bd.phase = 'fly'; bd.fly.p = 0.6; bd.p.elev = 120; bd.stars = [{ x: 0, y: 100, z: 0, t: 0.2 }];
