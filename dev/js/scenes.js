@@ -517,7 +517,10 @@
     tick(dt) {
       this.T += dt; W.updateFx(dt);
       if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
-      if (this.st === 'count') { const b = Math.ceil(this.stT - 0.4); this.stT -= dt; if (Math.ceil(this.stT - 0.4) !== b) G.sfx(this.stT < 0.5 ? 'ok' : 'msg'); G.input.flush(); if (this.stT <= 0) this.st = 'play'; return false; }
+      // Al entrar la cuenta en su ÚLTIMO segundo (el número mostrado pasa a 1),
+      // el chat se cierra en móvil: phone.duelClose decide según el modo
+      // (pedido de Jose: a punto de jugar, el chat abierto no tiene sentido).
+      if (this.st === 'count') { const b = Math.ceil(this.stT - 0.4); this.stT -= dt; const n = Math.ceil(this.stT - 0.4); if (n !== b) { G.sfx(this.stT < 0.5 ? 'ok' : 'msg'); if (b > 1 && n <= 1 && G.ui && G.ui.phone) G.ui.phone.duelClose(); } G.input.flush(); if (this.stT <= 0) this.st = 'play'; return false; }
       if (this.st === 'play') { if (this.time != null) this.time -= dt; return true; }
       if (this.st === 'rend') {
         if ((this.stT -= dt) <= 0) {
@@ -2048,7 +2051,11 @@
       // 75 s AÚN no corre. Al agotarse, la luz se corta (el fundido lo
       // hace surgeK al caer su objetivo a 0) y arranca la partida; el
       // primer parpadeo se reprograma desde el inicio del juego.
-      if (this.st === 'memory') { G.input.flush(); p.walk(0, 0, 0, dt); j.moving = false; j.vx = j.vy = 0; if ((this.stT -= dt) <= 0) { this.st = 'play'; this.nextSurge = this.T + 11; G.sfx('door'); } return; }
+      // Velas no usa la cuenta 3·2·1 de la base Duel: SU cuenta atrás
+      // es esta fase («La luz se corta en N s»), así que su «1» —el
+      // momento de cerrar el chat en móvil, phone.duelClose— es el
+      // último segundo de la memoria, justo antes de jugar.
+      if (this.st === 'memory') { G.input.flush(); p.walk(0, 0, 0, dt); j.moving = false; j.vx = j.vy = 0; const b = Math.ceil(this.stT); this.stT -= dt; if (b > 1 && Math.ceil(this.stT) <= 1 && G.ui && G.ui.phone) G.ui.phone.duelClose(); if (this.stT <= 0) { this.st = 'play'; this.nextSurge = this.T + 11; G.sfx('door'); } return; }
       if (this.st === 'over') {
         p.walk(0, 0, 0, dt); j.moving = false; j.vx = j.vy = 0;
         if ((this.stT -= dt) <= 0 && !this.doneFired) { this.doneFired = true; this.done(this.result); }
