@@ -9,12 +9,17 @@ button { font-family: inherit; cursor: pointer; }
 /* Altura con dvh (no solo vh): en el navegador móvil, 100vh incluye
    la zona que tapa la barra de direcciones, y el juego quedaba
    cortado por abajo o «saltaba» al esconderse la barra; 100dvh es
-   la altura VISIBLE real. Y con viewport-fit=cover (index.html) la
-   página llega bajo el notch: el padding con safe-area-inset
-   mantiene HUD, escenario y controles fuera del notch y de la
-   barra de gestos en cualquier orientación (en escritorio los
-   insets valen 0 y nada cambia). */
-#app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+   la altura VISIBLE real. La cadena es progresiva: vh (respaldo
+   universal) → svh (viewport chico, con las barras del navegador
+   presentes: el caso peor) → dvh (el visible en cada momento).
+   Y con viewport-fit=cover (index.html) la página llega bajo el
+   notch: el padding con safe-area-inset mantiene HUD, escenario
+   y controles fuera del notch y de la barra de gestos en
+   cualquier orientación (en escritorio los insets valen 0 y
+   nada cambia). overflow:hidden: #app nunca deja que el
+   conjunto se desborde ni genere scroll; el escenario se
+   dimensiona para caber (ver #stagewrap/#stage). */
+#app { height: 100vh; height: 100svh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 
 /* ---------- HUD ---------- */
 #hud { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: var(--panel); border-bottom: 3px solid #120f1b; flex-wrap: wrap; }
@@ -40,14 +45,43 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ---------- Layout ---------- */
 main { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 12px; }
-#stagewrap { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+/* #stagewrap es CONTENEDOR de tamaño (container-type: size):
+   su caja es exactamente el hueco que el layout le deja al
+   escenario (main le da el alto tras el HUD y el ancho tras el
+   teléfono, ya dentro del padding safe-area de #app), así que
+   #stage puede dimensionarse con unidades de contenedor
+   (cqw/cqh) EXACTAS, sin estimar cuánto mide el HUD ni cuánto
+   tapan las barras del navegador. Su tamaño viene del flex de
+   main, nunca de su contenido — por eso el contenido no lo
+   puede desbordar. En el media query de retrato se desactiva
+   (container-type: normal): ahí el alto del wrap depende del
+   contenido y manda el ancho, como siempre en vertical. */
+#stagewrap { flex: 1; min-width: 0; min-height: 0; container-type: size; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 /* El escenario es SIEMPRE 16:9 exacto (aspect-ratio) y los canvas
    internos son 1280×720: la imagen nunca se estira ni se deforma
    en ninguna proporción de pantalla; lo que sobra a los lados o
    arriba/abajo lo cubre el fondo de la página (letterbox/pillarbox)
-   y el conjunto va centrado por el flex de #stagewrap. El tope de
-   ancho se calcula con dvh, igual que la altura de #app. */
-#stage { position: relative; width: 100%; max-width: calc((100vh - 150px) * 16 / 9); max-width: calc((100dvh - 150px) * 16 / 9); aspect-ratio: 16 / 9; background: #000; border: 4px solid #120f1b; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 0 #120f1b; }
+   y el conjunto va centrado por el flex de #stagewrap.
+   DOBLE TOPE de ancho, siempre activo (también fuera de media
+   queries): el escenario no puede pasar NI del ancho disponible
+   NI del que le permite el ALTO disponible (alto × 16/9) — así
+   cabe completo en el viewport visible en cualquier orientación.
+   La línea que manda en navegadores modernos es la de unidades
+   de contenedor: min(100cqw, (100cqh − 48px) × 16/9), donde los
+   48px son el inventario (slots de 40px) + el gap de 8px, ambos
+   de tamaño FIJO. Las tres líneas anteriores son el respaldo
+   progresivo vh → svh → dvh para navegadores sin unidades de
+   contenedor, con un aire de 190px que cubre el HUD incluso en
+   dos filas (~95px) + el padding de main (24px) + inventario y
+   gap (48px) + margen. (La versión anterior estimaba ese aire
+   en 150px y el media query ≤900px anulaba el tope por alto:
+   en horizontal el escenario salía más alto que la pantalla
+   visible y se cortaba arriba y abajo — corrección 2026-11-22.) */
+#stage { position: relative; aspect-ratio: 16 / 9; background: #000; border: 4px solid #120f1b; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 0 #120f1b;
+  width: min(100%, calc((100vh - 190px) * 16 / 9));
+  width: min(100%, calc((100svh - 190px) * 16 / 9));
+  width: min(100%, calc((100dvh - 190px) * 16 / 9));
+  width: min(100cqw, calc((100cqh - 48px) * 16 / 9)); }
 #gl, #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #inv { display: flex; gap: 6px; }
 .slot { width: 40px; height: 40px; background: var(--panel); border: 2px solid #120f1b; border-radius: 6px; display: grid; place-items: center; }
@@ -58,15 +92,30 @@ main { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 12px; }
 /* ---------- Overlay / modales ---------- */
 #overlay { position: absolute; inset: 0; display: none; place-items: center; background: rgba(18, 14, 28, .78); padding: 3%; }
 #overlay.show { display: grid; }
-.modal { background: var(--panel); border: 4px solid #120f1b; border-radius: 14px; padding: 22px 28px; max-width: 560px; text-align: center; box-shadow: 0 8px 0 #120f1b; max-height: 100%; overflow: auto; }
+/* Las tarjetas viven DENTRO del escenario (#overlay/#pauseov son
+   hijos de #stage): además de caber el escenario, su contenido
+   debe caber en horizontales de teléfono/tablet, donde el
+   escenario puede medir solo ~340–400px de alto. Por eso los
+   tamaños de la tarjeta ESCALAN con el alto disponible: cada
+   propiedad lleva primero su valor clásico (respaldo para
+   navegadores sin unidades de contenedor y para el retrato,
+   donde cqh cae al alto del viewport chico y los clamp llegan
+   a su tope = el diseño de siempre) y después el valor con
+   clamp(…, cqh, …) referido al contenedor #stagewrap — el 100%
+   de cqh es el hueco del escenario, inventario incluido. Con el
+   escenario a ~360px de alto, el título baja a ~37px y el texto
+   a ~13px y la tarjeta del título entra completa sin scroll;
+   el overflow:auto de .modal queda como último recurso para
+   tarjetas de contenido largo (lista de minijuegos, etc.). */
+.modal { background: var(--panel); border: 4px solid #120f1b; border-radius: 14px; padding: 22px 28px; padding: clamp(12px, 5cqh, 22px) clamp(16px, 7cqh, 28px); max-width: 560px; text-align: center; box-shadow: 0 8px 0 #120f1b; max-height: 100%; overflow: auto; }
 .modal.wide { max-width: 860px; }
-.modal h1 { font-size: clamp(28px, 4.2vw, 50px); line-height: 1; margin: 6px 0 14px; color: #fff; text-shadow: 0 4px 0 #120f1b; letter-spacing: 1px; }
+.modal h1 { font-size: clamp(28px, 4.2vw, 50px); font-size: clamp(26px, 9.5cqh, 50px); line-height: 1; margin: 6px 0 14px; margin: clamp(4px, 1.5cqh, 6px) 0 clamp(8px, 3.5cqh, 14px); color: #fff; text-shadow: 0 4px 0 #120f1b; letter-spacing: 1px; }
 .modal h1 span { color: var(--yellow); font-size: .62em; }
-.modal h2 { margin: 0 0 12px; color: var(--yellow); font-size: 20px; }
-.modal p { line-height: 1.5; font-size: 14px; margin: 8px 0; }
+.modal h2 { margin: 0 0 12px; color: var(--yellow); font-size: 20px; font-size: clamp(16px, 5cqh, 20px); }
+.modal p { line-height: 1.5; font-size: 14px; font-size: clamp(12px, 3.3cqh, 14px); margin: 8px 0; }
 .dim { color: var(--dim); font-size: 12px !important; }
 .logo small { font-size: 34px; }
-button.big { margin-top: 14px; background: var(--yellow); color: #120f1b; border: 3px solid #120f1b; border-radius: 10px; padding: 10px 30px; font-weight: bold; font-size: 16px; letter-spacing: 1px; box-shadow: 0 4px 0 #120f1b; }
+button.big { margin-top: 14px; margin-top: clamp(8px, 3.5cqh, 14px); background: var(--yellow); color: #120f1b; border: 3px solid #120f1b; border-radius: 10px; padding: 10px 30px; padding: clamp(7px, 2.6cqh, 10px) 30px; font-weight: bold; font-size: 16px; font-size: clamp(14px, 4cqh, 16px); letter-spacing: 1px; box-shadow: 0 4px 0 #120f1b; }
 button.big:hover { transform: translateY(-1px); filter: brightness(1.08); }
 button.big:active { transform: translateY(3px); box-shadow: 0 1px 0 #120f1b; }
 button.big.alt { background: var(--panel2); color: var(--ink); }
@@ -116,9 +165,13 @@ body.touch-on #touchpad { display: block; }
 /* ---------- Responsive: pantallas angostas (móviles) ---------- */
 @media (max-width: 760px), (max-aspect-ratio: 4/5) {
   main { flex-direction: column; padding: 8px; gap: 8px; }
-  #stagewrap { flex: 0 0 auto; width: 100%; }
+  /* En retrato el alto de #stagewrap lo manda su contenido (la
+     página crece y hace scroll): el contenedor de tamaño se
+     desactiva y el escenario se dimensiona por el ancho, como
+     siempre en vertical. */
+  #stagewrap { flex: 0 0 auto; width: 100%; container-type: normal; }
   #stage { max-width: 100%; width: 100%; }
-  #phone { width: 100%; max-height: 32vh; }
+  #phone { width: 100%; max-height: 32vh; max-height: 32dvh; }
   #hud { gap: 8px; padding: 6px 10px; }
   #hud .meter { font-size: 10px; }
   #joystick { width: 128px; height: 128px; }
@@ -161,7 +214,7 @@ body.paused #phone, body.paused #inv { pointer-events: none; filter: saturate(.5
 .duel span { font-size: 12px; font-weight: bold; }
 .duel small { color: var(--dim); font-size: 11px; line-height: 1.35; }
 .roll.mid { color: var(--yellow); background: #4a3f1f; }
-.hero { height: 150px; width: auto; image-rendering: pixelated; }
+.hero { height: 150px; height: clamp(96px, 36cqh, 150px); width: auto; image-rendering: pixelated; }
 .pick { display: flex; gap: 12px; justify-content: center; }
 /* Carrusel de selección de personaje: ventana con overflow OCULTO y
    navegación por botones ‹ › / puntos / flechas del teclado. Ninguna
@@ -173,7 +226,7 @@ body.paused #phone, body.paused #inv { pointer-events: none; filter: saturate(.5
 .car.slim .ctrack { gap: 10px; }
 .car .pcard { flex: none; width: 248px; }
 .car.slim .pcard { width: 150px; }
-.car.slim .pcard img { height: 104px; }
+.car.slim .pcard img { height: 104px; height: clamp(72px, 26cqh, 104px); }
 .cnav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; background: #17122a; border: 3px solid var(--yellow); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 3; box-shadow: 0 4px 0 #120f1b; padding: 0; }
 .cnav.prev { left: -24px; }
 .cnav.next { right: -24px; }
@@ -187,7 +240,7 @@ body.paused #phone, body.paused #inv { pointer-events: none; filter: saturate(.5
 .cdot.on { background: var(--yellow); transform: scale(1.25); }
 .pcard { flex: 1; background: var(--panel2); border: 3px solid #120f1b; border-radius: 12px; padding: 10px 12px; color: var(--ink); text-align: left; transition: transform .1s; }
 .pcard:hover { transform: translateY(-4px); border-color: var(--yellow); }
-.pcard img { height: 150px; width: auto; image-rendering: pixelated; display: block; margin: 0 auto; }
+.pcard img { height: 150px; height: clamp(96px, 36cqh, 150px); width: auto; image-rendering: pixelated; display: block; margin: 0 auto; }
 .pcard h3 { margin: 0; text-align: center; font-size: 18px; }
 .pcard > small { display: block; text-align: center; color: var(--dim); margin-bottom: 8px; }
 .pcard p { font-size: 11px; margin: 6px 0 0; line-height: 1.35; }
@@ -265,8 +318,17 @@ body.paused #phone, body.paused #inv { pointer-events: none; filter: saturate(.5
 .tbar { height: 6px; background: #120f1b; border-radius: 3px; overflow: hidden; }
 .tbar i { display: block; height: 100%; width: 100%; background: var(--red); transition: width .1s linear; }
 
-@media (max-width: 900px) {
-  main { flex-direction: column; overflow: auto; } html, body { overflow: auto; } #app { height: auto; min-height: 100vh; min-height: 100dvh; }
+/* Pantallas ≤900px EN RETRATO: layout en columna con scroll y el
+   teléfono bajo el escenario. Este bloque va ACOTADO al retrato
+   (max-aspect-ratio: 4/5) a propósito: sin la condición, un
+   teléfono/tablet en HORIZONTAL de ≤900px de ancho caía aquí,
+   el #stage { max-width: 100% } anulaba el tope por alto y la
+   escena quedaba más alta que la pantalla visible (cortada
+   arriba y abajo, captura de Jose 2026-11-22). En horizontal
+   manda el encuadre general: #app de 100dvh sin scroll y el
+   escenario con doble tope (ancho y alto) de su regla base. */
+@media (max-width: 900px) and (max-aspect-ratio: 4/5) {
+  main { flex-direction: column; overflow: auto; } html, body { overflow: auto; } #app { height: auto; min-height: 100vh; min-height: 100svh; min-height: 100dvh; }
   #phone { width: 100%; height: 420px; } #stage { max-width: 100%; } .pick { flex-direction: column; }
 }
 

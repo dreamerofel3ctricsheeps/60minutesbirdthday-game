@@ -2230,6 +2230,32 @@ const tick = () => new Promise((r) => setImmediate(r));
       chosen2 === 0 && ph.state().visible === false && ph.state().pending === false && ph.state().unread === 0 && ph.state().pinned === false, JSON.stringify(ph.state()));
   }
 
+  // --- Sección P: encuadre a prueba de barras del navegador (corrección 2026-11-22) ---
+  // En horizontal el escenario se cortaba arriba y abajo: la regla base lo
+  // topaba con una estimación de 150px de cromo vertical (el HUD en dos
+  // filas la superaba) y el media query ≤900px, sin condición de
+  // orientación, anulaba el tope por alto con max-width:100%. Ahora el
+  // escenario se dimensiona con DOBLE tope exacto (unidades de contenedor
+  // sobre #stagewrap) y respaldo progresivo vh → svh → dvh.
+  {
+    const cssP = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const baseCss = cssP.slice(0, cssP.indexOf('@media')); // solo reglas base, fuera de media queries
+    const stageRule = (baseCss.match(/#stage \{[^}]*\}/) || [''])[0];
+    check('encuadre: la regla base del escenario trae el DOBLE tope (ancho y alto×16/9) con unidades de contenedor',
+      stageRule.includes('width: min(100cqw, calc((100cqh - 48px) * 16 / 9))'), stageRule.slice(0, 140));
+    check('encuadre: respaldo progresivo vh → svh → dvh en el ancho del escenario, sin el viejo tope estimado de 150px',
+      stageRule.includes('calc((100vh - 190px) * 16 / 9)') && stageRule.includes('calc((100svh - 190px) * 16 / 9)')
+      && stageRule.includes('calc((100dvh - 190px) * 16 / 9)') && !cssP.includes('(100dvh - 150px)') && !cssP.includes('(100vh - 150px)'), '');
+    check('encuadre: #app con cadena vh → svh → dvh y overflow hidden (ningún ancestro deja desbordar el escenario)',
+      baseCss.includes('height: 100vh; height: 100svh; height: 100dvh; overflow: hidden'), '');
+    check('encuadre: #stagewrap es el contenedor de tamaño (cqw/cqh exactos) y en retrato se desactiva',
+      baseCss.includes('container-type: size') && cssP.includes('container-type: normal'), '');
+    check('encuadre: el media query ≤900px ya no anula el tope por alto en horizontal (queda acotado a retrato)',
+      !cssP.includes('@media (max-width: 900px) {') && cssP.includes('@media (max-width: 900px) and (max-aspect-ratio: 4/5)'), '');
+    check('encuadre: la tarjeta del título escala con el alto del escenario (clamp con cqh, no solo con vw)',
+      cssP.includes('clamp(26px, 9.5cqh, 50px)') && cssP.includes('clamp(12px, 3.3cqh, 14px)'), '');
+  }
+
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR FATAL en la prueba:', e); process.exit(2); });
