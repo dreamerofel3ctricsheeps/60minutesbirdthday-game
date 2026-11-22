@@ -3,7 +3,7 @@
    Modo secreto: se controla a XIMENA en el departamento con
    todos escondidos, sale por la puerta principal y llega a la
    plaza de CDMX (capas parallax + recorte de foto real).
-   Parte 2: la Puerta de salida de la plaza (mundo x=1068, donde
+   Parte 2: la Puerta de salida de la plaza (mundo x=1900, donde
    ancla la vista lejana) cruza a la escena de SAN ÁNGEL, una
    segunda franja libre construida con recortes de las imágenes
    de El Libro de la Vida que aportó Jose (assets SOLO-LOCALES
@@ -304,17 +304,28 @@
   const vistaImg = loadDateImg('assets/date/sanangel-vista.png');
 
   // Geometría y ciclos de los complementos. Las x de los elementos
-  // fijos viven en el espacio de SU capa (pantalla con pan=0, como
-  // la Catedral en 268): con la cámara al fondo de la franja
-  // (pan=510) la vista cae en pantalla ≈558, justo detrás de donde
-  // irá la Puerta de salida (mundo ≈1060, ver vistaWorldX).
+  // fijos viven en el espacio de SU capa (pantalla con pan=0): la
+  // franja mide 2000 px de mundo y la cámara recorre pan 0..1360.
+  // Reparto a lo largo del paseo (centros en pantalla, pan 0 →
+  // pan 1360): Catedral 268 → −72 (el recibimiento, se aleja),
+  // tacos 1080 → 400 (zona media, protagonista de la 2ª mitad),
+  // Parroquia 1062 → 722 (zona media-derecha, entra desde
+  // pan≈1044) y la vista 812 → 540, que con la cámara al fondo
+  // coincide con la Puerta de salida (mundo 1900 → pantalla 540):
+  // la Puerta se apoya justo delante de San Ángel. Ojo con la
+  // matemática de capas: un hito L1 (parallax 0,25) solo recorre
+  // 340 px de pantalla en todo el paseo, así que su x de capa no
+  // puede pasar de ~1140 sin quedar fuera de pantalla para
+  // siempre; 1062 la deja entrar por la derecha al final del
+  // paseo y a ≥250 px de capa de la Catedral y de la vista.
   const PLAZA_FX = {
     avion: { w: 138, y: 54, ciclo: 28, cruce: 14, desfase: 7, par: 0.15 },
     vocho: { w: 246, base: 351, ciclo: 32, cruce: 7, desfase: 11 },
-    tacosX: 755, tacosW: 128,             // L2 (parallax 0,5)
-    parroquiaX: 700, parroquiaW: 322,     // L1 (parallax 0,25)
-    vistaX: 660, vistaW: 352,             // capa lejana (parallax 0,2)
-    vistaWorldX: 1068,                    // su ancla en el mundo L4
+    catedralX: 268,                       // L1 (parallax 0,25), con el asta en 96
+    tacosX: 1080, tacosW: 128,            // L2 (parallax 0,5)
+    parroquiaX: 1062, parroquiaW: 322,    // L1 (parallax 0,25)
+    vistaX: 812, vistaW: 352,             // capa lejana (parallax 0,2)
+    vistaWorldX: 1900,                    // su ancla en el mundo L4 (el final de la franja)
     vistaSquash: 0.86,                    // aplana un pelo la vista para que las torres quepan en la banda del cielo
     // Ventanilla del conductor del vocho, en fracciones del
     // recorte (medidas sobre vocho.png: la ventana lateral
@@ -566,16 +577,19 @@
       // compensateScale() y rawProjectedHeight().
       this.scaleRef = this.rawProjectedHeight(800, 470, { x: 800, y: 0, z: 440, dist: 560, pitch: 0.8 });
       // --- La plaza como mundo navegable (modo libre, ver
-      // updateFree): la franja mide 1150 px de mundo; la cámara
-      // (this.pan, en px de mundo a velocidad L4) se desplaza
-      // 0..(1150−640). La Puerta queda FIJA donde quedó al llegar
-      // (mundo x=174) y los personajes parten de sus posiciones
-      // de mundo del revelado (al final del paneo, cámara=90:
-      // Ximena en pantalla 168 → mundo 258; Jose 238 → 328).
-      this.worldW = 1150; this.doorX = 174; this.groundY = 316;
+      // updateFree): la franja mide 2000 px de mundo (Jose pidió
+      // un paseo más largo, con los hitos bien separados); la
+      // cámara (this.pan, en px de mundo a velocidad L4) se
+      // desplaza 0..(2000−640) = 0..1360. La Puerta queda FIJA
+      // donde quedó al llegar (mundo x=174) y los personajes
+      // parten de sus posiciones de mundo del revelado (al final
+      // del paneo, cámara=90: Ximena en pantalla 168 → mundo
+      // 258; Jose 238 → 328). A 150 u/s, cruzar la franja entera
+      // caminando toma ~13 s: es la intención, un paseo largo.
+      this.worldW = 2000; this.doorX = 174; this.groundY = 316;
       this.free = makeStripChars(258, 328, 316);
       // La Puerta de SALIDA de la plaza: la misma Puerta de
-      // siempre, al final de la franja (mundo x=1068), justo
+      // siempre, al final de la franja (mundo x=1900), justo
       // donde ancla la vista lejana de San Ángel que se ve en el
       // fondo (PLAZA_FX.vistaWorldX). Cruzarla lleva a la escena
       // de San Ángel; su Puerta del árbol devuelve aquí.
@@ -790,7 +804,7 @@
         }
       }
       // L1 · la Catedral (recorte de FOTO real) + asta con bandera dibujada
-      const catW = 430, catX = 268 - pan * 0.25, catBase = horizon + 4;
+      const catW = 430, catX = PLAZA_FX.catedralX - pan * 0.25, catBase = horizon + 4;
       if (catedralImg && catedralImg.complete && catedralImg.naturalWidth) {
         const catH = catW * catedralImg.naturalHeight / catedralImg.naturalWidth;
         c.drawImage(catedralImg, catX - catW / 2, catBase - catH, catW, catH);

@@ -28,7 +28,7 @@
       parpadeo walk/idle al caminar juntos (histéresis), y Jose
       ya sin ramo en la plaza (sin drawBouquet en date.js).
    J) Escena 2 «San Ángel» (Parte 2): la Puerta de salida de la
-      plaza (mundo x=1068) cruza a la franja de San Ángel
+      plaza (mundo x=1900, el final de la franja de 2000 px) cruza a la franja de San Ángel
       (1500 px, mismo modo libre), el cameo de Manolo y María
       con Chuy camina a la izquierda una sola vez, las velas
       parpadean, la Puerta del árbol devuelve a la plaza, y la
@@ -291,7 +291,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (let i = 0; i < 60; i++) sc.update(0.05);
   key('ArrowRight', false);
   check('input sostenido mueve al activo (Ximena) por la franja', X.x > fx0 + 200, `x ${fx0} → ${X.x.toFixed(0)}`);
-  check('la cámara sigue al activo y no se sale de la franja (0..510)', sc.pan > 100 && sc.pan <= 510.01, `pan=${sc.pan.toFixed(1)}`);
+  check('la cámara sigue al activo y no se sale de la franja (0..1360, mundo de 2000)', sc.pan > 100 && sc.pan <= 1360.01, `pan=${sc.pan.toFixed(1)}`);
   check('el activo camina con su ciclo lateral al moverse (moving + distancia acumulada)', X.dist > 200, `dist=${X.dist.toFixed(0)}`);
   sc.draw(0.016); // el modo libre se dibuja sin explotar (walk_right incluido)
   key('Tab', true); key('Tab', false);
@@ -392,19 +392,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('el vocho espera FUERA de escena fuera de su ventana (t=20 → fase 31 ≥ cruce 7)', vx(20) === 9999, 'vx(20)=' + vx(20));
   check('el vocho va por la calle de primer plano (base 348–354) con Pollito a la ventanilla del conductor',
     FX.vocho.base >= 348 && FX.vocho.base <= 354 && FX.winCx > 0.3 && FX.winCx < 0.5);
-  // Fijos: dentro de la franja y descubribles al fondo (su centro
-  // cae en pantalla con la cámara en pan máximo).
+  // La franja creció a pedido de Jose: 2000 px de mundo, cámara
+  // 0..1360, para un paseo largo con los hitos bien separados.
+  check('la franja de la plaza mide 2000 px de mundo (cámara 0..1360)', sc.worldW === 2000, 'worldW=' + sc.worldW);
+  // Fijos: dentro de la franja y descubribles al fondo (con la
+  // cámara en pan máximo, el centro de tacos cae en pantalla y
+  // el de la Parroquia entra por la derecha: su mitad izquierda
+  // ya se ve, centro > 640 pero su span cruza el borde).
   check('tacos y parroquia tienen posición fija dentro de la franja (0..worldW)',
     FX.tacosX > 0 && FX.tacosX < sc.worldW && FX.parroquiaX > 0 && FX.parroquiaX < sc.worldW,
     `tacos=${FX.tacosX}, parroquia=${FX.parroquiaX}, worldW=${sc.worldW}`);
-  check('con la cámara al fondo, tacos y parroquia caen en pantalla (se descubren explorando)',
-    (FX.tacosX - 510 * 0.5) > 200 && (FX.tacosX - 510 * 0.5) < 640 && (FX.parroquiaX - 510 * 0.25) > 300 && (FX.parroquiaX - 510 * 0.25) < 640);
-  // La vista de San Ángel: ancla de mundo en el tramo final
-  // (1000–1120, donde irá la Puerta de salida) y, con la cámara
-  // al fondo, su centro cae tras esa zona (pantalla 380–620).
-  check('la vista de San Ángel ancla en el tramo final del mundo (1000–1120) y queda tras la futura Puerta de salida',
-    FX.vistaWorldX >= 1000 && FX.vistaWorldX <= 1120 && (FX.vistaX - 510 * 0.2) >= 380 && (FX.vistaX - 510 * 0.2) <= 620,
-    `worldX=${FX.vistaWorldX}, pantalla al fondo=${(FX.vistaX - 510 * 0.2).toFixed(0)}`);
+  check('con la cámara al fondo (pan=1360), tacos cae en pantalla y la Parroquia entra por la derecha (se descubren explorando)',
+    (FX.tacosX - 1360 * 0.5) > 200 && (FX.tacosX - 1360 * 0.5) < 640 &&
+    (FX.parroquiaX - 1360 * 0.25) > 600 && (FX.parroquiaX - 1360 * 0.25) - FX.parroquiaW / 2 < 640,
+    `tacos@${(FX.tacosX - 1360 * 0.5).toFixed(0)}, parroquia@${(FX.parroquiaX - 1360 * 0.25).toFixed(0)}`);
+  // Separación mínima entre hitos (≥250 px entre vecinas):
+  // dentro de la MISMA capa L1 (comparable 1:1), la Parroquia
+  // dista de la Catedral y de la vista; y en pantalla, con la
+  // cámara al fondo, los centros de tacos y Parroquia también.
+  check('los hitos quedan separados ≥250 px entre vecinos (Catedral→vista→Parroquia en su capa; tacos↔Parroquia en pantalla al fondo)',
+    (FX.vistaX - FX.catedralX) >= 250 && (FX.parroquiaX - FX.vistaX) >= 250 &&
+    Math.abs((FX.tacosX - 1360 * 0.5) - (FX.parroquiaX - 1360 * 0.25)) >= 250,
+    `capa: cat=${FX.catedralX}, vista=${FX.vistaX}, parr=${FX.parroquiaX}; pantalla: tacos=${(FX.tacosX - 680).toFixed(0)}, parr=${(FX.parroquiaX - 340).toFixed(0)}`);
+  // La vista de San Ángel: ancla de mundo en el NUEVO tramo
+  // final (1850–1950, donde va la Puerta de salida) y, con la
+  // cámara al fondo, su centro cae tras esa zona (pantalla
+  // 380–620, alineada con la Puerta: 1900−1360 = 540).
+  check('la vista de San Ángel ancla en el nuevo tramo final del mundo (1850–1950) y queda tras la Puerta de salida',
+    FX.vistaWorldX >= 1850 && FX.vistaWorldX <= 1950 && (FX.vistaX - 1360 * 0.2) >= 380 && (FX.vistaX - 1360 * 0.2) <= 620,
+    `worldX=${FX.vistaWorldX}, pantalla al fondo=${(FX.vistaX - 1360 * 0.2).toFixed(0)}`);
   check('el dibujo de la vista está condicionado a que la imagen cargó (si falta el asset local, no se dibuja ni se rompe)',
     dateSrc.includes('imgOk(vistaImg)') && dateSrc.includes('sanangel-vista.png'));
   check('FUENTES.md registra la vista como asset solo-local aportado por Jose',
@@ -417,8 +433,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('\nJ) Escena 2 «San Ángel»: Puerta de salida, franja libre, cameo, velas y vuelta');
   // La plaza ganó su Puerta de salida al final de la franja,
   // exactamente donde ancla la vista lejana de San Ángel.
-  check('la plaza tiene su Puerta de salida en el mundo x=1068 (el ancla de la vista de San Ángel)',
-    sc.exitDoorX === 1068 && FX.vistaWorldX === sc.exitDoorX, 'exitDoorX=' + sc.exitDoorX);
+  check('la plaza tiene su Puerta de salida en el mundo x=1900 (el ancla de la vista de San Ángel, al final de la franja de 2000)',
+    sc.exitDoorX === 1900 && FX.vistaWorldX === sc.exitDoorX, 'exitDoorX=' + sc.exitDoorX);
   if (F.active !== 'ximena') sc.switchActive();
   X.x = sc.exitDoorX - 10; X.y = sc.groundY; J.x = X.x - 70; J.y = sc.groundY;
   sc.update(0.05);
