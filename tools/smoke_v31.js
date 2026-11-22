@@ -296,11 +296,14 @@ load('scenes.js');
 // sección V suma cromo (la máquina del modo inmersivo). La sección AC
 // suma titleScreen y las piezas del autoguardado (saveCheckpoint,
 // readSave, applySave, clearSave) para el viaje de ida y vuelta del
-// guardado y los botones del título.
+// guardado y los botones del título. La extensión de alcance de la
+// sección AC suma repersistSave y enterPractice: fijan que el
+// guardado es SOLO del modo historia (ni la práctica ni «La Cita»
+// lo crean, lo tocan ni lo resucitan tras borrarlo).
 load('game.js', (code) => {
   const from = 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect };';
   if (!code.includes(from)) throw new Error('no se encontró G.debug en game.js');
-  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings, settingsScreen, cromo, titleScreen, saveCheckpoint, readSave, applySave, clearSave };');
+  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings, settingsScreen, cromo, titleScreen, saveCheckpoint, readSave, applySave, clearSave, repersistSave, enterPractice };');
 });
 
 const G = sandbox.G, Sc = G.Scenes, W = G.World;
@@ -3722,6 +3725,68 @@ const tick = () => new Promise((r) => setImmediate(r));
     playBtnAC.onclick(); // segundo toque: borra y arranca
     check('autoguardado: el segundo toque borra el guardado y resuelve new',
       (await pNewAC) === 'new' && lsAC.getItem('1mtp.save') === null, '');
+    // Alcance (aclaración de Jose, 2026-11-22): el autoguardado es
+    // SOLO del modo historia. Ni la práctica de minijuegos ni el
+    // easter egg «La Cita» crean, tocan ni resucitan guardados, y
+    // la red de seguridad (pagehide) no puede revivir uno borrado.
+    console.log('  — alcance: solo historia (práctica y «La Cita», fuera)');
+    // Fuente: los escritores del guardado viven confinados en la
+    // historia de game.js; ningún otro módulo conoce la ranura.
+    const modulosAC2 = ['scenes.js', 'world.js', 'music.js', 'data.js', 'gl3d.js', 'sprites.js', 'date.js'];
+    const fueraAC2 = modulosAC2.map((f) => fs.readFileSync(path.join(SRC, f), 'utf8')).join('\n');
+    check('alcance: ningún módulo fuera de game.js conoce el autoguardado (ni la cita en date.js)',
+      !fueraAC2.includes('1mtp.save') && !fueraAC2.includes('saveCheckpoint') && !fueraAC2.includes('clearSave') && !fueraAC2.includes('repersistSave'), '');
+    check('alcance: los puntos de control son exactamente los 6 de la historia (collect, arrival, night, climax y reanudaciones)',
+      (gameAC.match(/saveCheckpoint\('/g) || []).length === 6, '');
+    const pracDuelAC2 = gameAC.slice(gameAC.indexOf('async function practiceDuel'), gameAC.indexOf('function minigamesLockedScreen'));
+    const showMgAC2 = gameAC.slice(gameAC.indexOf('async function showMinigames'), gameAC.indexOf('function titleScreen'));
+    const resultAC2 = gameAC.slice(gameAC.indexOf('function resultScreen'), gameAC.indexOf('function enterMinigameMusic'));
+    const listAC2 = gameAC.slice(gameAC.indexOf('function duelListScreen'), gameAC.indexOf('function charCarousel'));
+    check('alcance: la práctica (lista, duelo, resultado) jamás escribe ni borra el guardado — su único contacto es el abandono en enterPractice',
+      !pracDuelAC2.includes('saveCheckpoint') && !pracDuelAC2.includes('clearSave')
+      && !showMgAC2.includes('saveCheckpoint') && !showMgAC2.includes('clearSave')
+      && !resultAC2.includes('saveCheckpoint') && !resultAC2.includes('clearSave')
+      && !listAC2.includes('saveCheckpoint') && !listAC2.includes('clearSave'), '');
+    const startDateAC2 = gameAC.slice(gameAC.indexOf('function startDate'), gameAC.indexOf('function enterPractice'));
+    check('alcance: entrar a «La Cita» (startDate) no escribe ni borra el guardado de la historia',
+      !startDateAC2.includes('saveCheckpoint') && !startDateAC2.includes('clearSave'), '');
+    // Comportamiento: la red de seguridad re-persiste un guardado
+    // VIVO (control positivo) pero jamás resucita uno borrado,
+    // porque clearSave también descarta la copia en memoria.
+    S.player = 'saulo'; S.phase = 'act2';
+    msgsAC.innerHTML = '<div class="row"><div class="msg"><div class="bubble">Punto de control</div></div></div>';
+    D.saveCheckpoint('night', { storyIdx: 1 });
+    lsAC.removeItem('1mtp.save'); // la escritura «se perdió»: la red la repone
+    D.repersistSave();
+    let reAC2 = null; try { reAC2 = JSON.parse(lsAC.getItem('1mtp.save') || 'null'); } catch (e) { reAC2 = null; }
+    check('alcance: la red de seguridad (pagehide) re-persiste el último punto si su escritura se perdió',
+      !!reAC2 && reAC2.at === 'night' && reAC2.storyIdx === 1, '');
+    D.clearSave();
+    D.repersistSave(); // la pestaña se oculta JUSTO tras borrar: no puede resucitar
+    check('alcance: tras clearSave, la red de seguridad NO resucita el guardado (la copia en memoria también se descarta)',
+      lsAC.getItem('1mtp.save') === null, '');
+    // Comportamiento: la práctica desde el título no crea guardado…
+    S.phase = 'title';
+    D.enterPractice();
+    check('alcance: practicar desde el título NO crea ningún guardado',
+      lsAC.getItem('1mtp.save') === null && S.phase === 'practice', '');
+    D.titleScreen(); // sin guardado tras practicar: el título sigue sin ofrecer Continuar
+    check('alcance: tras practicar, el título NO ofrece Continuar (no hay partida que retomar)',
+      overlayAC.innerHTML.includes('JUGAR') && !overlayAC.innerHTML.includes('CONTINUAR PARTIDA'), '');
+    // …ni toca el de una historia que ni siquiera se cargó…
+    S.player = 'saulo'; S.phase = 'title';
+    D.saveCheckpoint('night', { storyIdx: 4 });
+    const intactoAC2 = lsAC.getItem('1mtp.save');
+    D.enterPractice();
+    check('alcance: practicar desde el título deja INTACTO el guardado de una historia sin cargar',
+      !!intactoAC2 && lsAC.getItem('1mtp.save') === intactoAC2, '');
+    // …pero desde la pausa SÍ abandona la historia en curso, y ni
+    // la red de seguridad lo trae de vuelta al ocultar la pestaña.
+    S.phase = 'act2';
+    D.enterPractice();
+    D.repersistSave();
+    check('alcance: entrar a práctica con historia en curso la abandona (guardado borrado) y ni la red lo trae de vuelta',
+      lsAC.getItem('1mtp.save') === null, '');
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
