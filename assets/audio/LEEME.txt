@@ -1,0 +1,53 @@
+LA CANCIÓN DEL EASTER EGG «LA CITA»
+====================================
+
+En esta carpeta va el archivo de la canción, con ESTE nombre exacto:
+
+    and-i-love-her.m4a      (formato M4A / AAC — el principal)
+    and-i-love-her.mp3      (opcional: respaldo, solo si no hay .m4a)
+
+El juego lo busca aquí al activarse el easter egg. Si el archivo no
+está, la secuencia corre igual, en silencio, con su reloj de respaldo.
+
+IMPORTANTE: el archivo NO se sube a git (el .gitignore del repo lo
+excluye a propósito). El repositorio es público y la canción tiene
+derechos: vive solo en la copia local y en el paquete que se le
+entregue a Ximena.
+
+LA MÚSICA DEL JUEGO PRINCIPAL (banda sonora, 2026-11-22)
+=========================================================
+
+Además de la canción de la cita, en esta MISMA carpeta deben ir
+estos 5 archivos MP3, con ESTOS nombres exactos:
+
+    Gold_Plated_Strut.mp3
+        - Menú / título: segmento 0:00–0:16, en loop.
+        - Gestión: también forma parte de la playlist de gestión
+          (la pista completa, en rotación).
+
+    Quarter_Slot_Swagger.mp3
+        - Recolección (los 60 segundos): segmento 0:25–1:26, en loop.
+        - Minijuegos y duelos (de la historia y de práctica): el
+          mismo segmento, en loop, mientras dura el duelo.
+
+    Before_The_Strike.mp3
+        - Llegada de Ximena y toda escena donde ella sea la amenaza:
+          desde el inicio, en loop mientras dure la amenaza.
+        - Partida ganada: desde 0:17 en adelante, sin loop
+          (es el remate que suena en la pantalla del final).
+
+    The_Last_Life.mp3
+        - Gestión: pista completa, en rotación con
+          Gold_Plated_Strut.mp3 (una tras otra, en loop de playlist).
+          Ojo: la gestión suena SOLO en la escena de casa mientras se
+          interactúa con el chat, entre duelos; dentro de los
+          minijuegos suena Quarter_Slot_Swagger.mp3 (ver arriba).
+
+    Controller_Down.mp3
+        - Partida perdida (final «LA RUINA»): pista completa, sin loop.
+
+El módulo que los reproduce es application/src/js/music.js
+(G.Music, tabla MUSIC_CUES). Igual que con la cita: si alguno de
+estos archivos NO está en la copia local, el juego corre igual,
+en silencio y sin errores. Y también quedan fuera de git: el
+.gitignore ya ignora application/src/assets/audio/*.mp3.

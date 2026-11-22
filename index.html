@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>1 Minuto para la Fiesta</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="brand"><img class="brandico" src="assets/icons/pastel.png" alt=""> <b>1 MINUTO</b> PARA LA FIESTA</div>
+    <button id="pausebtn" title="Pausa: congela todo el juego (atajos: Esc, o la tecla P fuera de los duelos)"><span class="pic pic-pause"><i></i><i></i></span>Pausa</button>
+    <button id="settingsbtn" title="Ajustes: controles táctiles y más"><span class="pic pic-gear"><i></i></span></button>
+    <button id="phonebtn" title="Chat del grupo: aparece solo cuando llega algo nuevo o hay una decisión pendiente; tócalo para abrirlo o cerrarlo a mano"><span class="pic pic-phone"><i></i></span><span id="phonebadge"></span></button>
+    <div class="meter" id="m-sus"><label>Sospecha</label><div class="bar"><div class="fill"></div></div><span class="val">0%</span></div>
+    <div class="meter" id="m-sleep"><label>Sueño de Ximena</label><div class="segs"><i class="seg"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i></div><span class="val">—</span></div>
+    <div class="meter" id="m-noise"><label>Ruido</label><div class="bar"><div class="fill"></div></div><span class="val">0%</span></div>
+    <div class="meter" id="m-q"><label>Fiesta</label><div class="bar"><div class="fill"></div></div><span class="val">☆☆☆☆</span></div>
+  </header>
+  <main>
+    <section id="stagewrap">
+      <div id="stage">
+        <canvas id="gl" width="1280" height="720"></canvas>
+        <canvas id="cv" width="1280" height="720"></canvas>
+        <div id="fade"></div>
+        <div id="overlay"></div>
+        <div id="pauseov"></div>
+      </div>
+      <!-- La capa táctil vive FUERA del escenario (hija de #stagewrap):
+           el cableado de game.js la calca sobre el rect del escenario
+           y, cuando el letterbox deja franjas laterales anchas, muda
+           el joystick y el botón de acción a esas franjas; dentro del
+           escenario quedarían recortados por su overflow:hidden. -->
+      <div id="touchpad">
+        <div id="joystick" role="application" aria-label="Joystick: arrastra en cualquier dirección para moverte">
+          <div class="joy-base"></div>
+          <div class="joy-knob"></div>
+        </div>
+        <button class="tbtn taction" data-k="action" aria-label="Acción">●</button>
+      </div>
+      <div id="inv" aria-label="Inventario"></div>
+    </section>
+    <aside id="phone" class="ph-off">
+      <div class="ptop"><span class="dot"></span>Protosaurios 🦕<small>7 participantes</small><button id="phoneclose" title="Ocultar el chat (vuelve solo si llega algo nuevo o hay una decisión pendiente)">×</button></div>
+      <div id="msgs"></div>
+      <div id="actions"></div>
+    </aside>
+  </main>
+</div>
+<script src="js/defined-sheets.js"></script>
+<script src="js/rocket-sheets.js"></script>
+<script src="js/belt-sheets.js"></script>
+<script src="js/alebrije-sheets.js"></script>
+<script src="js/teodora-sheets.js"></script>
+<script src="js/jump-sheets.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/data.js"></script>
+<script src="js/music.js"></script>
+<script src="js/gl3d.js"></script>
+<script src="js/world.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/date.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
