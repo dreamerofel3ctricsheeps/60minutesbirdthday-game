@@ -2251,6 +2251,21 @@
   // Tramos de gravedad (clave, segundos): el guion suma 57 s y el
   // tramo final normal cubre lo que reste hasta los 60.
   const RACE_SEGS = [['normal', 11], ['luna', 8], ['normal', 7], ['pesada', 8], ['normal', 7], ['luna', 8], ['pesada', 8], ['normal', 99]];
+  // Vista y bola (playtest de Jose, 2026-11-22): la cámara de la
+  // carrera va MÁS LEJOS que la de antes (con dist 350 los
+  // corredores se veían enormes y cada cactus se anunciaba solo
+  // ~150 u antes de llegar, ~0,9 s; con 500 se ven ~272 u a cada
+  // lado del encuadre y el aviso sube a ~1,4 s). La bola se pinta
+  // a escala RACE_BALL_S y su radio REAL ya pintada es
+  // RACE_BALL_R: el arte es un lienzo de 32×32 con la bola de
+  // radio 9 px + 2 px de borde (11 px × 1,7 de escala = 18,7 u).
+  // Ese radio manda en la rodadura (ω = v/r, sin deslizar) y en
+  // el apoyo: el centro va a un radio del suelo y la bola queda
+  // tangente a la línea donde pisan los corredores.
+  const RACE_CAM_DIST = 500;
+  const RACE_BALL_S = 1.7;
+  const RACE_BALL_R = 18.7;
+  const RACE_BALL_CY = 17 / 32; // fila del centro de la bola dentro de su lienzo (desde arriba)
   let raceMesh = null;
   function buildRaceArena() {
     const m = new R.MB();
@@ -2269,7 +2284,7 @@
       super(who, 'pollito', done, { rounds: 1, need: 1, time: 60, label: 'CARRERA', title: 'CACTUS EN CARRERA', hint: 'ESPACIO o ↑ para saltar · Gana quien reciba MENOS golpes en 60 s', rendT: 1.6 });
       this.isRace = true;
       this.p = new Actor(who, -38, 0); this.cat = new Actor('pollito', 38, 0); // MISMO carril: misma z, desfase en x
-      this.cam = { x: 0, y: 0, z: 6, dist: 350, pitch: 0.3, fov: 42 };
+      this.cam = { x: 0, y: 0, z: 6, dist: RACE_CAM_DIST, pitch: 0.3, fov: 42 };
       this.quietRend = true; // el cierre usa su propio panel con los golpes (ver endOverlay)
       this.begin();
     }
@@ -2290,6 +2305,25 @@
       };
       if (Math.random() < 0.34) c.change = { at: rnd(-50, 100), f: Math.random() < 0.5 ? 0.55 : 1.5, done: false };
       this.cacti.push(c);
+    }
+    // Colocación del sprite de un cactus al pintarlo. R.sprite gira
+    // el cuadro sobre su BASE (el punto (x, y−feet)), no sobre su
+    // centro: sin compensar, al rodar la bola ORBITABA alrededor de
+    // esa base — subía, bajaba, se desplazaba de lado y su parte
+    // baja se hundía bajo la pista (playtest de Jose: «ruedan muy
+    // raro, parece que se esconden en el piso»). Aquí la posición
+    // del cuadro se compensa en cada ángulo para que el CENTRO de
+    // la bola quede fijo en (c.x, un radio sobre el suelo): la
+    // bola gira sobre su centro y queda TANGENTE a la línea de
+    // suelo, ni hundida ni flotando. Devuelve también la geometría
+    // (cy, dyC, rv) para la prueba de humo.
+    ballDraw(c) {
+      const cv = Sp.item('cactus'), k = R.stretch || 1; // k: estirado vertical de los billboards según la inclinación de cámara
+      const h = cv.height * (cv._scale || 1) * RACE_BALL_S * k; // alto del cuadro en unidades de mundo
+      const dyC = h * (1 - RACE_BALL_CY); // centro de la bola medido desde la base del cuadro
+      const lean = c.warned && c.change && !c.change.done ? Math.sin(this.T * 26) * 0.14 : 0; // la inclinación de aviso
+      const th = c.rot + lean, cy = RACE_BALL_R * k; // el centro, a un radio (vertical) del suelo
+      return { x: c.x + dyC * Math.sin(th), y: cy - dyC * Math.cos(th), roll: th, cy, dyC, rv: RACE_BALL_R * k };
     }
     tryJump(r) { if (r.h <= 0 && r.stun <= 0) { r.v = RACE_GRAV[this.grav].v0; r.h = 0.01; } }
     stepRunner(r, a, dt) {
@@ -2342,7 +2376,7 @@
           if (c.x >= c.change.at) { c.vx *= c.change.f; c.change.done = true; W.puff(c.x, 0, 3); }
         }
         c.vx += 24 * dt; // acelera al cruzar la pista
-        c.x += c.vx * dt; c.rot -= (c.vx * dt) / 13;
+        c.x += c.vx * dt; c.rot -= (c.vx * dt) / RACE_BALL_R; // rodadura verdadera: ω = v/r con el radio real de la bola (antes /13: giraba ~44% más rápido que su avance, como si patinara)
         this.hitCheck(c, rp, p, 'hitP', true);
         this.hitCheck(c, rc, cat, 'hitC', false);
       }
@@ -2368,9 +2402,9 @@
           for (let i = 0; i < 15; i++) mb.flat(-448 + i * 64 - off, 26, 30, 5, 0.4, '#8f6a3d');
         },
         sprites: () => this.cacti.forEach((c) => {
-          R.shadow(c.x, 0, 13, 0.8);
-          const lean = c.warned && c.change && !c.change.done ? Math.sin(this.T * 26) * 0.14 : 0; // la inclinación de aviso
-          R.sprite(Sp.item('cactus'), c.x, 3, 0, { feet: 6, roll: c.rot + lean, sx: 1.7, sy: 1.7 });
+          R.shadow(c.x, 0, RACE_BALL_R * 0.9, 0.8); // sombra de contacto acorde al tamaño real de la bola
+          const bd = this.ballDraw(c); // gira sobre su centro y apoya en el suelo (ver ballDraw)
+          R.sprite(Sp.item('cactus'), bd.x, bd.y, 0, { feet: 0, roll: bd.roll, sx: RACE_BALL_S, sy: RACE_BALL_S });
           if (c.warned && c.change && !c.change.done) ring(c.x, 0, 20, [1, 0.8, 0.3], 0.3);
         }),
         over: (c, t) => {
