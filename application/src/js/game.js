@@ -101,6 +101,18 @@
   // ---------- Interfaz ----------
   const msgs = $('#msgs'), actions = $('#actions'), overlay = $('#overlay');
 
+  // Media query de RETRATO compartida: espeja el bloque de
+  // retrato de style.css y la leen DOS piezas — la máquina del
+  // teléfono (abajo: en retrato el chat pasa a control MANUAL,
+  // como en el modo flotante) y la banda táctil inferior
+  // (initTouchLayout: muda #touchpad a main). Se define una
+  // sola vez aquí para que ambas compartan siempre el mismo
+  // criterio; sin matchMedia (el arnés del humo) vale null y
+  // cada pieza conserva su campo fijable a mano.
+  const portraitMQ = (typeof window !== 'undefined' && window.matchMedia)
+    ? window.matchMedia('(max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait)')
+    : null;
+
   // ---------- Teléfono: aparece SOLO si tiene algo que mostrar ----------
   // (Pedido de Jose, 2026-11-21: «el chat se esconde o aparece si es
   // que realmente tiene algo que mostrar, no se debe mantener en
@@ -124,31 +136,50 @@
   // mismos tiempos de antes) y el teléfono aparece en el mismo
   // instante en que llega el primero; y ninguna decisión puede
   // empezar sin mostrarlo, porque ui.choose/ui.assign lo fuerzan.
+  // (Todo esto es el modo AUTOMÁTICO, el de escritorio ancho; en
+  // el modo manual de la excepción manda la insignia.)
   //
-  // EXCEPCIÓN — MODO FLOTANTE (pedido de Jose, 2026-11-22, probando
-  // el modo inmersivo en horizontal): cuando el panel FLOTA sobre
-  // la escena (el bloque horizontal compacto de style.css lo pone
-  // `position: absolute`; es el único sitio donde eso ocurre), el
-  // aparecer/desaparecer solo NO le gusta: en ese modo el panel
-  // NUNCA se abre solo (ni por mensajes ni por decisión pendiente)
-  // y NUNCA se auto-oculta — lo abre y lo cierra ÉL con el botón
-  // del teléfono (que por eso crece en ese modo, ver style.css).
+  // EXCEPCIÓN — MODO MANUAL (pedido de Jose, 2026-11-22): en
+  // horizontal flotante y en VERTICAL el aparecer/desaparecer
+  // solo NO le gusta («pierdo el foco cuando aparece a mitad de
+  // un diálogo»): en esos modos el panel NUNCA se abre solo (ni
+  // por mensajes ni por decisión pendiente) y NUNCA se
+  // auto-oculta — lo abre y lo cierra ÉL con el botón del
+  // teléfono (que por eso crece en horizontal, ver style.css).
   // Lo que llega con el panel cerrado se acumula en la INSIGNIA
   // del botón: contador de no leídos, y si hay una DECISIÓN
   // pendiente la insignia pasa a «!» en alerta (pulso suave),
   // porque el juego no avanza sin esa elección; al abrir el
   // panel la insignia se limpia. Un pulso breve del botón
   // (clase .ping) avisa de que llegó algo, sin abrir nada.
-  // El modo se detecta de la FUENTE DE VERDAD del CSS — la
-  // posición calculada del panel — en vez de duplicar las media
-  // queries en JS; sin getComputedStyle (el arnés del humo)
-  // manda el campo floatMode, que la prueba fija a mano como
-  // hace con cromo.active.
+  //   · FLOTANTE: el panel flota sobre la escena (el bloque
+  //     horizontal compacto de style.css lo pone
+  //     `position: absolute`; es el único sitio donde eso
+  //     ocurre). Se detecta de la FUENTE DE VERDAD del CSS — la
+  //     posición calculada del panel — en vez de duplicar las
+  //     media queries en JS; sin getComputedStyle (el arnés del
+  //     humo) manda el campo floatMode, fijable a mano.
+  //   · RETRATO: el panel vive EN FLUJO en la columna vertical
+  //     y nace CERRADO (la insignia es la campana). Al cerrarse
+  //     colapsa su espacio en la columna — la regla base
+  //     `#phone.ph-off { display: none }` ya lo sacaba del
+  //     layout, y la banda táctil inferior (margin-top:auto)
+  //     sigue anclada al fondo — y al abrirse ocupa su sitio en
+  //     el flujo como siempre (la distribución que Jose aprobó:
+  //     juego arriba, mensajes en medio). Se detecta con
+  //     portraitMQ, la media query de retrato compartida con la
+  //     banda táctil; sin matchMedia (el arnés) manda el campo
+  //     portraitMode, fijable a mano.
+  // Al girar el teléfono el estado abierto/cerrado se CONSERVA:
+  // cada modo relee su criterio en cada llamada (syncFloat /
+  // syncPortrait) y el oculto se pinta a la manera del modo en
+  // curso. En escritorio ancho (ni flotante ni retrato) manda
+  // la máquina automática de arriba, sin cambios.
   const PHONE_GRACE_MS = 4000; // gracia antes del auto-ocultado
   const phoneEl = $('#phone'), phoneBadge = $('#phonebadge');
   const phone = {
-    visible: false, pending: false, pinned: false, muted: false, unread: 0, graceT: null, graceMs: PHONE_GRACE_MS, floatMode: false, pingT: null,
-    state() { return { visible: this.visible, pending: this.pending, pinned: this.pinned, muted: this.muted, unread: this.unread, floating: this.floatMode }; },
+    visible: false, pending: false, pinned: false, muted: false, unread: 0, graceT: null, graceMs: PHONE_GRACE_MS, floatMode: false, portraitMode: false, pingT: null,
+    state() { return { visible: this.visible, pending: this.pending, pinned: this.pinned, muted: this.muted, unread: this.unread, floating: this.floatMode, portrait: this.portraitMode, manual: this.floatMode || this.portraitMode }; },
     syncFloat() { // ¿el CSS tiene el panel flotando sobre la escena?
       if (phoneEl && typeof getComputedStyle === 'function') {
         try { this.floatMode = getComputedStyle(phoneEl).position === 'absolute'; } catch (e) { /* sin estilo calculable: se conserva el valor anterior */ }
@@ -156,6 +187,12 @@
       return this.floatMode;
     },
     floating() { return this.syncFloat(); },
+    syncPortrait() { // ¿estamos en retrato? (la media query compartida con la banda táctil)
+      if (portraitMQ) this.portraitMode = !!portraitMQ.matches;
+      return this.portraitMode;
+    },
+    portrait() { return this.syncPortrait(); },
+    manual() { return this.floating() || this.portrait(); }, // modo manual: flotante O retrato
     paint() {
       if (phoneEl) phoneEl.classList.toggle('ph-off', !this.visible);
       if (phoneBadge) {
@@ -177,18 +214,18 @@
     },
     armGrace() {
       clearTimeout(this.graceT);
-      if (this.floating() || !this.visible || this.pending || this.pinned) return; // flotante: jamás se auto-oculta
+      if (this.manual() || !this.visible || this.pending || this.pinned) return; // modo manual: jamás se auto-oculta
       this.graceT = setTimeout(() => {
         // Si al vencer la gracia el juego está en pausa, se rearma:
         // el teléfono no desaparece debajo del menú de pausa.
-        if (this.pending || this.pinned || G.paused || this.floating()) this.armGrace();
+        if (this.pending || this.pinned || G.paused || this.manual()) this.armGrace();
         else this.hide();
       }, this.graceMs);
     },
     show() { this.visible = true; this.unread = 0; this.paint(); this.armGrace(); },
     hide() { this.visible = false; clearTimeout(this.graceT); this.paint(); },
     content() { // llegó algo al chat (ui.raw)
-      if (this.floating()) { // flotante: control manual — nunca se abre solo; suma a la insignia
+      if (this.manual()) { // modo manual (flotante o retrato): nunca se abre solo; suma a la insignia
         if (!this.visible) { this.unread++; this.ping(); }
         this.paint(); return;
       }
@@ -197,7 +234,7 @@
     },
     decision(on) { // una decisión del jugador empieza/termina
       this.pending = !!on;
-      if (this.floating()) { // flotante: no se abre solo; la insignia queda en alerta hasta responderla
+      if (this.manual()) { // modo manual: no se abre solo; la insignia queda en alerta hasta responderla
         if (on) this.ping();
         this.paint(); return;
       }
@@ -238,9 +275,17 @@
     // estándar de chat: solo se sigue al fondo si YA se estaba
     // (casi) al final — dentro de CHAT_STICK_PX —; si no, la
     // posición de lectura se conserva intacta. ui.scroll es el
-    // punto común (lo llaman raw, choose y assign) y raw mide la
+    // punto común de los MENSAJES (lo llama raw, que mide la
     // cercanía al final ANTES de añadir, para que el mensaje
-    // nuevo no cuente como «lejos del final».
+    // nuevo no cuente como «lejos del final»).
+    // Las DECISIONES (choose/assign) NO lo llaman (ampliación
+    // del mismo pedido, 2026-11-22): su llegada NUNCA mueve el
+    // scroll, ni siquiera estando el jugador al final — la
+    // vista saltaba a la decisión y el mensaje que la motiva
+    // salía de pantalla («no puedo leer los mensajes ni la
+    // razón porque tengo que elegir personajes»). Jose lee la
+    // razón a su ritmo y baja a elegir cuando quiere; si el
+    // panel está cerrado, la insignia «!» avisa fuera.
     scroll() { if (msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight <= CHAT_STICK_PX) msgs.scrollTop = msgs.scrollHeight; },
     raw(html) {
       const stick = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight <= CHAT_STICK_PX;
@@ -272,7 +317,7 @@
     async postAll(list) { for (const m of list) await ui.post(m); ui.fast = false; },
     choose(options, timer) {
       return new Promise((res) => {
-        phone.decision(true); // decisión pendiente: el chat se muestra y NO se oculta hasta resolverla
+        phone.decision(true); // decisión pendiente: la máquina avisa según el modo (escritorio: muestra el chat y no lo oculta; modo manual: solo la insignia «!»)
         actions.innerHTML = ''; let tm = null, left = timer;
         const finish = (i) => { phone.decision(false); if (G.practiceMode) return; if (tm) clearInterval(tm); actions.innerHTML = ''; ui.raw(`<div class="mine">${options[i].label}</div>`); res(i); };
         if (timer) {
@@ -287,7 +332,7 @@
           const b = el('button', 'opt', `<span>${'ABC'[i]}</span>${o.label}${miss ? ` <em>(falta: ${G.ITEMS[o.requires].name})</em>` : o.requires ? ` <em class="ok">(usa: ${G.ITEMS[o.requires].name})</em>` : ''}`);
           b.disabled = !!miss; b.onclick = () => finish(i); actions.appendChild(b);
         });
-        ui.scroll();
+        // SIN scroll a propósito: la llegada de una decisión nunca mueve la lectura (ver ui.scroll).
       });
     },
     // tarjetas de asignación de personaje: SOLO la party (protagonista +
@@ -295,7 +340,7 @@
     // se ofrece el roster completo.
     assign(prompt, info) {
       return new Promise((res) => {
-        phone.decision(true); // asignación pendiente: misma regla que ui.choose
+        phone.decision(true); // asignación pendiente: misma regla de aviso que ui.choose
         actions.innerHTML = `<div class="ask">${prompt}</div>`;
         const wrap = el('div', 'cards');
         (S.party.length ? S.party : G.PLAYABLE).forEach((id) => {
@@ -304,7 +349,7 @@
           b.disabled = tired; b.onclick = () => { phone.decision(false); actions.innerHTML = ''; ui.raw(`<div class="mine">Va ${c.name}</div>`); res(id); };
           wrap.appendChild(b);
         });
-        actions.appendChild(wrap); ui.scroll();
+        actions.appendChild(wrap); // SIN scroll a propósito: la decisión no mueve la lectura (ver ui.scroll).
       });
     },
     modal(html, btn) {
@@ -736,9 +781,10 @@
     // #stagewrap: su orden entre hermanas no importa (es
     // absoluta y la regla de ocultación con modal usa ~, que
     // solo pide que siga siendo hermana POSTERIOR de #stage).
-    const portraitMQ = (typeof window !== 'undefined' && window.matchMedia)
-      ? window.matchMedia('(max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait)')
-      : null;
+    // portraitMQ NO se redefine aquí: es la media query de
+    // retrato COMPARTIDA (definida junto a la máquina del
+    // teléfono, que también la lee para su modo manual en
+    // vertical) — un solo criterio para banda y chat.
     let band = false;
     function syncBand(force) {
       const want = typeof force === 'boolean' ? force : !!(portraitMQ && portraitMQ.matches);

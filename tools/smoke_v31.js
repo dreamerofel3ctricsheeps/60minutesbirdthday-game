@@ -3029,7 +3029,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     msgsFake.scrollTop = 100; G.ui.scroll();
     const upStaysW = msgsFake.scrollTop === 100;
     msgsFake.scrollTop = 690; G.ui.scroll();
-    check('scroll: ui.scroll (el punto común que también llaman choose/assign) aplica la misma regla',
+    check('scroll: ui.scroll (el punto común de los MENSAJES) aplica la regla de seguimiento; las decisiones ya no lo invocan (sección W2)',
       upStaysW && msgsFake.scrollTop === 1000, 'scrollTop=' + msgsFake.scrollTop);
     phW.reset();
 
@@ -3044,6 +3044,99 @@ const tick = () => new Promise((r) => setImmediate(r));
     const bandOffW = G.touchBandSync(false);
     check('banda: al salir de vertical la capa vuelve a #stagewrap (vuelve el modo superpuesto/márgenes intacto)',
       bandOffW === false && padFake.parent === wrapFake, '');
+  }
+
+  // --- Sección W2: el modelo manual manda también en VERTICAL
+  // (playtest de Jose, 2026-11-22, sobre develop) ---
+  // «El chat debería mostrarse o desaparecer cuando uno lo
+  // seleccione, porque pierdo el foco cuando aparece a mitad de
+  // un diálogo»: en retrato el panel vive en el flujo y seguía
+  // con la máquina automática de escritorio. Ahora el modo
+  // manual es flotante O retrato (la media query portraitMQ se
+  // comparte con la banda táctil; en el arnés, sin matchMedia,
+  // manda el campo portraitMode, como floatMode). En retrato el
+  // panel nace cerrado, al cerrarse colapsa en la columna (la
+  // regla base lo saca del layout) y la insignia es la campana.
+  // Y la llegada de una DECISIÓN ya no mueve el scroll ni
+  // estando el lector al final: la razón de la elección se lee
+  // al ritmo del jugador (los mensajes normales sí siguen).
+  {
+    console.log('\nW2) Chat manual también en vertical y decisiones que no roban el scroll');
+    const waitW2 = (ms) => new Promise((r) => setTimeout(r, ms));
+    const cssW2 = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameW2 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+
+    // --- Fuente: detección compartida y decisiones sin scroll ---
+    check('retrato: el modo manual del teléfono es flotante O retrato (manual() = floating() || portrait(), con syncPortrait sobre la media query)',
+      gameW2.includes('manual() { return this.floating() || this.portrait(); }') && gameW2.includes('syncPortrait()') && gameW2.includes('portraitMode'), '');
+    check('retrato: la media query de retrato se define UNA sola vez y la comparten el teléfono y la banda táctil (sin duplicar el criterio)',
+      (gameW2.split("window.matchMedia('(max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait)')").length - 1) === 1
+      && gameW2.includes('G.touchBandSync = syncBand'), '');
+    check('retrato: al cerrarse el panel COLAPSA su espacio en la columna (la regla base lo saca del layout: display none)',
+      cssW2.includes('#phone.ph-off { display: none; }'), '');
+    const iChooseW2 = gameW2.indexOf('choose(options, timer)');
+    const chooseTxtW2 = iChooseW2 >= 0 ? gameW2.slice(iChooseW2, gameW2.indexOf('assign(prompt, info)')) : '';
+    const iAssignW2 = gameW2.indexOf('assign(prompt, info)');
+    const assignTxtW2 = iAssignW2 >= 0 ? gameW2.slice(iAssignW2, gameW2.indexOf('modal(html, btn)')) : '';
+    check('decisiones: ni choose ni assign invocan el scroll al renderizarse (su llegada nunca mueve la lectura)',
+      iChooseW2 >= 0 && iAssignW2 >= 0 && !chooseTxtW2.includes('.scroll(') && !assignTxtW2.includes('.scroll(')
+      && !gameW2.includes('ui.scroll();'), '');
+
+    // --- Comportamiento: el teléfono en modo retrato ---
+    const ph2 = G.ui.phone, badge2 = documentFake.querySelector('#phonebadge'), phoneEl2 = documentFake.querySelector('#phone'),
+      acts2 = documentFake.querySelector('#actions'), msgs2 = documentFake.querySelector('#msgs');
+    ph2.floatMode = false; ph2.portraitMode = true; // sin matchMedia en el arnés: el modo se fija a mano, como floatMode
+    ph2.reset();
+    check('retrato: el panel NACE cerrado (la insignia es la campana) y el modo se reporta manual/retrato',
+      ph2.state().visible === false && phoneEl2.classList.contains('ph-off') && ph2.state().manual === true && ph2.state().portrait === true && ph2.state().floating === false,
+      JSON.stringify(ph2.state()));
+    await G.ui.post({ who: 'sistema', text: 'Mensaje vertical uno' });
+    await G.ui.post({ who: 'sistema', text: 'Mensaje vertical dos' });
+    check('retrato: con mensajes nuevos el panel NO se abre solo y la insignia ACUMULA los no leídos (el panel sigue colapsado en la columna)',
+      ph2.state().visible === false && phoneEl2.classList.contains('ph-off') && ph2.state().unread === 2
+      && badge2.textContent === '2' && badge2.style.display === 'grid' && !badge2.classList.contains('alert'),
+      JSON.stringify(ph2.state()) + ' badge=' + badge2.textContent);
+
+    // --- Comportamiento: la decisión no roba el scroll ---
+    msgs2.scrollHeight = 1000; msgs2.clientHeight = 300; msgs2.scrollTop = 700; // pegado al final (hueco 0 ≤ CHAT_STICK_PX)
+    let chosenW2 = -1;
+    const pChooseW2 = G.ui.choose([{ label: 'Ir' }, { label: 'Quedarse' }]).then((i) => { chosenW2 = i; });
+    check('retrato: una decisión pendiente TAMPOCO abre el panel; la insignia pasa a alerta «!»',
+      ph2.state().visible === false && ph2.state().pending === true && badge2.textContent === '!' && badge2.classList.contains('alert'),
+      JSON.stringify(ph2.state()) + ' badge=' + badge2.textContent);
+    check('decisiones: renderizada con el lector AL FINAL, el scroll NO se mueve (la razón de la elección queda en pantalla)',
+      msgs2.scrollTop === 700, 'scrollTop=' + msgs2.scrollTop);
+    const optBtnW2 = acts2.children.find((c) => c.onclick);
+    if (optBtnW2) optBtnW2.onclick();
+    await pChooseW2;
+    check('decisiones: al responderla, el eco de la elección es un MENSAJE normal y SÍ sigue la regla de seguimiento (salta al final)',
+      chosenW2 === 0 && ph2.state().pending === false && msgs2.scrollTop === 1000, 'scrollTop=' + msgs2.scrollTop);
+
+    // Apertura manual y no auto-ocultado en retrato
+    ph2.toggle(); // abrir a mano con el botón
+    const openedW2 = ph2.state().visible === true && ph2.state().unread === 0 && badge2.style.display === 'none';
+    ph2.graceMs = 50; // si en retrato hubiera auto-ocultado, 150 ms bastan para cazarlo
+    await waitW2(150);
+    check('retrato: abierto a mano la insignia se limpia, el panel ocupa su sitio en el flujo y NO se auto-oculta jamás',
+      openedW2 && ph2.state().visible === true && !phoneEl2.classList.contains('ph-off'), JSON.stringify(ph2.state()));
+    ph2.toggle(); // cerrar a mano: colapsa
+    check('retrato: cerrado a mano el panel colapsa (ph-off) y queda cerrado',
+      ph2.state().visible === false && phoneEl2.classList.contains('ph-off'), JSON.stringify(ph2.state()));
+
+    // Rotación: el estado abierto/cerrado se conserva al cambiar de modo
+    ph2.toggle(); // abierto en retrato…
+    ph2.portraitMode = false; ph2.floatMode = true; // …giro a horizontal flotante
+    const rotKeepsW2 = ph2.state().visible === true;
+    await G.ui.post({ who: 'sistema', text: 'Mensaje tras el giro' });
+    check('rotación: al pasar de retrato a flotante el panel CONSERVA su estado (abierto) y el modo sigue siendo manual (sin conteo con el panel abierto)',
+      rotKeepsW2 && ph2.state().visible === true && ph2.state().unread === 0 && ph2.state().manual === true, JSON.stringify(ph2.state()));
+
+    // Escritorio ancho: ni flotante ni retrato → la máquina automática de siempre, intacta
+    ph2.floatMode = false; ph2.portraitMode = false; ph2.reset();
+    await G.ui.post({ who: 'sistema', text: 'Mensaje de escritorio' });
+    check('escritorio: sin flotante ni retrato el chat sigue apareciendo solo con contenido nuevo (modo automático intacto)',
+      ph2.state().visible === true && ph2.state().manual === false, JSON.stringify(ph2.state()));
+    ph2.reset(); ph2.graceMs = 4000;
   }
 
   // --- Sección X: botón de pruebas «Borrar caché y datos» ---
