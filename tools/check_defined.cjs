@@ -51,7 +51,7 @@ const FRONT = ['idle', 'walk_down', 'run_down', 'act'];
 // 1. todo personaje de data.js existe
 for (const id of Object.keys(G.CHARS)) {
   ok(!!META.chars[id], `personaje ${id} (de data.js) tiene hoja`);
-  ok(typeof DATA[id] === 'string' && DATA[id].startsWith('data:image/png;base64,'), `personaje ${id} tiene dataURL PNG`);
+  ok(typeof DATA[id] === 'string' && DATA[id].startsWith('assets/sheets/'), `personaje ${id} tiene dataURL PNG`);
 }
 
 // 3 (parcial): dimensiones reales del PNG contra la metadata
@@ -60,7 +60,7 @@ function pngSize(buf) {
   return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
 }
 for (const [id, m] of Object.entries(META.chars)) {
-  const buf = Buffer.from(DATA[id].split(',')[1], 'base64');
+  const buf = fs.readFileSync(path.join(SRC, DATA[id]));
   const sz = pngSize(buf);
   ok(!!sz && sz.w === m.sw && sz.h === m.sh, `${id}: PNG ${sz ? sz.w + 'x' + sz.h : '?'} == metadata ${m.sw}x${m.sh}`);
   const rows = Math.ceil(Math.max(...Object.values(m.anims).flat(), 0) / m.cols) + 1;

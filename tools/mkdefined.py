@@ -410,7 +410,10 @@ def main():
             qb = io.BytesIO(); q.save(qb, 'PNG', optimize=True)
             if len(qb.getvalue()) < len(png): png = qb.getvalue()
         open(os.path.join(OUT_PNG, cid + '.png'), 'wb').write(png)
-        data_all[cid] = 'data:image/png;base64,' + base64.b64encode(png).decode()
+        _sd = os.path.join(ROOT, 'application/src/assets/sheets/defined')
+        os.makedirs(_sd, exist_ok=True)
+        open(os.path.join(_sd, cid + '.png'), 'wb').write(png)
+        data_all[cid] = 'assets/sheets/defined/' + cid + '.png'
         report.append(f'  hoja {cid}.png: {len(png) / 1024:.0f} KB')
     js = ('/* GENERADO por tools/mkdefined.py — NO editar a mano.\n'
           '   Hojas de los sprites DEFINIDOS (bundles de new-sprites) normalizadas\n'

@@ -37,8 +37,10 @@ def main() -> None:
     entries = []
     for name in NAMES:
         data = (IMG_DIR / f"{name}.png").read_bytes()
-        b64 = base64.b64encode(data).decode("ascii")
-        entries.append(f'    "{name}": "data:image/png;base64,{b64}"')
+        _sd = ROOT / "application" / "src" / "assets" / "sheets" / "rocket"
+        _sd.mkdir(parents=True, exist_ok=True)
+        (_sd / f"{name}.png").write_bytes(data)
+        entries.append(f'    "{name}": "assets/sheets/rocket/{name}.png"')
     body = ",\n".join(entries)
     text = (
         "/* GENERADO por tools/mkrockets.py — NO editar a mano.\n"

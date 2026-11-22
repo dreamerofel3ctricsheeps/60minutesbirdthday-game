@@ -1669,7 +1669,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     // Corrección: data URIs en G.ROCKET_DATA + rAF agendado ANTES de
     // update/draw en frame() ---
     check('contador 4: G.ROCKET_DATA existe con las 6 claves y cada valor es una data URI PNG',
-      !!G.ROCKET_DATA && rocketFiles.every((n) => typeof G.ROCKET_DATA[n] === 'string' && G.ROCKET_DATA[n].startsWith('data:image/png;base64,')),
+      !!G.ROCKET_DATA && rocketFiles.every((n) => typeof G.ROCKET_DATA[n] === 'string' && G.ROCKET_DATA[n].startsWith('assets/sheets/')),
       G.ROCKET_DATA ? Object.keys(G.ROCKET_DATA).join(',') : 'sin ROCKET_DATA');
     check('contador 4: scenes.js carga los cohetes desde G.ROCKET_DATA, NO desde la ruta assets/img/',
       scenesTxt2.includes('G.ROCKET_DATA[name]') && !scenesTxt2.includes("'assets/img/' +"));
@@ -1784,7 +1784,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('J1407b 1B imágenes: los 9 sprites con traje y la meta existen en application/src/assets/img/',
       beltFiles.every((n) => fs.existsSync(path.join(imgDir, n + '.png'))));
     check('J1407b 1B imágenes: G.BELT_DATA trae las 10 claves como data URIs PNG',
-      !!G.BELT_DATA && beltFiles.every((n) => typeof G.BELT_DATA[n] === 'string' && G.BELT_DATA[n].startsWith('data:image/png;base64,')),
+      !!G.BELT_DATA && beltFiles.every((n) => typeof G.BELT_DATA[n] === 'string' && G.BELT_DATA[n].startsWith('assets/sheets/')),
       G.BELT_DATA ? Object.keys(G.BELT_DATA).join(',') : 'sin BELT_DATA');
     check('J1407b 1B imágenes: index.html incluye js/belt-sheets.js ANTES que js/scenes.js',
       htmlTxt2.includes('js/belt-sheets.js') && htmlTxt2.indexOf('js/belt-sheets.js') < htmlTxt2.indexOf('js/scenes.js'));
@@ -1829,7 +1829,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('la recolección spawnea claqueta y cámara como cualquier ítem', spawned.includes('claqueta') && spawned.includes('camara') && new Set(spawned).size === Object.keys(G.ITEMS).length, spawned.join(','));
     // Registro de especiales y pantallas
     check('G.SPECIALS registra a Alebrije y Teodora (fuera de G.CHARS)', !!G.SPECIALS.alebrije && !!G.SPECIALS.teodora && !G.CHARS.alebrije && !G.CHARS.teodora);
-    check('retratos por código de los especiales (specialURL)', G.specialURL('alebrije').startsWith('data:image') && G.specialURL('teodora').startsWith('data:image'));
+    check('retratos por código de los especiales (specialURL)', G.specialURL('alebrije').startsWith('assets/sheets/') && G.specialURL('teodora').startsWith('assets/sheets/'));
     check('ENDINGS.leyendas = «ESTRELLA DE CINE»', !!G.ENDINGS.leyendas && G.ENDINGS.leyendas.title === 'ESTRELLA DE CINE');
     check('las entradas de Leyendas NO están en la historia (G.STORY)', !G.STORY.includes('patron') && !G.STORY.includes('trazo') && !G.STORY.includes('soga') && !G.STORY.includes('finalleyendas'));
     check('MG registra los 3 minijuegos y la cadena de Leyendas', !!(MG.patron && MG.trazo && MG.soga && MG.finalleyendas));
@@ -1867,7 +1867,7 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('patrón: la base y las 6 variantes de zona existen en application/src/assets/img/',
         albFiles.every((n) => fs.existsSync(path.join(imgDirM, n + '.png'))));
       check('patrón: G.ALEBRIJE_DATA trae base + 6 zonas como data URIs PNG',
-        !!G.ALEBRIJE_DATA && albFiles.every((n) => typeof G.ALEBRIJE_DATA[n] === 'string' && G.ALEBRIJE_DATA[n].startsWith('data:image/png;base64,')),
+        !!G.ALEBRIJE_DATA && albFiles.every((n) => typeof G.ALEBRIJE_DATA[n] === 'string' && G.ALEBRIJE_DATA[n].startsWith('assets/sheets/')),
         G.ALEBRIJE_DATA ? Object.keys(G.ALEBRIJE_DATA).join(',') : 'sin ALEBRIJE_DATA');
       const htmlTxtM = fs.readFileSync(path.join(SRC, '..', 'main.js'), 'utf8');
       check('patrón: index.html incluye js/alebrije-sheets.js ANTES que js/scenes.js',
@@ -1897,11 +1897,11 @@ const tick = () => new Promise((r) => setImmediate(r));
         && finaleLight.points.length === 0, JSON.stringify(finaleLight));
       check('final Leyendas: las poses del Alebrije (director/feliz) existen como PNG y data URI',
         ['alebrije-director', 'alebrije-feliz'].every((n) => fs.existsSync(path.join(imgDirM, n + '.png'))
-          && typeof G.ALEBRIJE_DATA[n] === 'string' && G.ALEBRIJE_DATA[n].startsWith('data:image/png;base64,')),
+          && typeof G.ALEBRIJE_DATA[n] === 'string' && G.ALEBRIJE_DATA[n].startsWith('assets/sheets/')),
         G.ALEBRIJE_DATA ? Object.keys(G.ALEBRIJE_DATA).join(',') : 'sin ALEBRIJE_DATA');
       check('final Leyendas: las poses de Teodora del final (altiva/presentadora) existen como PNG y data URI',
         ['teodora-altiva', 'teodora-presentadora'].every((n) => fs.existsSync(path.join(imgDirM, n + '.png'))
-          && typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
+          && typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('assets/sheets/')),
         G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
       check('patrón: luz NEUTRA del duelo (amb y sun en blanco equilibrado, sin puntos de color, sin LIGHT.fiesta)',
         !!Sc.PatronDuel.LIGHT && Sc.PatronDuel.LIGHT.amb[0] === Sc.PatronDuel.LIGHT.amb[1] && Sc.PatronDuel.LIGHT.amb[1] === Sc.PatronDuel.LIGHT.amb[2]
@@ -1970,7 +1970,7 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('trazo: las 9 poses de Teodora existen en application/src/assets/img/',
         teoFiles.every((n) => fs.existsSync(path.join(imgDirT, n + '.png'))));
       check('trazo: G.TEODORA_DATA trae las 9 poses como data URIs PNG',
-        !!G.TEODORA_DATA && teoFiles.every((n) => typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
+        !!G.TEODORA_DATA && teoFiles.every((n) => typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('assets/sheets/')),
         G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
       const htmlTxtT = fs.readFileSync(path.join(SRC, '..', 'main.js'), 'utf8');
       check('trazo: index.html incluye js/teodora-sheets.js ANTES que js/scenes.js',
@@ -1990,7 +1990,7 @@ const tick = () => new Promise((r) => setImmediate(r));
         !sogaSrc.includes('teoCv(') && !sogaSrc.includes('calCv(') && sogaSrc.includes("teoImg(teoName)") && sogaSrc.includes("jumpImg('calaverita-clasica-perfil-a')") && sogaSrc.includes("jumpImg('calaverita-morada-perfil-a')"), '');
       check('soga: Teodora suma salto (de su hoja de boss) y quemada (de la de faltantes) como PNG y data URI',
         ['teodora-salto', 'teodora-quemada'].every((n) => fs.existsSync(path.join(imgDirS, n + '.png'))
-          && typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
+          && typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('assets/sheets/')),
         G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
       check('soga: cámara verificada con la proyección real (dist 520, pitch 0,36, objetivo y=26; la anterior cortaba el arco y pegaba los postes a los bordes)',
         !!Sc.SogaDuel.CAM && Sc.SogaDuel.CAM.dist === 520 && Sc.SogaDuel.CAM.pitch === 0.36 && Sc.SogaDuel.CAM.y === 26 && Sc.SogaDuel.CAM.z === 6,
@@ -2002,7 +2002,7 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('soga: la sombra de Teodora usa la firma vigente de R.flat (la antigua de 7 args ignoraba las opciones)',
         sogaSrc.includes('R.flat(R.glowTex, J.t.x, 0.8, 0, 21, { ry: 0.67') && !sogaSrc.includes('42, 28, { color:'), '');
       check('soga: G.JUMP_DATA trae los 7 saltos, las calaveritas (frontales + perfiles ×2 frames) y las esperas ×2 de los 7 roomies como data URIs PNG y sus PNG existen',
-        !!G.JUMP_DATA && Sc.SogaDuel.JUMP.files.length === 27 && Sc.SogaDuel.JUMP.files.every((n) => typeof G.JUMP_DATA[n] === 'string' && G.JUMP_DATA[n].startsWith('data:image/png;base64,') && fs.existsSync(path.join(imgDirS, n + '.png'))),
+        !!G.JUMP_DATA && Sc.SogaDuel.JUMP.files.length === 27 && Sc.SogaDuel.JUMP.files.every((n) => typeof G.JUMP_DATA[n] === 'string' && G.JUMP_DATA[n].startsWith('assets/sheets/') && fs.existsSync(path.join(imgDirS, n + '.png'))),
         G.JUMP_DATA ? Object.keys(G.JUMP_DATA).join(',') : 'sin JUMP_DATA');
       check('soga: index.html incluye js/jump-sheets.js ANTES que js/scenes.js',
         htmlTxtT.includes('js/jump-sheets.js') && htmlTxtT.indexOf('js/jump-sheets.js') < htmlTxtT.indexOf('js/scenes.js'));
@@ -2182,7 +2182,7 @@ const tick = () => new Promise((r) => setImmediate(r));
         trazoSrc4.includes('this.teoTrip') && trazoSrc4.includes('this.teoArc = Math.sin(Math.PI') && trazoSrc4.includes('(this.teoArc || 0) * 11 + Math.sin(t * 9.42) * 3.5'), '');
       check('trazo (4ª ronda): teodora-side2 y teodora-side-izq2 (frames hermanos generados) existen como PNG y data URI',
         fs.existsSync(path.join(imgDir4, 'teodora-side2.png')) && fs.existsSync(path.join(imgDir4, 'teodora-side-izq2.png'))
-        && G.TEODORA_DATA['teodora-side2'].startsWith('data:image/png;base64,') && G.TEODORA_DATA['teodora-side-izq2'].startsWith('data:image/png;base64,'), '');
+        && G.TEODORA_DATA['teodora-side2'].startsWith('assets/sheets/') && G.TEODORA_DATA['teodora-side-izq2'].startsWith('assets/sheets/'), '');
       // Arco en vivo: con un único hexágono seguro lejano, a mitad
       // de camino el arco es positivo y el trayecto está registrado.
       const dw4 = new Sc.TrazoDuel('natalia', () => {});

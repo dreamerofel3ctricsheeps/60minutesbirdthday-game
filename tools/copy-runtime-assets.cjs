@@ -4,7 +4,7 @@
 const fs = require('fs'), path = require('path');
 const SRC = path.join(__dirname, '..', 'application', 'src', 'assets');
 const DST = path.join(__dirname, '..', 'dist', 'assets');
-for (const d of ['icons', 'audio', 'date', 'img']) {
+for (const d of ['icons', 'audio', 'date', 'img', 'sheets']) {
   fs.cpSync(path.join(SRC, d), path.join(DST, d), { recursive: true });
   console.log('copiado assets/' + d);
 }
