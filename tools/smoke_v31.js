@@ -1785,12 +1785,12 @@ const tick = () => new Promise((r) => setImmediate(r));
         && G.specialURL('alebrije') === G.ALEBRIJE_DATA['alebrije-frente'], '');
       check('trazo: la cara del HUD de Teodora se recorta de su sprite real (teoFaceCv usa teoImg, con respaldo por código)',
         scenesTxtU.includes("teoImg('teodora-idle')") && scenesTxtU.includes('function teoFaceCv()'), '');
-      check('trazo: cuenta regresiva PROPIA de 3 s (3·2·1), sin el «4» de la base (stT pisado en el constructor)',
-        Sc.TrazoDuel.COUNT === 3 && trazoSrcU.includes('this.stT = TRAZO_COUNT_T'), '');
+      check('trazo: cuenta regresiva PROPIA de 5 s (palabra de Jose, 3ª ronda; stT pisado en el constructor)',
+        Sc.TrazoDuel.COUNT === 5 && trazoSrcU.includes('this.stT = TRAZO_COUNT_T'), '');
       check('trazo: la presentación del set dura ~3,4 s y es saltable desde 0,4 s (antes 8,4 s)',
         scenesTxtU.includes('const REVEAL_DUR = 3.4') && scenesTxtU.includes('REVEAL_DUR - 0.05') && !scenesTxtU.includes('this.t >= 8.4'), '');
       const dc = new Sc.TrazoDuel('natalia', () => {});
-      check('trazo: un duelo recién creado arranca con la cuenta en 3 (stT = 3)', dc.st === 'count' && dc.stT === 3, `stT=${dc.stT}`);
+      check('trazo: un duelo recién creado arranca con la cuenta en 5 (stT = 5)', dc.st === 'count' && dc.stT === 5, `stT=${dc.stT}`);
       // Vuelo por estados: la pose depende de la dirección y la velocidad.
       const dv = new Sc.TrazoDuel('natalia', () => {});
       dv.phase = 'corre'; dv.teoMoving = true; dv.teoSpeed = 119;
@@ -1813,6 +1813,66 @@ const tick = () => new Promise((r) => setImmediate(r));
       df.update(0.05); df.update(0.05); df.update(0.05);
       check('trazo: anticipación antes del despegue y estela de chispas al volar',
         anticip > 0 && df.teoTrail.length > 0 && df.teoSpeed > 40, `anticip=${anticip.toFixed(2)} trail=${df.teoTrail.length} spd=${df.teoSpeed.toFixed(0)}`);
+    }
+    // --- Corrección de Jose (2026-11-21), 3ª ronda del Trazo: el
+    // sprite de Teodora salía CORTADO por la izquierda (la celda de
+    // extracción de mkteodora.py era más estrecha que la figura:
+    // trazo ocupa x 1961–2681 en su hoja y la celda nacía en 2010),
+    // seguía deslizándose, la cuenta pasa a 5 s con pausa de 2 s
+    // antes del anuncio del color, y las losetas pastel translúcidas
+    // se prestaban a confusión ---
+    {
+      const scenesTxtV = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const trazoSrcV = scenesTxtV.slice(scenesTxtV.indexOf('class TrazoDuel'), scenesTxtV.indexOf('class SogaDuel'));
+      const mkTxt = fs.readFileSync(path.join(__dirname, 'mkteodora.py'), 'utf8');
+      check('trazo: la extracción ya no cercena a Teodora (celdas medidas sobre la figura real + margen PAD en mkteodora.py)',
+        mkTxt.includes('("trazo", "teodora-poses-boss-v1.webp", (1920, 0, 2736, 912), False)')
+        && mkTxt.includes('("dash", "teodora-sprites-faltantes-v1.webp", (900, 0, 1560, 992), False)')
+        && mkTxt.includes('PAD = 14') && mkTxt.includes('canvas.paste(img, (PAD, PAD))'), '');
+      // Los PNG del duelo llevan el margen: alto del lienzo = figura
+      // (440, o 405/406 en idle/idle2 tras seccionar la sombra) + 28.
+      const ihdrH = (n) => { const b = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'assets', 'img', n + '.png')); return b.readUInt32BE(20); };
+      check('trazo: los PNG de Teodora del duelo llevan su margen (IHDR: 468 de alto; idle 433 e idle2 434 por la sombra seccionada)',
+        ihdrH('teodora-trazo') === 468 && ihdrH('teodora-side') === 468 && ihdrH('teodora-side-izq') === 468
+        && ihdrH('teodora-sorprendida') === 468 && ihdrH('teodora-derrotada') === 468 && ihdrH('teodora-selfie') === 468 && ihdrH('teodora-dash') === 468
+        && ihdrH('teodora-idle') === 433 && ihdrH('teodora-idle2') === 434, '');
+      check('trazo: los altos de billboard compensan el margen (TEO_H 85 en el Trazo; la Soga y las escenas del final ajustadas)',
+        Sc.TrazoDuel.TEO.h === 85 && scenesTxtV.includes('const SOGA_TEO_H = 81'), '');
+      // Pausa de 2 s antes del anuncio: constante, fase y flujo.
+      check('trazo: la pausa previa al anuncio es la constante TRAZO_COLOR_DELAY = 2 y el flujo pasa por la fase «pre»',
+        Sc.TrazoDuel.COLOR_DELAY === 2 && trazoSrcV.includes("this.phase = 'pre'; this.pt = 0;")
+        && trazoSrcV.includes("this.phase === 'pre'") && trazoSrcV.includes('¡Prepárense…!'), '');
+      const dp = new Sc.TrazoDuel('natalia', () => {});
+      dp.st = 'play'; dp.phase = 'trazo'; dp.tTrazo = 0.1; dp.pt = 0;
+      dp.update(0.2); // fin del trazo → «pre», todavía SIN anuncio
+      const enPre = dp.phase;
+      dp.update(0.5); dp.update(0.5); dp.update(0.5); // 1,5 s de pausa
+      const siguePre = dp.phase;
+      const sinCaida = dp.hexes.every((h) => h.warn === 0 && h.sink === 0);
+      dp.update(0.6); // 2,1 s → se anuncia y pasa a «aviso»
+      check('trazo: tras el trazo hay 2 s de «pre» sin anuncio ni caída, y luego «aviso»',
+        enPre === 'pre' && siguePre === 'pre' && sinCaida && dp.phase === 'aviso', `${enPre}/${siguePre}/${dp.phase}`);
+      // Paleta cerrada y cara plana opaca con su RGB exacto.
+      check('trazo: paleta cerrada saturada (ROJO/AZUL/AMARILLO con RGB exactos) en TrazoDuel.HEX',
+        JSON.stringify(Sc.TrazoDuel.HEX.colors) === JSON.stringify(['#e63229', '#2060ff', '#ffc400'])
+        && JSON.stringify(Sc.TrazoDuel.HEX.names) === JSON.stringify(['ROJO', 'AZUL', 'AMARILLO']), '');
+      check('trazo: la cara de la loseta es plana y opaca (sin brillo central, alfa 1) y el anuncio lleva swatch del RGB exacto',
+        !trazoSrcV.includes('shadeHex(col, 1.22)') && trazoSrcV.includes('(1 - 0.38 * e), alpha: 1')
+        && trazoSrcV.includes('c.fillStyle = HEX_COLORS[this.safeColor]; c.fillRect(206, 74, 18, 18)'), '');
+      check('trazo: el aviso de hundimiento ya no tiñe de rojo la loseta (velo oscuro + filo rojo, solo en la condenada)',
+        scenesTxtV.includes("rgba(38,4,4,0.62)") && !scenesTxtV.includes("hexPath(x, 48, 48, 44); x.fillStyle = '#ff3b30'; x.fill();"), '');
+      // Teodora nunca estatua: espera = celular tecleando; vuelo = frames alternos.
+      const dw2 = new Sc.TrazoDuel('natalia', () => {});
+      dw2.phase = 'aviso'; dw2.teoMoving = false;
+      const poseEspera = dw2.teoPose();
+      dw2.phase = 'corre'; dw2.teoMoving = true; dw2.teoVx = -100; dw2.teoAnimT = 0;
+      const frameA = dw2.teoPose();
+      dw2.teoAnimT = 0.2; // ~7 fps: el segundo frame del vuelo
+      const frameB = dw2.teoPose();
+      check('trazo: en espera Teodora está con el celular (selfie) y en vuelo alterna frames (side-izq ↔ idle2)',
+        poseEspera === 'selfie' && frameA === 'side-izq' && frameB === 'idle2', `${poseEspera}/${frameA}/${frameB}`);
+      check('trazo: el tecleo tiene su micro-animación (bob ~2 Hz de 1,6 u y balanceo) en draw',
+        trazoSrcV.includes('Math.sin(t * 12.6) * 1.6') && trazoSrcV.includes('Math.sin(t * 6.3) * 0.03') && trazoSrcV.includes('this.teoAnimT += dt'), '');
     }
     // 2B Soga: sin saltar te quemas; saltando a tiempo, Teodora cae en su selfie (~vuelta 10)
     {

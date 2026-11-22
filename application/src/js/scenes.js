@@ -3947,14 +3947,16 @@
     if (!teoCvCache.face) teoCvCache.face = codeCv(96, 96, (x) => { x.scale(2.2, 2.2); x.translate(-41, -12); drawTeoFigure(x, {}); });
     // Retrato desde el SPRITE REAL (corrección de Jose, 2026-11-21):
     // recorte de cabeza calculado de la anatomía de teodora-idle
-    // (sombrero en fy≈0, barbilla en fy≈0,44, cabeza centrada en
-    // fx 0,10–0,90), ajustado al lienzo. Se redibuja en cada llamada
-    // si la imagen ya cargó, así el HUD se corrige solo.
+    // SOBRE SU LIENZO CON MARGEN (3ª ronda: la figura va inset 14 px
+    // en un lienzo de 289×433; la cabeza ocupa fx 0,139–0,861 y
+    // fy 0,032–0,444 de ese lienzo), ajustado al lienzo. Se
+    // redibuja en cada llamada si la imagen ya cargó, así el HUD
+    // se corrige solo.
     const im = typeof Image !== 'undefined' ? teoImg('teodora-idle') : null;
     if (im && im.complete && im.naturalWidth) {
       const cv = teoCvCache.face, x = cv.getContext('2d');
       const iw = im.naturalWidth, ih = im.naturalHeight;
-      const sx = iw * 0.10, sy = 0, sw = iw * 0.80, sh = ih * 0.44;
+      const sx = iw * 0.139, sy = ih * 0.032, sw = iw * 0.722, sh = ih * 0.412;
       const sc = Math.min(96 / sw, 96 / sh), dw = sw * sc, dh = sh * sc;
       x.clearRect(0, 0, 96, 96);
       x.drawImage(im, sx, sy, sw, sh, (96 - dw) / 2, (96 - dh) / 2, dw, dh);
@@ -4216,7 +4218,15 @@
   // Teodora; (b) anuncio de color por flash y carrera a los
   // hexágonos seguros (los de ese color que la línea cruzó); el
   // resto del suelo se hunde. Caer 2 veces = fuera de la escena.
-  const HEX_COLORS = ['#ffd23f', '#4fd0ff', '#ff8ad6'], HEX_NAMES = ['ÁMBAR', 'CELESTE', 'ROSA'];
+  // PALETA CERRADA de las losetas (3ª ronda, corrección de Jose):
+  // colores SÓLIDOS, saturados y muy separados entre sí (rojo, azul
+  // y amarillo difieren en tono Y en luminosidad: se distinguen de
+  // un vistazo). La paleta anterior era pastel (#ffd23f/#4fd0ff/
+  // #ff8ad6) y encima la cara se dibujaba con alfa pulsante y un
+  // brillo central aclarado: el color real no se apreciaba y el
+  // anuncio se prestaba a confusión. Ahora la cara superior es este
+  // RGB EXACTO, opaco y plano (ver hexCv y el dibujo en draw()).
+  const HEX_COLORS = ['#e63229', '#2060ff', '#ffc400'], HEX_NAMES = ['ROJO', 'AZUL', 'AMARILLO'];
   // --- Correcciones de Jose (2026-11-21) a este duelo ---
   // LUZ NEUTRA propia (patrón de PATRON_LIGHT): el duelo usaba la
   // luz de fiesta y el set salía con su lavado saturado de colores.
@@ -4234,14 +4244,18 @@
   // y∈[144,269]).
   const TRAZO_SCALE = 0.72;
   const TRAZO_CAM = { x: 18, y: 24, z: 70, dist: 550, pitch: 0.56, fov: 44 };
-  // CUENTA REGRESIVA DE ESTE DUELO: 3·2·1 reales (~3 s). La clase
-  // base Duel arranca con stT = 3,6 y su visor anuncia un «4» antes
-  // del 3; sumada a la presentación del set en la cadena de Leyendas
-  // (LegendsRevealScene, ya comprimida a ~3,4 s), Jose medía hasta
-  // ~8 s antes de poder jugar. Aquí SOLO se acorta la cuenta de este
-  // duelo (el constructor la pisa tras super()); la base y los demás
-  // duelos no se tocan. Corrección de Jose, 2026-11-21.
-  const TRAZO_COUNT_T = 3.0;
+  // CUENTA REGRESIVA DE ESTE DUELO: la pisa el constructor tras
+  // super() (la base arranca con stT = 3,6 y anuncia un «4»). Su
+  // duración la fija Jose y su palabra más reciente manda: 3 s en
+  // la 2ª ronda, **5 s en la 3ª (2026-11-21)**. La presentación del
+  // set (LegendsRevealScene, ~3,4 s y saltable) no cambia.
+  const TRAZO_COUNT_T = 5.0;
+  // PAUSA PREVIA AL ANUNCIO DEL COLOR (3ª ronda, palabra de Jose):
+  // entre el fin del trazo y el anuncio del color seguro pasan
+  // 2 s de «¡Prepárense…!» — sin anuncio, sin movimiento y sin que
+  // ninguna loseta empiece su aviso/caída (la fase «cae» sigue
+  // llegando tras «aviso»/«corre», ya con el color anunciado).
+  const TRAZO_COLOR_DELAY = 2;
   // FASES DEL HUNDIMIENTO: aviso (la loseta condenada parpadea en
   // rojo y tiembla) y caída con easing (acelerando, con inclinación,
   // polvo y sacudida de cámara). Antes la loseta simplemente bajaba
@@ -4252,15 +4266,17 @@
   function hexPath(x, cx, cy, r) { x.beginPath(); for (let i = 0; i < 6; i++) { const a = (Math.PI / 3) * i + Math.PI / 6, px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.closePath(); }
   const hexCvCache = {};
   function hexCv(ci) {
-    // Loseta con VOLUMEN: cara lateral oscura desplazada (grosor),
-    // cara superior en SU color (el que manda en el anuncio, siempre
-    // legible), luz cenital y filo claro.
+    // Loseta con VOLUMEN: cara lateral oscura desplazada (grosor,
+    // un tono más oscuro del MISMO color) y cara superior PLANA con
+    // el RGB exacto de HEX_COLORS — sin brillo central aclarado ni
+    // filo claro que lo laven (3ª ronda: el color del anuncio tiene
+    // que ser el color de la loseta, sin discusión). El filo va en
+    // un tono oscuro del mismo color, solo para definir el borde.
     if (!hexCvCache[ci]) hexCvCache[ci] = codeCv(96, 96, (x) => {
       const col = HEX_COLORS[ci];
       hexPath(x, 48, 52, 44); x.fillStyle = shadeHex(col, 0.5); x.fill();
       hexPath(x, 48, 46, 44); x.fillStyle = col; x.fill();
-      hexPath(x, 48, 46, 35); x.fillStyle = shadeHex(col, 1.22); x.globalAlpha = 0.55; x.fill(); x.globalAlpha = 1;
-      hexPath(x, 48, 46, 44); x.strokeStyle = '#fff2cf'; x.lineWidth = 3; x.stroke();
+      hexPath(x, 48, 46, 44); x.strokeStyle = shadeHex(col, 0.68); x.lineWidth = 3; x.stroke();
     });
     return hexCvCache[ci];
   }
@@ -4272,8 +4288,15 @@
     });
     return hexCvCache.hole;
   }
-  function hexWarnCv() { // velo rojo del aviso de hundimiento
-    if (!hexCvCache.warn) hexCvCache.warn = codeCv(96, 96, (x) => { hexPath(x, 48, 48, 44); x.fillStyle = '#ff3b30'; x.fill(); });
+  function hexWarnCv() { // aviso de hundimiento: velo OSCURO + filo rojo
+    // (3ª ronda: el velo rojo sólido anterior TEÑÍA la loseta
+    // condenada y, con el ROJO ya en la paleta de juego, una loseta
+    // azul o amarilla parpadeando en rojo se podía confundir con
+    // una roja segura. Ahora la condenada se OSCURECE y su filo
+    // parpadea en rojo: se lee «peligro», nunca «otro color». El
+    // velo solo se dibuja sobre las losetas condenadas: las demás
+    // no se tiñen.)
+    if (!hexCvCache.warn) hexCvCache.warn = codeCv(96, 96, (x) => { hexPath(x, 48, 48, 44); x.fillStyle = 'rgba(38,4,4,0.62)'; x.fill(); hexPath(x, 48, 48, 42); x.strokeStyle = '#ff3b30'; x.lineWidth = 5; x.stroke(); });
     return hexCvCache.warn;
   }
   // Teodora en ESTE duelo es su sprite DISEÑADO (corrección de Jose):
@@ -4289,7 +4312,11 @@
   // presentadora) y las de «La soga de fuego» (salto de su hoja de
   // poses de boss y quemada cómica de la de faltantes).
   const TEODORA_FILES = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada', 'teodora-idle2', 'teodora-side', 'teodora-side-izq', 'teodora-altiva', 'teodora-presentadora', 'teodora-salto', 'teodora-quemada'];
-  const TEO_H = 80; // alto en mundo del billboard (≈74 px en pantalla con TRAZO_CAM)
+  // Alto en mundo del billboard. Desde la 3ª ronda los PNG de
+  // Teodora llevan MARGEN transparente (la figura mide 440 de los
+  // 468 px del lienzo): 80 × 468/440 ≈ 85 para que su tamaño en
+  // pantalla no cambie (≈74 px con TRAZO_CAM).
+  const TEO_H = 85;
   const teoImgs = {};
   function teoImg(name) {
     if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
@@ -4322,14 +4349,19 @@
       // la estela, anticipación antes de despegar hacia el hexágono,
       // asentamiento al llegar y estela de chispas en desplazamiento.
       this.teoSpeed = 0; this.teoAnticip = 0; this.teoSettleT = 0; this.teoWasMoving = false;
+      // Reloj PROPIO de la alternancia de frames del vuelo (~7 fps):
+      // solo avanza en draw(), así la pose es estable entre frames
+      // y determinista fuera de pantalla (teoPose devuelve el frame
+      // principal si nadie ha dibujado todavía).
+      this.teoAnimT = 0;
       this.teoTrail = []; this.teoTrailAcc = 0;
       teoPreload(); // Teodora de este duelo es imagen diseñada
-      this.stT = TRAZO_COUNT_T; // cuenta 3·2·1 de ESTE duelo (la base anuncia 3,6 con un «4»)
+      this.stT = TRAZO_COUNT_T; // cuenta de 5 s de ESTE duelo (la base anuncia 3,6 con un «4»)
       this.begin();
     }
     setup() {
       this.r = 0; this.fallsP = 0; this.fallsT = 0; this.precP = []; this.precT = [];
-      this.tTrazo = 11; this.tAviso = 1.4; this.tCorre = 3.4; this.tCae = SINK_WARN_T + SINK_FALL_T + 0.3; // duraciones (el humo las acorta)
+      this.tTrazo = 11; this.tPre = TRAZO_COLOR_DELAY; this.tAviso = 1.4; this.tCorre = 3.4; this.tCae = SINK_WARN_T + SINK_FALL_T + 0.3; // duraciones (el humo las acorta)
       this.newRound();
     }
     newRound() {
@@ -4379,6 +4411,19 @@
         if (this.sampleT >= 0.12) { this.sampleT = 0; this.samples++; this.accP += clamp15(1 - this.distPath(p) / 45, 0, 1); this.accT += clamp15(1 - this.distPath(this.teo) / 45, 0, 1); }
         if (this.pt >= this.tTrazo) {
           this.precP.push(this.samples ? (this.accP / this.samples) * 100 : 0); this.precT.push(this.samples ? (this.accT / this.samples) * 100 : 0);
+          // NO se anuncia todavía: primero la pausa de 2 s (fase
+          // «pre», ver TRAZO_COLOR_DELAY). El anuncio, el say() y
+          // los destinos de los partners llegan al pasar a «aviso».
+          this.phase = 'pre'; this.pt = 0;
+        }
+      } else if (this.phase === 'pre') {
+        // Pausa de 2 s ANTES del anuncio del color: nadie se mueve
+        // (velocidades a cero, como en el aviso) y ninguna loseta
+        // empieza su aviso/caída — eso solo ocurre en «cae», que
+        // sigue tras «aviso»/«corre», ya con el color anunciado.
+        p.vx = 0; p.vy = 0; p.moving = false;
+        this.partners.forEach((a) => { a.vx = 0; a.vy = 0; a.moving = false; });
+        if (this.pt >= this.tPre) {
           this.phase = 'aviso'; this.pt = 0; G.sfx('msg'); this.say(`¡Al color ${HEX_NAMES[this.safeColor]}!`, '#ffd7f0', 1.3);
           this.partners.forEach((a) => { const pool = Math.random() < 0.62 ? this.hexes.filter((h) => h.safe) : this.hexes; a.tx = pool[(Math.random() * pool.length) | 0]; });
         }
@@ -4446,15 +4491,25 @@
         // diseño; las hojas solo traían el derecho); a la derecha,
         // ráfaga «dash» si va lanzada en horizontal y perfil de su
         // hoja si va en diagonal; casi vertical, frontal flotando.
-        if (this.teoVx < -14) return 'side-izq';
-        if (this.teoVx > 60) return 'dash';
-        if (this.teoVx > 14) return 'side';
-        return 'idle';
+        // ALTERNANCIA de frames a ~7 fps (3ª ronda: Jose la seguía
+        // viendo deslizarse como un cartón): la pose direccional
+        // alterna con el otro punto de flotación según el reloj
+        // propio teoAnimT — el vuelo se lee vivo, con aleteo.
+        const alt = Math.floor(this.teoAnimT / 0.143) % 2 === 1;
+        if (this.teoVx < -14) return alt ? 'idle2' : 'side-izq';
+        if (this.teoVx > 60) return alt ? 'side' : 'dash';
+        if (this.teoVx > 14) return alt ? 'idle2' : 'side';
+        return 'idle'; // casi vertical: frontal (draw alterna idle/idle2 con el bob)
       }
-      return 'idle'; // aviso y reposo: flotando (draw alterna idle/idle2 con el bob)
+      // ESPERA (la pausa «pre», el aviso y la gracia de flotación
+      // en corre/cae mientras no se desplaza): está CON EL CELULAR
+      // (pose selfie) y en draw TECLEA con un bob corto y rápido —
+      // nunca inmóvil como una estatua (3ª ronda, palabra de Jose).
+      return 'selfie';
     }
     draw(dt) {
       const t = performance.now() / 1000, p = this.p;
+      this.teoAnimT += dt; // reloj de la alternancia de frames del vuelo de Teodora
       // Sacudida de cámara del hundimiento (desplome y caídas).
       const sh = this.shakeT > 0 ? Math.sin(t * 70) * 3 * (this.shakeT / 0.3) : 0;
       const cam = sh ? { ...this.cam, x: this.cam.x + sh, z: this.cam.z + sh * 0.6 } : this.cam;
@@ -4490,8 +4545,13 @@
             // «inclinación» de una loseta plana: se desplaza y se
             // acorta en z mientras se hunde acelerando).
             const jx = (this.phase === 'cae' && !h.safe && h.warn > 0 && e <= 0) ? Math.sin(t * 40 + h.x * 3) * 1.6 : 0;
-            R.flat(hexCv(h.color), h.x + jx + e * 6, 1 - e * 34, h.y, HEX_R, { ry: HEX_RY * (1 - 0.38 * e), alpha: h.safe && this.phase !== 'trazo' ? 1 : 0.55 + 0.2 * Math.sin(t * 3 + h.x) });
-            if (this.phase === 'cae' && !h.safe && h.warn > 0 && e <= 0) R.flat(hexWarnCv(), h.x + jx, 1.4, h.y, HEX_R, { ry: HEX_RY, alpha: 0.3 + 0.4 * Math.abs(Math.sin(t * 10)) }); // parpadeo rojo del aviso
+            // Cara OPACA siempre (alfa 1): R.flat ya pinta sin luz
+            // (uLit = -1 en gl3d.js), así que el RGB de la textura
+            // es el RGB en pantalla; el lavado pastel venía del
+            // alfa pulsante anterior (0,35–0,75 sobre el piso
+            // marrón) y del brillo central de la textura, ya fuera.
+            R.flat(hexCv(h.color), h.x + jx + e * 6, 1 - e * 34, h.y, HEX_R, { ry: HEX_RY * (1 - 0.38 * e), alpha: 1 });
+            if (this.phase === 'cae' && !h.safe && h.warn > 0 && e <= 0) R.flat(hexWarnCv(), h.x + jx, 1.4, h.y, HEX_R, { ry: HEX_RY, alpha: 0.5 + 0.5 * Math.abs(Math.sin(t * 10)) }); // aviso: velo oscuro y filo rojo parpadeante, solo en la condenada
           }
           if (this.phase === 'trazo' || this.phase === 'aviso') for (let i = 0; i < this.pts.length; i += 2) R.flat(R.glowTex, this.pts[i].x, 1.6, this.pts[i].y, 11, { tint: [1, 0.85, 0.35], alpha: 0.5 + 0.3 * Math.sin(t * 5 + i) });
           R.flat(R.glowTex, this.teo.x, 0.8, this.teo.y, 30, { tint: [0.1, 0.05, 0.16], alpha: 0.5 }); // sombra suave de fantasma (ella flota: la sombra va en el suelo)
@@ -4511,17 +4571,29 @@
             const asp = (tim.naturalWidth && tim.naturalHeight) ? tim.naturalWidth / tim.naturalHeight : 0.6;
             const spd = this.teoSpeed || 0;
             let teoElevY = 15 + Math.sin(t * (2.2 + Math.min(3.2, spd * 0.026))) * (3 + Math.min(5, spd * 0.045));
+            // TECLEO en el celular (pose selfie = sus esperas): bob
+            // CORTO y RÁPIDO (~2 Hz, 1,6 u) y un balanceo leve del
+            // roll — está escribiendo en el teléfono, no posando
+            // como una estatua (3ª ronda, palabra de Jose).
+            const onPhone = teoPoseName === 'selfie';
+            if (onPhone) teoElevY = 15 + Math.sin(t * 12.6) * 1.6;
             if (this.teoSettleT > 0) teoElevY -= Math.sin((1 - this.teoSettleT / 0.3) * Math.PI) * 4; // asentamiento al llegar
             teoElevY -= (this.teoAnticip || 0) * 5; // se agacha/carga antes de despegar
             const squash = 1 - 0.06 * (this.teoAnticip || 0);
-            R.sprite(tim, this.teo.x, teoElevY, this.teo.y, { w: TEO_H * asp / squash, h: TEO_H * squash, feet: 0, lit: 0.2, nostretch: true, roll: this.teoRoll });
+            R.sprite(tim, this.teo.x, teoElevY, this.teo.y, { w: TEO_H * asp / squash, h: TEO_H * squash, feet: 0, lit: 0.2, nostretch: true, roll: this.teoRoll + (onPhone ? Math.sin(t * 6.3) * 0.03 : 0) });
           }
         },
         over: (c) => {
           const e = this.extra();
           legendsHud(this, c, 'EL SET SE HUNDE / TRAZA LA LEYENDA', `Ronda ${Math.min(this.r + 1, 3)}/3 · Precisión tú ${e.precP}% · Teodora ${e.precT}% · Caídas ${this.fallsP}/2`, { solo: true });
           if (this.phase === 'trazo') G.text(c, `TRAZA LA LEYENDA (${this.pathKind.toUpperCase()}) — ${Math.max(0, this.tTrazo - this.pt).toFixed(0)}s`, 320, 84, { size: 14, color: '#ffe96a', lw: 6 });
-          else if (this.phase === 'aviso' || this.phase === 'corre') { panel(c, 190, 66, 260, 34, HEX_COLORS[this.safeColor]); G.text(c, `¡AL ${HEX_NAMES[this.safeColor]}!`, 320, 84, { size: 19, color: '#241a10', lw: 2, stroke: false }); if (this.phase === 'corre') G.text(c, `El set se hunde en ${Math.max(0, this.tCorre - this.pt).toFixed(1)}…`, 320, 116, { size: 13, color: '#ff6b7a', lw: 5 }); }
+          else if (this.phase === 'pre') G.text(c, '¡Prepárense…!', 320, 84, { size: 18, color: '#ffe96a', lw: 6 }); // la pausa de 2 s antes del anuncio (sin color todavía)
+          else if (this.phase === 'aviso' || this.phase === 'corre') { panel(c, 190, 66, 260, 34); c.fillStyle = HEX_COLORS[this.safeColor]; c.fillRect(206, 74, 18, 18); c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 1.5; c.strokeRect(206, 74, 18, 18); G.text(c, `¡AL ${HEX_NAMES[this.safeColor]}!`, 336, 84, { size: 19, color: '#ffffff', lw: 5 }); if (this.phase === 'corre') G.text(c, `El set se hunde en ${Math.max(0, this.tCorre - this.pt).toFixed(1)}…`, 320, 116, { size: 13, color: '#ff6b7a', lw: 5 }); }
+          // El anuncio (3ª ronda): panel oscuro + MUESTRA (swatch)
+          // rellena con el RGB EXACTO de HEX_COLORS junto al nombre
+          // — la correspondencia anuncio↔loseta es inequívoca (el
+          // panel entero teñido de antes, con texto oscuro encima,
+          // se lavaba con los colores saturados nuevos).
           else if (this.phase === 'cae') G.text(c, '¡SE HUNDE!', 320, 84, { size: 19, color: '#ff6b7a', lw: 7 });
           if (this.st === 'rend') this.endOverlay(c);
         },
@@ -4543,6 +4615,8 @@
   TrazoDuel.SCALE = TRAZO_SCALE;
   TrazoDuel.TEO = { h: TEO_H, files: TEODORA_FILES };
   TrazoDuel.COUNT = TRAZO_COUNT_T;
+  TrazoDuel.COLOR_DELAY = TRAZO_COLOR_DELAY;
+  TrazoDuel.HEX = { colors: HEX_COLORS, names: HEX_NAMES };
 
   // ----- Boss 2B: «La soga de fuego» (Hot Rope Jump) -----
   // ----- «La soga de fuego» (2B): cámara, luz y sprites -----
@@ -4565,7 +4639,7 @@
   // canales casi iguales, sin puntos de color — con el patrón de
   // PATRON_LIGHT/TRAZO_LIGHT/FINALE_LIGHT, solo para este duelo.
   const SOGA_LIGHT = { amb: [0.52, 0.52, 0.56], sun: [0.26, 0.26, 0.3], sky: '#14101f', points: [] };
-  const SOGA_TEO_H = 76; // alto de mundo de Teodora (≈87 px en pantalla con SOGA_CAM)
+  const SOGA_TEO_H = 81; // alto de mundo de Teodora (≈87 px en pantalla con SOGA_CAM; compensa el margen de su lienzo, 76 × 468/440)
   const JUMP_H = 84; // alto de mundo del sprite de salto (el del Actor definido)
   // Sprites GENERADOS para este duelo (a pedido expreso de Jose,
   // 2026-11-21): el salto de soga de cada roomie desde su idle
@@ -4788,7 +4862,7 @@
           // figuras por código (115 y 77 u) y el ancho de su
           // aspecto real. Sin imagen cargada, no se pinta nada.
           if (t > 0.7) { const im = albImg('alebrije-director'); if (rocketReady(im)) R.sprite(im, albX, 0, 168, { w: 115 * (im.naturalWidth / im.naturalHeight), h: 115, feet: 0, lit: 0.25, nostretch: true }); }
-          if (t > 1.6) { R.flat(R.glowTex, 772, 0.8, 168, 23, { ry: 0.65, tint: [0.1, 0.05, 0.16], alpha: 0.5 }); const im = teoImg('teodora-altiva'); if (rocketReady(im)) R.sprite(im, 772, teoElev + Math.sin(t * 2.2) * 2, 168, { w: 77 * (im.naturalWidth / im.naturalHeight), h: 77, feet: 0, lit: 0.2, nostretch: true }); }
+          if (t > 1.6) { R.flat(R.glowTex, 772, 0.8, 168, 23, { ry: 0.65, tint: [0.1, 0.05, 0.16], alpha: 0.5 }); const im = teoImg('teodora-altiva'); if (rocketReady(im)) R.sprite(im, 772, teoElev + Math.sin(t * 2.2) * 2, 168, { w: 82 * (im.naturalWidth / im.naturalHeight), h: 82, feet: 0, lit: 0.2, nostretch: true }); }
         },
         over: (c) => {
           if (t > 0.8) { // reflectores del set apuntando a la sala
@@ -4843,7 +4917,7 @@
           const alb = albImg('alebrije-feliz'); if (rocketReady(alb)) R.sprite(alb, 500, Math.abs(Math.sin(t * 3.2)) * 5, 168, { w: 115 * (alb.naturalWidth / alb.naturalHeight), h: 115, feet: 0, lit: 0.25, nostretch: true });
           R.flat(R.glowTex, 772, 0.8, 168, 23, { ry: 0.65, tint: [0.1, 0.05, 0.16], alpha: 0.5 });
           const teoName = w === 2 ? (t >= 12.6 ? 'teodora-selfie' : 'teodora-presentadora') : w === 1 ? 'teodora-altiva' : 'teodora-idle';
-          const teo = teoImg(teoName); if (rocketReady(teo)) R.sprite(teo, 772, 24 + Math.sin(t * 2.2) * 3, 168, { w: 77 * (teo.naturalWidth / teo.naturalHeight), h: 77, feet: 0, lit: 0.2, nostretch: true });
+          const teo = teoImg(teoName); if (rocketReady(teo)) R.sprite(teo, 772, 24 + Math.sin(t * 2.2) * 3, 168, { w: 82 * (teo.naturalWidth / teo.naturalHeight), h: 82, feet: 0, lit: 0.2, nostretch: true });
         },
         over: (c) => {
           if (w === 0) { legendsSubtitle(c, t < 2.6 ? 'TEODORA: «No apta para cine. Su fiesta, no mi película.»' : 'El set se apaga. La fiesta sigue… como fiesta.', '#ffd7f0'); return; }
