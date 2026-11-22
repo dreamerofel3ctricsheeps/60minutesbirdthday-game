@@ -82,6 +82,15 @@
       espacio (foto del cohete ~13:00 y telescopio en la Escalada)
       y el enrutado del clímax: solo uno → ese final; AMBOS →
       ELIGE EL JUGADOR (decisión de Jose); ninguno → final normal.
+   O) Móvil (pedido de Jose): joystick circular analógico en vez
+      del D-pad de flechas (función pura joyVector con zona
+      muerta, eje analógico con velocidad proporcional y flechas
+      derivadas por umbral para los consumidores discretos),
+      proporciones en teléfonos (viewport-fit=cover, alturas
+      dvh, safe-area-inset, escenario 16:9 sin deformar) y el
+      chat del teléfono que aparece SOLO si tiene algo que
+      mostrar (contenido nuevo o decisión pendiente) y se
+      oculta solo cuando ya no hay nada pendiente.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -2111,6 +2120,114 @@ const tick = () => new Promise((r) => setImmediate(r));
       await G.spaceBeats('apagon');
       check('siembra espacial: se postea una sola vez en la noche', dump() === once);
     }
+  }
+
+  // ============================================================
+  // O) Móvil (pedido de Jose, 2026-11-21): joystick circular
+  // analógico en vez del D-pad, proporciones/safe-area y el chat
+  // que aparece solo si tiene algo que mostrar.
+  // ============================================================
+  console.log('\nO) Móvil: joystick analógico, proporciones y chat bajo demanda');
+  {
+    const inp = G.input;
+    const near = (a, b) => Math.abs(a - b) < 0.001;
+    // --- Función pura del joystick ---
+    const v0 = inp.joyVector(0, 0, 100);
+    check('joystick: centro exacto = vector cero (sin deriva)', v0.x === 0 && v0.y === 0 && v0.mag === 0, JSON.stringify(v0));
+    const vDead = inp.joyVector(10, 0, 100); // empuje 0,10 del radio < zona muerta 0,18
+    check('joystick: dentro de la zona muerta el vector es cero', vDead.mag === 0 && vDead.x === 0 && vDead.y === 0, JSON.stringify(vDead));
+    const vFull = inp.joyVector(100, 0, 100);
+    check('joystick: borde de la base = intensidad 1 hacia donde apunta el dedo', near(vFull.mag, 1) && near(vFull.x, 1) && near(vFull.y, 0), JSON.stringify(vFull));
+    const vOver = inp.joyVector(260, -130, 100);
+    check('joystick: más allá del borde la intensidad se recorta a 1 (sin pasar de la velocidad normal)', near(vOver.mag, 1), JSON.stringify(vOver));
+    const vDiag = inp.joyVector(50, 50, 100);
+    check('joystick: diagonal a 45° reparte x/y por igual, con la intensidad reescalada tras la zona muerta',
+      near(vDiag.x, vDiag.y) && vDiag.x > 0 && near(vDiag.mag, (Math.hypot(50, 50) / 100 - inp.JOY_DEAD) / (1 - inp.JOY_DEAD)), JSON.stringify(vDiag));
+    const vHalf = inp.joyVector(59, 0, 100); // n = 0,59 → mag = (0,59 − 0,18) / 0,82 = 0,5
+    check('joystick: empuje intermedio = intensidad proporcional (0,5)', near(vHalf.mag, 0.5) && near(vHalf.x, 0.5), JSON.stringify(vHalf));
+    const vBad = inp.joyVector(50, 50, 0);
+    check('joystick: radio inválido = vector cero (sin NaN)', vBad.mag === 0 && vBad.x === 0 && vBad.y === 0, JSON.stringify(vBad));
+    // --- joySet: el eje analógico manda; las flechas se derivan por umbral ---
+    inp.touchReset();
+    inp.joySet(0.3, 0); // sobre la zona muerta, bajo el umbral de flecha (0,45)
+    const axSoft = inp.axis();
+    check('joystick: empuje suave mueve el eje analógico SIN derivar flecha (velocidad proporcional)',
+      near(axSoft.x, 0.3) && axSoft.y === 0 && !inp.held('right'), JSON.stringify(axSoft));
+    inp.joySet(1, 0);
+    check('joystick: empuje fuerte deriva la flecha con semántica de pulsación (held + hit una sola vez)',
+      inp.held('right') && inp.hit('right') && !inp.hit('right'), '');
+    const axFull = inp.axis();
+    check('joystick: con el joystick activo, axis() es el vector analógico (dirección libre, no la flecha)',
+      near(axFull.x, 1) && near(axFull.y, 0), JSON.stringify(axFull));
+    inp.joySet(0, 0);
+    check('joystick: al soltar, eje en cero y flecha derivada liberada', inp.axis().x === 0 && inp.axis().y === 0 && !inp.held('right'), '');
+    inp.joySet(-0.8, -0.8);
+    check('joystick: diagonal fuerte deriva DOS flechas (left+up), como un D-pad en diagonal',
+      inp.held('left') && inp.held('up') && !inp.held('right') && !inp.held('down'), JSON.stringify(inp.joyState()));
+    inp.touchReset();
+    check('joystick: touchReset también limpia el vector analógico y las flechas derivadas',
+      inp.joyState().mag === 0 && inp.axis().x === 0 && !inp.held('left') && !inp.held('up'), '');
+    // --- Fuente: fuera el D-pad, dentro el joystick ---
+    const htmlTxt = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'index.html'), 'utf8');
+    const cssTxt = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameTxtO = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    check('móvil: el D-pad de flechas ya no existe en la UI táctil (ni en el HTML ni en el CSS)',
+      !htmlTxt.includes('tpad-dpad') && !cssTxt.includes('tpad-dpad') && !htmlTxt.includes('data-k="up"') && !htmlTxt.includes('data-k="left"'), '');
+    check('móvil: el joystick circular está en el HTML, el CSS y el cableado (Pointer Events + joyVector/joySet)',
+      htmlTxt.includes('id="joystick"') && htmlTxt.includes('joy-knob') && cssTxt.includes('.joy-base') && cssTxt.includes('.joy-knob')
+      && gameTxtO.includes('initJoystick') && gameTxtO.includes('G.input.joySet') && gameTxtO.includes("addEventListener('pointermove'"), '');
+    check('móvil: el botón de acción se queda y convive con el joystick (multitáctil: cada control con su pointerId)',
+      htmlTxt.includes('data-k="action"') && gameTxtO.includes('e.pointerId'), '');
+    // --- Proporciones y zona segura ---
+    check('móvil: viewport-fit=cover (la página llega bajo el notch y los insets son utilizables)',
+      htmlTxt.includes('viewport-fit=cover'), '');
+    check('móvil: alturas con dvh (la barra de direcciones del navegador no corta el juego) y safe-area-inset en #app',
+      cssTxt.includes('100dvh') && cssTxt.includes('env(safe-area-inset-top)') && cssTxt.includes('env(safe-area-inset-bottom)')
+      && cssTxt.includes('env(safe-area-inset-left)') && cssTxt.includes('env(safe-area-inset-right)'), '');
+    check('móvil: el escenario se mantiene 16:9 con letterbox (aspect-ratio; la imagen nunca se estira)',
+      cssTxt.includes('aspect-ratio: 16 / 9'), '');
+  }
+  // --- Chat: máquina de estados (con la gracia acortada para la prueba) ---
+  {
+    const ph = G.ui.phone, phoneElO = documentFake.querySelector('#phone'), actsElO = documentFake.querySelector('#actions');
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    ph.graceMs = 60; // la gracia real es 4000 ms (PHONE_GRACE_MS en game.js)
+    ph.reset();
+    check('chat: oculto por defecto (sin novedades no se mantiene en pantalla)',
+      ph.state().visible === false && phoneElO.classList.contains('ph-off'), JSON.stringify(ph.state()));
+    await G.ui.post({ who: 'sistema', text: 'Mensaje de prueba del humo' });
+    check('chat: aparece cuando llega contenido nuevo', ph.state().visible === true && !phoneElO.classList.contains('ph-off'), JSON.stringify(ph.state()));
+    await sleep(160);
+    check('chat: leído y sin nada pendiente, se oculta solo tras la gracia breve', ph.state().visible === false, JSON.stringify(ph.state()));
+    let chosen = -1;
+    const pChoose = G.ui.choose([{ label: 'Opción A' }, { label: 'Opción B' }]).then((i) => { chosen = i; });
+    check('chat: una decisión pendiente lo muestra y lo marca pendiente', ph.state().visible === true && ph.state().pending === true, JSON.stringify(ph.state()));
+    await sleep(160);
+    check('chat: con la decisión pendiente NO se auto-oculta aunque pase la gracia', ph.state().visible === true && ph.state().pending === true, JSON.stringify(ph.state()));
+    const optBtn = actsElO.children.find((c) => c.onclick);
+    if (optBtn) optBtn.onclick();
+    await pChoose;
+    check('chat: al decidir, la promesa se resuelve y el pendiente se libera', chosen === 0 && ph.state().pending === false, 'chosen=' + chosen);
+    await sleep(160);
+    check('chat: resuelta la decisión y sin más contenido, vuelve a ocultarse solo', ph.state().visible === false, JSON.stringify(ph.state()));
+    ph.toggle(); // abrir a mano: queda fijado
+    const pinnedOk = ph.state().visible === true && ph.state().pinned === true;
+    await sleep(160);
+    const pinnedStays = ph.state().visible === true; // fijado a mano: la gracia no lo cierra
+    ph.toggle(); // cerrar a mano: silencio
+    await G.ui.post({ who: 'sistema', text: 'Mensaje con el chat silenciado' });
+    check('chat: abierto a mano queda fijado; cerrado a mano, el contenido nuevo NO lo reabre (suma al contador)',
+      pinnedOk && pinnedStays && ph.state().visible === false && ph.state().unread >= 1, JSON.stringify(ph.state()));
+    let chosen2 = -1;
+    const pChoose2 = G.ui.choose([{ label: 'Sí' }, { label: 'No' }]).then((i) => { chosen2 = i; });
+    check('chat: una decisión pendiente rompe el silencio manual y se muestra siempre',
+      ph.state().visible === true && ph.state().pending === true && ph.state().unread === 0, JSON.stringify(ph.state()));
+    const optBtn2 = actsElO.children.find((c) => c.onclick);
+    if (optBtn2) optBtn2.onclick();
+    await pChoose2;
+    ph.reset(); ph.graceMs = 4000;
+    check('chat: al terminar la prueba el estado queda limpio (oculto, sin pendiente, sin contador, sin fijado)',
+      chosen2 === 0 && ph.state().visible === false && ph.state().pending === false && ph.state().unread === 0 && ph.state().pinned === false, JSON.stringify(ph.state()));
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

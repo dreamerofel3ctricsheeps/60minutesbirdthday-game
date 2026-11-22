@@ -6,7 +6,15 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: var(--font); overflow: hidden; }
 button { font-family: inherit; cursor: pointer; }
-#app { height: 100vh; display: flex; flex-direction: column; }
+/* Altura con dvh (no solo vh): en el navegador móvil, 100vh incluye
+   la zona que tapa la barra de direcciones, y el juego quedaba
+   cortado por abajo o «saltaba» al esconderse la barra; 100dvh es
+   la altura VISIBLE real. Y con viewport-fit=cover (index.html) la
+   página llega bajo el notch: el padding con safe-area-inset
+   mantiene HUD, escenario y controles fuera del notch y de la
+   barra de gestos en cualquier orientación (en escritorio los
+   insets valen 0 y nada cambia). */
+#app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 
 /* ---------- HUD ---------- */
 #hud { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: var(--panel); border-bottom: 3px solid #120f1b; flex-wrap: wrap; }
@@ -33,7 +41,13 @@ button { font-family: inherit; cursor: pointer; }
 /* ---------- Layout ---------- */
 main { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 12px; }
 #stagewrap { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-#stage { position: relative; width: 100%; max-width: calc((100vh - 150px) * 16 / 9); aspect-ratio: 16 / 9; background: #000; border: 4px solid #120f1b; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 0 #120f1b; }
+/* El escenario es SIEMPRE 16:9 exacto (aspect-ratio) y los canvas
+   internos son 1280×720: la imagen nunca se estira ni se deforma
+   en ninguna proporción de pantalla; lo que sobra a los lados o
+   arriba/abajo lo cubre el fondo de la página (letterbox/pillarbox)
+   y el conjunto va centrado por el flex de #stagewrap. El tope de
+   ancho se calcula con dvh, igual que la altura de #app. */
+#stage { position: relative; width: 100%; max-width: calc((100vh - 150px) * 16 / 9); max-width: calc((100dvh - 150px) * 16 / 9); aspect-ratio: 16 / 9; background: #000; border: 4px solid #120f1b; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 0 #120f1b; }
 #gl, #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #inv { display: flex; gap: 6px; }
 .slot { width: 40px; height: 40px; background: var(--panel); border: 2px solid #120f1b; border-radius: 6px; display: grid; place-items: center; }
@@ -82,19 +96,21 @@ body.touch-on #touchpad { display: block; }
    personaje, VS, resultado…) los botones táctiles se ocultan: evitan
    tapar el modal y no hace falta moverse ni actuar mientras se decide. */
 #overlay.show ~ #touchpad, #pauseov.show ~ #touchpad { display: none !important; }
-.tpad-dpad { position: absolute; left: 4%; bottom: 6%; width: 148px; height: 148px; pointer-events: auto; }
+/* Joystick circular analógico (reemplaza al D-pad de flechas):
+   base circular semitransparente en la esquina inferior izquierda
+   y perilla que sigue el dedo dentro del radio (la mueve game.js
+   con transform; aquí solo va su centrado base). La zona de toque
+   es el cuadrado completo de 148px, cómodo para el pulgar, y queda
+   dentro de la zona segura porque #app ya trae el padding con
+   safe-area-inset y la posición es relativa al escenario. */
+#joystick { position: absolute; left: 4%; bottom: 6%; width: 148px; height: 148px; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+.joy-base { position: absolute; inset: 9px; border-radius: 50%; background: rgba(38, 32, 54, .42); border: 3px solid rgba(255, 210, 63, .38); pointer-events: none; }
+.joy-knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; border-radius: 50%; background: rgba(38, 32, 54, .78); border: 3px solid rgba(255, 210, 63, .6); transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 3px 0 rgba(18, 15, 27, .6); }
+#joystick.on .joy-knob { background: rgba(255, 210, 63, .38); border-color: var(--yellow); }
+#joystick.on .joy-base { border-color: rgba(255, 210, 63, .65); }
 .taction { position: absolute; right: 6%; bottom: 10%; width: 78px; height: 78px; border-radius: 50%; pointer-events: auto; }
 .tbtn { background: rgba(38, 32, 54, .72); border: 3px solid rgba(255, 210, 63, .55); color: var(--ink); font-size: 18px; line-height: 1; touch-action: none; user-select: none; -webkit-user-select: none; }
 .tbtn:active, .tbtn.on { background: rgba(255, 210, 63, .35); border-color: var(--yellow); }
-.tbtn i { display: block; width: 0; height: 0; margin: auto; border: 9px solid transparent; }
-.tup { position: absolute; left: 50px; top: 0; width: 48px; height: 48px; border-radius: 10px; }
-.tup i { border-bottom-color: currentColor; margin-top: 4px; }
-.tleft { position: absolute; left: 0; top: 50px; width: 48px; height: 48px; border-radius: 10px; }
-.tleft i { border-right-color: currentColor; margin-left: 2px; }
-.tright { position: absolute; left: 100px; top: 50px; width: 48px; height: 48px; border-radius: 10px; }
-.tright i { border-left-color: currentColor; margin-left: 6px; }
-.tdown { position: absolute; left: 50px; top: 100px; width: 48px; height: 48px; border-radius: 10px; }
-.tdown i { border-top-color: currentColor; margin-top: 6px; }
 .taction { font-size: 28px; display: grid; place-items: center; }
 
 /* ---------- Responsive: pantallas angostas (móviles) ---------- */
@@ -105,9 +121,8 @@ body.touch-on #touchpad { display: block; }
   #phone { width: 100%; max-height: 32vh; }
   #hud { gap: 8px; padding: 6px 10px; }
   #hud .meter { font-size: 10px; }
-  .tpad-dpad { width: 126px; height: 126px; }
-  .tup, .tleft, .tright, .tdown { width: 42px; height: 42px; }
-  .tleft { top: 42px; } .tright { left: 84px; top: 42px; } .tup { left: 42px; } .tdown { left: 42px; top: 84px; }
+  #joystick { width: 128px; height: 128px; }
+  .joy-knob { width: 50px; height: 50px; }
   .taction { width: 66px; height: 66px; right: 4%; bottom: 8%; }
 }
 #pausebtn.off { opacity: .35; }
@@ -191,6 +206,23 @@ body.paused #phone, body.paused #inv { pointer-events: none; filter: saturate(.5
 /* ---------- Teléfono / chat ---------- */
 #phone { width: clamp(290px, 27vw, 380px); display: flex; flex-direction: column; background: var(--panel); border: 4px solid #120f1b; border-radius: 18px; overflow: hidden; box-shadow: 0 8px 0 #120f1b; transition: opacity .3s; }
 #phone.dim { opacity: .45; }
+/* El chat aparece SOLO si tiene algo que mostrar (máquina de
+   estados en game.js): oculto = fuera del layout (el escenario
+   aprovecha el ancho); al aparecer entra con un desplazamiento
+   corto desde la derecha. La animación se reinicia sola porque
+   el elemento vuelve de display:none. */
+#phone.ph-off { display: none; }
+#phone:not(.ph-off) { animation: phonein .28s cubic-bezier(.2, 1.15, .4, 1); }
+@keyframes phonein { from { opacity: 0; transform: translateX(18px); } }
+/* Botón del teléfono en el HUD: abrir/cerrar el chat a mano, con
+   contador de mensajes que llegaron estando oculto y silenciado. */
+#phonebtn { position: relative; background: var(--panel2); color: var(--ink); border: 2px solid #120f1b; border-radius: 8px; padding: 5px 10px; font-weight: bold; font-size: 13px; }
+#phonebtn:hover { border-color: var(--yellow); }
+#phonebadge { position: absolute; top: -8px; right: -8px; min-width: 20px; height: 20px; padding: 0 5px; display: none; place-items: center; background: var(--red); color: #fff; border: 2px solid #120f1b; border-radius: 999px; font-size: 11px; font-weight: bold; line-height: 1; }
+.pic-phone { display: inline-block; width: 11px; height: 17px; border: 2.5px solid currentColor; border-radius: 3.5px; position: relative; vertical-align: -3px; box-sizing: content-box; }
+.pic-phone i { position: absolute; left: 50%; bottom: 1.5px; transform: translateX(-50%); width: 3.5px; height: 3.5px; border-radius: 50%; background: currentColor; }
+#phoneclose { margin-left: 4px; background: none; border: none; color: var(--dim); font-size: 18px; line-height: 1; padding: 2px 5px; border-radius: 6px; }
+#phoneclose:hover { color: #fff; background: rgba(255, 255, 255, .08); }
 .ptop { background: #3a2f57; padding: 10px 14px; font-weight: bold; display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .ptop small { margin-left: auto; color: var(--dim); font-weight: normal; font-size: 11px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
@@ -234,7 +266,7 @@ body.paused #phone, body.paused #inv { pointer-events: none; filter: saturate(.5
 .tbar i { display: block; height: 100%; width: 100%; background: var(--red); transition: width .1s linear; }
 
 @media (max-width: 900px) {
-  main { flex-direction: column; overflow: auto; } html, body { overflow: auto; } #app { height: auto; min-height: 100vh; }
+  main { flex-direction: column; overflow: auto; } html, body { overflow: auto; } #app { height: auto; min-height: 100vh; min-height: 100dvh; }
   #phone { width: 100%; height: 420px; } #stage { max-width: 100%; } .pick { flex-direction: column; }
 }
 
