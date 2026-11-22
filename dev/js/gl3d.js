@@ -85,6 +85,16 @@
       vec3 l=mix(vec3(1.), min(uAmb*1.3+uSun*0.45+points(vP), vec3(1.25)), max(uLit,0.));
       gl_FragColor=vec4(c.rgb*l*uTint.rgb+uFlash*c.a, c.a*uTint.a); }`;
   // Posproceso: desenfoque tilt-shift (look de maqueta), bloom, viñeta y corrección de color
+  // Corrección de color NEUTRA por pedido de Jose (playtest 2026-11-22): notaba «un filtro
+  // raro que sube la nitidez de los colores» al iniciar la partida — el realce era saturación
+  // 1.14 + curva de contraste al 0.55 + tinte cálido completo, aplicado siempre que el 3D
+  // renderiza (los menús son DOM sin filtrar, por eso el salto se nota al empezar a jugar).
+  // Ahora los colores se ven como fueron creados; para recuperar fuerza basta subir UN
+  // número por palanca (p. ej. POST_SAT 1.07 = la mitad del realce anterior). El desenfoque
+  // tilt-shift, el bloom y la viñeta (escalados por uFx) quedan como estaban.
+  const POST_SAT = 1.0;       // saturación: 1 = neutra (antes 1.14)
+  const POST_CONTRASTE = 0.0; // mezcla hacia la curva S de contraste: 0 = neutro (antes 0.55)
+  const POST_TINTE = 0.0;     // tinte cálido vec3(1.03, 1.00, 0.97): 0 = neutro (antes 1)
   const VS_P = `attribute vec2 aPos; varying vec2 vUV; void main(){ vUV=aPos*0.5+0.5; gl_Position=vec4(aPos,0.,1.); }`;
   const FS_P = `precision mediump float; uniform sampler2D uTex; uniform vec2 uPx; uniform float uFx; varying vec2 vUV;
     vec3 tap(vec2 o){ return texture2D(uTex, vUV+o*uPx).rgb; }
@@ -97,9 +107,9 @@
       for(int i=0;i<12;i++){ float a=float(i)*0.5236; float r = (mod(float(i),2.)<1.) ? 7. : 15.; vec3 s = tap(vec2(cos(a),sin(a))*r); b += max(s-vec3(0.62),0.); }
       c += b/12.*1.5*uFx;
       float l = dot(c, vec3(0.299,0.587,0.114));
-      c = mix(vec3(l), c, 1.14);                       // saturación
-      c = c*c*(3.-2.*c)*0.55 + c*0.45;                  // contraste suave
-      c *= vec3(1.03,1.0,0.97);
+      c = mix(vec3(l), c, ${POST_SAT.toFixed(3)});                        // saturación (POST_SAT)
+      c = mix(c, c*c*(3.-2.*c), ${POST_CONTRASTE.toFixed(3)});            // contraste suave (POST_CONTRASTE)
+      c *= mix(vec3(1.), vec3(1.03,1.0,0.97), ${POST_TINTE.toFixed(3)});  // tinte cálido (POST_TINTE)
       vec2 d = vUV-0.5; c *= 1. - dot(d,d)*0.75*uFx;    // viñeta
       gl_FragColor = vec4(c,1.);
     }`;
