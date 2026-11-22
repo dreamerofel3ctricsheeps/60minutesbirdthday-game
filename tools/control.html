@@ -42,6 +42,11 @@
 <script>
 (function () {
   'use strict';
+  // anti-zoom en móviles (doble toque / pinch): iOS ignora user-scalable=no
+  let _lastTap = 0;
+  document.addEventListener('touchend', (e) => { const n = Date.now(); if (n - _lastTap < 350) e.preventDefault(); _lastTap = n; }, { passive: false });
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('dblclick', (e) => e.preventDefault());
   const room = new URLSearchParams(location.search).get('room') || 'default';
   const statusEl = document.getElementById('status');
   let connected = null;
