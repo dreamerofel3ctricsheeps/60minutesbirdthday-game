@@ -99,6 +99,21 @@
      pastelito → panel con FINAL_TEXT → se levantan y vuelve
      el control); el salto la deja en el estado posterior y
      la canción/reloj no se reinician al entrar.
+   P) La acción de abrazo de San Ángel (pedido de Jose):
+     sprite NUEVO de la pareja abrazándose (abrazo.png, arte
+     original del juego generado desde los sprites definidos
+     como referencia de identidad; versionado y registrado en
+     FUENTES.md). Con el controlado y el seguidor cerca
+     (≤80 px entre pies) se ofrece «ESPACIO: abrazarse»; la
+     secuencia (~3,5 s) acerca a la pareja frente a frente,
+     sostiene el abrazo (con el sprite de la pareja si cargó;
+     en el humo manda el respaldo de los dos sprites, porque
+     FakeImage nunca «carga») con pétalos y corazoncitos
+     dibujados, y separa dejando al seguidor en su puesto.
+     Durante el abrazo el control está bloqueado, TAB no
+     cambia de personaje y las bolas ni nacen ni frenan; al
+     terminar, el rearme exige separarse (>140 px) o esperar
+     (~4 s). Funciona controlando a Ximena o a Jose.
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -1394,6 +1409,155 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let prDrawOk2 = true;
   for (const p of [0, 1500, 2511, 3710]) { pr3.pan = p; try { pr3.draw(0.016); } catch (e) { prDrawOk2 = false; } }
   check('draw() de las praderas enriquecidas no explota (pan 0/1500/2511/3710; sin los recortes locales cargados, mandan las guardas imgOk)', prDrawOk2);
+  DM.stop();
+
+  console.log('\nP) Escena 2 «San Ángel»: la acción de abrazo (sprite nuevo de la pareja)');
+  // El asset: arte ORIGINAL del juego (generado desde los
+  // sprites definidos como referencia de identidad), así que
+  // SÍ se versiona, al contrario que los recortes de película.
+  const abrazoVersionado = (() => {
+    try {
+      const out = require('child_process').execSync(
+        'git ls-files application/src/assets/date/abrazo.png',
+        { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+      return out.trim().length > 0;
+    } catch (e) { return false; }
+  })();
+  check('abrazo.png existe, está VERSIONADO (arte original del juego) y FUENTES.md lo registra',
+    fs.existsSync(path.join(DATE_DIR, 'abrazo.png')) && abrazoVersionado && fuentes.includes('abrazo.png'));
+  // Alfa y proporción reales del PNG (se infla el IDAT y se
+  // desfiltran las filas: la pareja es casi tan alta como
+  // ancha y el fondo es transparente de verdad).
+  const abrazoPng = (() => {
+    try {
+      const zlib = require('zlib');
+      const buf = fs.readFileSync(path.join(DATE_DIR, 'abrazo.png'));
+      const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20), ct = buf[25];
+      let off = 8; const idat = [];
+      while (off < buf.length) {
+        const len = buf.readUInt32BE(off), type = buf.toString('ascii', off + 4, off + 8);
+        if (type === 'IDAT') idat.push(buf.slice(off + 8, off + 8 + len));
+        if (type === 'IEND') break;
+        off += 12 + len;
+      }
+      const raw = zlib.inflateSync(Buffer.concat(idat));
+      const bpp = 4, stride = w * bpp, data = Buffer.alloc(w * h * bpp);
+      for (let y = 0; y < h; y++) {
+        const f = raw[y * (stride + 1)], row = raw.slice(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+        for (let x = 0; x < stride; x++) {
+          const a = x >= bpp ? data[y * stride + x - bpp] : 0;
+          const b = y ? data[(y - 1) * stride + x] : 0;
+          const cc = (x >= bpp && y) ? data[(y - 1) * stride + x - bpp] : 0;
+          let v = row[x];
+          if (f === 1) v = (v + a) & 255; else if (f === 2) v = (v + b) & 255;
+          else if (f === 3) v = (v + ((a + b) >> 1)) & 255;
+          else if (f === 4) { const p = a + b - cc, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - cc); v = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : cc)) & 255; }
+          data[y * stride + x] = v;
+        }
+      }
+      let transp = 0, opaco = 0;
+      for (let i = 3; i < data.length; i += 4) { if (data[i] < 10) transp++; else if (data[i] > 245) opaco++; }
+      return { w, h, ct, fracT: transp / (w * h), fracO: opaco / (w * h) };
+    } catch (e) { return null; }
+  })();
+  check('abrazo.png es RGBA con alfa real (fondo transparente y figura opaca) y proporción de pareja (alto/ancho 0,8–1,1)',
+    !!abrazoPng && abrazoPng.ct === 6 && abrazoPng.fracT > 0.05 && abrazoPng.fracO > 0.3 &&
+    (abrazoPng.h / abrazoPng.w) >= 0.8 && (abrazoPng.h / abrazoPng.w) <= 1.1,
+    abrazoPng ? `${abrazoPng.w}×${abrazoPng.h}, transp=${(abrazoPng.fracT * 100).toFixed(0)}%, opaco=${(abrazoPng.fracO * 100).toFixed(0)}%` : 'sin PNG legible');
+  const AB = DM.debug.SA_ABRAZO;
+  check('date.js carga abrazo.png con su guarda imgOk y expone SA_ABRAZO (cerca ≤80, rearme >140 o ~4 s, secuencia ~3,5 s)',
+    dateSrc.includes("loadDateImg('assets/date/abrazo.png')") && dateSrc.includes('imgOk(abrazoImg)') &&
+    dateSrc.includes('drawHugSprite') && !!AB &&
+    AB.cercaDist === 80 && AB.rearmeDist === 140 && AB.rearmeT === 4 &&
+    Math.abs((AB.acercarT + AB.abrazoT + AB.separarT) - 3.5) < 0.01,
+    AB ? `total=${(AB.acercarT + AB.abrazoT + AB.separarT).toFixed(1)} s` : 'sin SA_ABRAZO');
+  check('el abrazo es SOLO de San Ángel: la plaza (DateScene) no tiene estado hug',
+    !('hug' in sc) && sc.hug === undefined);
+  // Se re-entra a la cita y se cruza a San Ángel en modo libre.
+  DM.start(() => {});
+  DM.debug.travelTo('sanangel');
+  const sa3 = G.scene;
+  for (let i = 0; i < 25 && sa3.phase !== 'free'; i++) sa3.update(0.05);
+  check('se vuelve a San Ángel en modo libre para ejercitar el abrazo', sa3.id === 'sanangel' && sa3.phase === 'free', 'phase=' + sa3.phase);
+  const HF = sa3.free, HA = HF.chars[HF.active], HB = HF.chars[HF.active === 'ximena' ? 'jose' : 'ximena'];
+  const runHugTo = (fase, tope) => { for (let i = 0; i < tope && sa3.hug.phase !== fase; i++) sa3.update(0.05); };
+  // Lejos: no hay oferta.
+  HA.x = 600; HA.y = sa3.groundY; HB.x = 900; HB.y = sa3.groundY; sa3.pan = 280;
+  sa3.update(0.016);
+  check('con los dos LEJOS (>80 px entre pies) no se ofrece el abrazo', sa3.nearHug === false && sa3.hug.phase === 'off');
+  // Cerca: aparece el aviso.
+  HB.x = HA.x + 55; HB.y = sa3.groundY;
+  sa3.update(0.016);
+  check('con los dos CERCA (≤80 px) aparece la oferta del abrazo (nearHug, aviso armado)', sa3.nearHug === true && sa3.hugArmed === true);
+  // Al alejarse, el aviso desaparece.
+  HB.x = HA.x + 300;
+  sa3.update(0.016);
+  check('al alejarse el aviso desaparece', sa3.nearHug === false);
+  // Disparo y acercamiento: quedan frente a frente a hugGap.
+  HB.x = HA.x + 55; HB.y = sa3.groundY;
+  sa3.update(0.016);
+  key('Space', true); sa3.update(0.016); key('Space', false);
+  check('ESPACIO con el aviso inicia la secuencia (fase approach, control tomado por la escena)', sa3.hug.phase === 'approach', 'phase=' + sa3.hug.phase);
+  runHugTo('hold', 30);
+  const dAbrazo = Math.hypot(HA.x - HB.x, HA.y - HB.y);
+  check('el acercamiento deja a la pareja frente a frente a la distancia del abrazo (~34 px entre pies)',
+    sa3.hug.phase === 'hold' && Math.abs(dAbrazo - AB.hugGap) < 3 && HA.dir !== HB.dir,
+    `phase=${sa3.hug.phase}, dist=${dAbrazo.toFixed(1)}, dirs=${HA.dir}/${HB.dir}`);
+  check('al entrar el abrazo nacen sus partículas: 14 pétalos y 3 corazoncitos dibujados por código',
+    sa3.petalFx.length === 14 && sa3.heartFx.length === 3, `pétalos=${sa3.petalFx.length}, corazones=${sa3.heartFx.length}`);
+  // Las bolas no arruinan el momento: ni nacen ni frenan.
+  sa3.bolas.length = 0; sa3.bolaTimer = 0; sa3.pajitas.length = 0; sa3.frenoT = 0;
+  sa3.update(0.05);
+  check('durante el abrazo NO nacen bolas de paja (aunque el temporizador se fuerce a 0)', sa3.bolas.length === 0, 'vivas=' + sa3.bolas.length);
+  sa3.bolas.push({ x: HA.x, y: HA.y, r: 24, vel: 150, dist: 0, ang: 0, ph: 0 });
+  sa3.update(0.05); sa3.update(0.05);
+  check('una bola viva atraviesa a la pareja abrazándose sin estallar ni frenar a nadie',
+    sa3.bolas.length === 1 && sa3.frenoT === 0 && sa3.pajitas.length === 0,
+    `vivas=${sa3.bolas.length}, frenoT=${sa3.frenoT}, pajitas=${sa3.pajitas.length}`);
+  sa3.bolas.length = 0;
+  // El control está bloqueado y TAB no cambia de personaje.
+  const hxHold = HA.x, actHold = HF.active;
+  key('ArrowRight', true);
+  for (let i = 0; i < 5; i++) sa3.update(0.05);
+  key('ArrowRight', false);
+  sa3.switchActive();
+  check('durante el abrazo el control está bloqueado (el input no mueve al controlado) y TAB no cambia el activo',
+    HA.x === hxHold && HF.active === actHold, `x=${HA.x.toFixed(1)}, active=${HF.active}`);
+  let hugDrawOk = true;
+  try { sa3.draw(0.016); } catch (e) { hugDrawOk = false; }
+  check('draw() en pleno abrazo no explota (en el humo manda el respaldo: los dos sprites frente a frente)', hugDrawOk);
+  // Separación: el seguidor termina en su puesto y vuelve el control.
+  runHugTo('off', 80);
+  const postEsp = HB.id === 'jose' ? HA.x + 70 : HA.x - 70;
+  check('la secuencia completa los tres tiempos en orden y devuelve el control (fase off en ~3,5 s)',
+    sa3.hug.phase === 'off', 'phase=' + sa3.hug.phase);
+  check('tras separarse, el seguidor queda en su puesto de seguimiento (±70 px del controlado)',
+    Math.abs(HB.x - postEsp) < 2 && Math.abs(HB.y - HA.y) < 2, `seguidor=${HB.x.toFixed(1)}, puesto=${postEsp.toFixed(1)}`);
+  // Rearme: sin separarse no hay reaviso inmediato…
+  sa3.update(0.016);
+  check('recién abrazados y aún cerca, el aviso NO reaparece (rearme pendiente)', sa3.hugArmed === false && sa3.nearHug === false);
+  // …pero separarse más allá de ~140 px lo rearma al instante.
+  HB.x = HA.x + 200; HB.y = sa3.groundY;
+  sa3.update(0.016);
+  check('al separarse más allá de ~140 px el aviso se rearma', sa3.hugArmed === true);
+  // Segundo abrazo, ahora controlando a Jose (TAB): la acción
+  // funciona igual con cualquiera de activo.
+  if (HF.active !== 'jose') sa3.switchActive();
+  const JA = HF.chars.jose, JB = HF.chars.ximena;
+  JA.x = 1200; JA.y = sa3.groundY; JB.x = JA.x - 55; JB.y = sa3.groundY; sa3.pan = 880;
+  sa3.update(0.016);
+  check('controlando a JOSE también aparece la oferta junto a Ximena', sa3.nearHug === true && HF.active === 'jose');
+  key('Space', true); sa3.update(0.016); key('Space', false);
+  runHugTo('hold', 30);
+  check('el abrazo con Jose de activo llega a su fase hold igual', sa3.hug.phase === 'hold', 'phase=' + sa3.hug.phase);
+  runHugTo('off', 80);
+  // Rearme por TIEMPO: sin separarse, tras ~4 s el aviso vuelve.
+  for (let i = 0; i < 95 && !sa3.hugArmed; i++) sa3.update(0.05);
+  check('sin separarse, el rearme llega por tiempo (~4 s) y el aviso vuelve a ofrecerse',
+    sa3.hugArmed === true && sa3.nearHug === true, `armado=${sa3.hugArmed}, cerca=${sa3.nearHug}`);
+  let hugDrawOk2 = true;
+  for (const p of [0, 1200, 3260]) { sa3.pan = p; try { sa3.draw(0.016); } catch (e) { hugDrawOk2 = false; } }
+  check('draw() de San Ángel tras los abrazos no explota en ningún punto del paseo (pan 0/1200/3260)', hugDrawOk2);
   DM.stop();
 
   DM.debug.setHash(realHash); // el hash real queda como estaba

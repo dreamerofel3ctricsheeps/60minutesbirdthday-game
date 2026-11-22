@@ -232,3 +232,25 @@
   árboles a ~218 px de alto, con velo de distancia, quieta,
   sin colisión ni interacción. Si el archivo no está en la
   copia local, la arboleda se dibuja igual, sin el recorte.
+
+## abrazo.png — Ximena y Jose abrazándose (escena 2, «San Ángel»)
+- **Arte original del juego** (no es foto ni material de
+  película): sprite nuevo de la pareja abrazándose en perfil,
+  generado para el juego usando como referencia de identidad
+  los sprites definidos de Ximena y de Jose (ella: pelo largo
+  castaño, orejas de conejo moradas, bata blanca sobre polo
+  morado; él: lentes redondos oscuros, audífonos con cable,
+  camisa verde a rayas sobre polo blanco, jeans claros).
+- **Procesado:** fondo magenta retirado por clave de color,
+  limpieza del fleco por erosión de la máscara y borde blanco
+  Paper Mario re-horneado por dilatación, como en los sprites
+  definidos. Verificado sobre fondo magenta y sobre el tono
+  de la calle de San Ángel, y a tamaño de juego (96 px de
+  alto). Salida: 400 × 384.
+- **Uso:** la acción «ESPACIO: abrazarse» de la escena 2:
+  con los dos personajes cerca, la secuencia acerca a la
+  pareja, oculta los sprites individuales y dibuja este
+  sprite en el punto medio con balanceo suave, pétalos y
+  corazoncitos dibujados por código. Si el archivo no
+  cargara, la escena usa el respaldo de los dos sprites
+  individuales frente a frente.

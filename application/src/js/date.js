@@ -447,6 +447,17 @@
   // calle arrastrada por el viento como obstáculo (ver
   // SA_BOLAS y SanAngelScene.updateBolas).
   const bolaPajaImg = loadDateImg('assets/date/bola-paja.png');
+  // El ABRAZO de San Ángel: sprite NUEVO de la pareja abrazándose
+  // en perfil, generado para el juego desde los sprites definidos
+  // de Ximena y Jose como referencia de identidad (orejas de conejo
+  // moradas y bata blanca; lentes, audífonos y camisa verde a
+  // rayas), con el borde blanco Paper Mario horneado como los
+  // definidos. Es arte original de los personajes del juego (NO
+  // es material de película): está VERSIONADO en el repo como los
+  // demás assets propios. Se dibuja solo si cargó (imgOk); sin él,
+  // la acción de abrazo usa el respaldo de los dos sprites
+  // individuales frente a frente (ver SanAngelScene.drawHug).
+  const abrazoImg = loadDateImg('assets/date/abrazo.png');
   // Geometría de la franja de San Ángel: 3900 px de mundo (el
   // w de su bloque en la tabla maestra: 26 s × PACE), la Puerta
   // de entrada a la izquierda (x=90) y la de salida junto al
@@ -489,6 +500,20 @@
   const SA_BOLAS = {
     maxVivas: 3, cadMin: 3.5, cadMax: 6.5, velMin: 120, velMax: 180,
     dMin: 34, dMax: 58, zonaX: 2500, frenoK: 0.4, frenoT: 0.7,
+  };
+  // La ACCIÓN DE ABRAZO de San Ángel (pedido de Jose): cuando el
+  // personaje controlado y su acompañante están cerca, la escena
+  // ofrece «ESPACIO: abrazarse» y corre una secuencia corta con
+  // el sprite de la pareja (abrazo.png): acercamiento, abrazo
+  // con balanceo, pétalos de la escena y corazoncitos dibujados
+  // por código, y separación. Durante el abrazo las bolas de
+  // paja no nacen ni frenan (no arruinan el momento) y, al
+  // terminar, el aviso no vuelve hasta separarse más allá de
+  // rearmeDist o esperar rearmeT segundos (anti-spam amable:
+  // repetir el abrazo es a voluntad, separándose y volviendo).
+  const SA_ABRAZO = {
+    cercaDist: 80, rearmeDist: 140, rearmeT: 4,
+    acercarT: 0.5, abrazoT: 2.4, separarT: 0.6, hugGap: 34,
   };
 
   // ---------- Escena 3: AEROPUERTO (interior dibujado) ----------
@@ -1188,6 +1213,15 @@
       }
       this.resetCameo();
       this.resetBolas();
+      this.resetAbrazo();
+    }
+    resetAbrazo() {
+      // La acción de abrazo (ver SA_ABRAZO): cada llegada por
+      // una Puerta empieza con la secuencia apagada, el aviso
+      // armado y sin partículas en el aire.
+      this.hug = { phase: 'off', t: 0, ax: 0, ay: 0, bx: 0, by: 0, atx: 0, aty: 0, btx: 0, bty: 0, mx: 0, my: 0, pax: 0, pay: 0, pbx: 0, pby: 0 };
+      this.hugArmed = true; this.hugRearmT = 0; this.nearHug = false;
+      this.petalFx = []; this.heartFx = [];
     }
     resetBolas() {
       // Las bolas de paja y las pajitas de los estallidos, y el
@@ -1209,6 +1243,7 @@
     candleGlowAt(t, i) { return candleGlow(t, i); }
     switchActive() {
       if (this.phase !== 'free') return;
+      if (this.hug && this.hug.phase !== 'off') return; // en mitad del abrazo no se cambia de personaje
       this.free.active = this.free.active === 'ximena' ? 'jose' : 'ximena';
       if (G.input && G.input.flush) G.input.flush();
     }
@@ -1222,6 +1257,7 @@
       this.pan = 0; this.nearDoor = false;
       this.resetCameo();
       this.resetBolas();
+      this.resetAbrazo();
     }
     // Llegada desde el aeropuerto: se reaparece junto a la
     // Puerta del árbol (la del fondo de la franja), tras el
@@ -1235,6 +1271,7 @@
       this.pan = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
       this.nearDoor = false;
       this.resetBolas();
+      this.resetAbrazo();
     }
     beginExit() {
       if (this.phase !== 'free') return;
@@ -1267,16 +1304,127 @@
     }
     updateFree(dt) {
       const F = this.free, A = F.chars[F.active];
+      // La secuencia del abrazo manda: el motor libre queda en
+      // pausa (nadie camina por input) y las bolas siguen
+      // rodando, pero sin nacer ni frenar (ver updateBolas).
+      if (this.hug.phase !== 'off') {
+        this.updateHug(dt);
+        this.updateBolas(dt);
+        return;
+      }
       const dE = Math.abs(A.x - this.entryDoorX), dX = Math.abs(A.x - this.exitDoorX);
       this.nearDoor = Math.min(dE, dX) < 58 && Math.abs(A.y - this.groundY) < 40;
       this.nearDoorX = dE <= dX ? this.entryDoorX : this.exitDoorX;
       if (this.nearDoor && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
+      // La oferta del abrazo: con los dos cerca (entre pies) y
+      // el aviso armado. La Puerta manda si ambas ofertas
+      // coinciden (nearHug exige no estar junto a una Puerta).
+      const B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      const dHug = Math.hypot(A.x - B.x, A.y - B.y);
+      if (!this.hugArmed) {
+        this.hugRearmT += dt;
+        if (dHug > SA_ABRAZO.rearmeDist || this.hugRearmT >= SA_ABRAZO.rearmeT) this.hugArmed = true;
+      }
+      this.nearHug = this.hugArmed && !this.nearDoor && dHug <= SA_ABRAZO.cercaDist;
+      if (this.nearHug && (G.input.hit('action') || D.tap)) { this.beginHug(); return; }
       // El trastabilleo por bola de paja: mientras dura, el
       // motor compartido mueve al activo con speedK (×0,4).
       if (this.frenoT > 0) this.frenoT = Math.max(0, this.frenoT - dt);
       this.speedK = this.frenoT > 0 ? SA_BOLAS.frenoK : 1;
       updateStripFree(this, dt);
       this.updateBolas(dt);
+    }
+    // ---------- La acción de abrazo (solo San Ángel) ----------
+    // Tres tiempos: acercamiento (ambos caminan a quedar frente
+    // a frente a hugGap px, en el punto medio entre los dos),
+    // abrazo (los sprites individuales se ocultan y se dibuja
+    // el de la pareja, con balanceo y partículas) y separación
+    // (el acompañante vuelve a su puesto de seguimiento y el
+    // control regresa). El controlado se queda donde quedó el
+    // abrazo: es su sitio nuevo en la calle.
+    beginHug() {
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      const H = this.hug, P = SA_ABRAZO;
+      H.phase = 'approach'; H.t = 0;
+      H.ax = A.x; H.ay = A.y; H.bx = B.x; H.by = B.y;
+      H.mx = (A.x + B.x) / 2; H.my = (A.y + B.y) / 2;
+      const side = B.x >= A.x ? 1 : -1; // cada uno conserva su lado
+      H.atx = H.mx - side * P.hugGap / 2; H.aty = H.my;
+      H.btx = H.mx + side * P.hugGap / 2; H.bty = H.my;
+      A.follow = false; B.follow = false;
+      A.dir = side > 0 ? 'right' : 'left'; // frente a frente
+      B.dir = side > 0 ? 'left' : 'right';
+      this.nearHug = false;
+      D.tap = false;
+    }
+    updateHug(dt) {
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      const H = this.hug, P = SA_ABRAZO;
+      H.t += dt;
+      const ease = (k) => { k = Math.max(0, Math.min(1, k)); return k * k * (3 - 2 * k); };
+      const lerp = (a, b, k) => a + (b - a) * k;
+      if (H.phase === 'approach') {
+        const k = ease(H.t / P.acercarT);
+        A.x = lerp(H.ax, H.atx, k); A.y = lerp(H.ay, H.aty, k);
+        B.x = lerp(H.bx, H.btx, k); B.y = lerp(H.by, H.bty, k);
+        A.animWalk = B.animWalk = H.t < P.acercarT;
+        if (H.t >= P.acercarT) {
+          H.phase = 'hold'; H.t = 0;
+          A.animWalk = B.animWalk = false;
+          this.spawnHugFx();
+        }
+      } else if (H.phase === 'hold') {
+        if (H.t >= P.abrazoT) {
+          H.phase = 'part'; H.t = 0;
+          // La separación: el acompañante vuelve a su puesto de
+          // seguimiento (la misma fórmula del motor compartido).
+          H.pbx = B.x; H.pby = B.y;
+          H.btx = Math.max(40, Math.min(this.worldW - 40, B.id === 'jose' ? A.x + 70 : A.x - 70));
+          H.bty = Math.max(this.groundY - 26, Math.min(this.groundY + 26, A.y));
+        }
+      } else if (H.phase === 'part') {
+        const k = ease(H.t / P.separarT);
+        B.x = lerp(H.pbx, H.btx, k); B.y = lerp(H.pby, H.bty, k);
+        B.animWalk = H.t < P.separarT;
+        if (H.t >= P.separarT) {
+          H.phase = 'off'; H.t = 0;
+          B.animWalk = false; B.follow = false;
+          this.hugArmed = false; this.hugRearmT = 0; // rearme: separarse o esperar
+        }
+      }
+      // La cámara sigue al activo, como en el motor compartido.
+      const camT = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
+      this.pan += (camT - this.pan) * Math.min(1, dt * 6);
+      if (Math.abs(camT - this.pan) < 0.05) this.pan = camT;
+      this.updateHugFx(dt);
+      D.tap = false;
+    }
+    // Las partículas del momento: pétalos de la escena (el
+    // sabor de San Ángel, como los de la absorción) flotando
+    // alrededor de la pareja y 2–3 corazoncitos DIBUJADOS por
+    // código (formas geométricas con curvas: jamás caracteres).
+    spawnHugFx() {
+      const H = this.hug;
+      this.petalFx = []; this.heartFx = [];
+      for (let i = 0; i < 14; i++) {
+        this.petalFx.push({
+          x: H.mx + (Math.random() - 0.5) * 110, y: H.my - 96 - Math.random() * 26,
+          vx: (Math.random() - 0.5) * 14, vy: 13 + Math.random() * 15,
+          t: -Math.random() * 0.9, life: 2.7, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 2.4, ph: Math.random() * 6.28,
+        });
+      }
+      for (let i = 0; i < 3; i++) {
+        this.heartFx.push({ x: H.mx + (i - 1) * 17 + (Math.random() - 0.5) * 6, y: H.my - 100, t: -i * 0.45, life: 2.1, s: 5.5 + (i % 2) * 1.5, ph: Math.random() * 6.28 });
+      }
+    }
+    updateHugFx(dt) {
+      const step = (arr, fn) => {
+        const keep = [];
+        for (const p of arr) { p.t += dt; if (p.t >= p.life) continue; if (p.t >= 0) fn(p); keep.push(p); }
+        return keep;
+      };
+      this.petalFx = step(this.petalFx, (p) => { p.x += (p.vx + Math.sin(p.t * 2.6 + p.ph) * 9) * dt; p.y += p.vy * dt; p.rot += p.vr * dt; });
+      this.heartFx = step(this.heartFx, (p) => { p.y -= 13 * dt; p.x += Math.sin(p.t * 3.1 + p.ph) * 6 * dt; });
     }
     // Las bolas de paja: aparición por viento (solo con el
     // controlado en la zona de la calle), rodadura real hacia
@@ -1286,9 +1434,13 @@
     // pajitas dibujadas por código y el controlado trastabillea.
     updateBolas(dt) {
       const F = this.free, A = F.chars[F.active];
+      // Durante el abrazo las bolas no nacen ni chocan: las
+      // vivas siguen rodando y pasan de largo (el momento no
+      // se arruina por un trastabilleo a mitad de abrazo).
+      const hugging = this.hug.phase !== 'off';
       this.bolaTimer -= dt;
       if (this.bolaTimer <= 0) {
-        if (this.bolas.length < SA_BOLAS.maxVivas && A.x < SA_BOLAS.zonaX) {
+        if (!hugging && this.bolas.length < SA_BOLAS.maxVivas && A.x < SA_BOLAS.zonaX) {
           const d = SA_BOLAS.dMin + Math.random() * (SA_BOLAS.dMax - SA_BOLAS.dMin), r = d / 2;
           this.bolas.push({
             x: this.pan + 640 + 40 + r, y: this.groundY + (Math.random() * 44 - 22),
@@ -1304,7 +1456,7 @@
         b.ang = -b.dist / b.r; // rodadura: al ir a la izquierda gira en sentido antihorario
         if (b.x < this.pan - 100 || b.x + b.r < 0) continue; // salió del encuadre o del mundo
         const dx = b.x - A.x, dy = (b.y - b.r) - (A.y - 44);
-        if (dx * dx + dy * dy < Math.pow(b.r * 0.85 + 26, 2)) {
+        if (!hugging && dx * dx + dy * dy < Math.pow(b.r * 0.85 + 26, 2)) {
           for (let i = 0; i < 9; i++) {
             const a = Math.random() * 6.28, s = 30 + Math.random() * 70;
             this.pajitas.push({ x: b.x, y: b.y - b.r, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 25, t: 0, life: 0.45 + Math.random() * 0.2, rot: Math.random() * 6.28 });
@@ -1426,14 +1578,24 @@
       // detrás según su línea de rodadura)
       for (const b of this.bolas) items.push({ y: b.y, fn: () => this.drawBola(c, pan, b) });
       const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
-      for (const ch of chars) {
-        items.push({
-          y: ch.y, fn: () => {
-            let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
-            if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = walkIdxFor(ch.id, ch.dist); bobY = 0; }
-            drawChar2DAt(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
-          },
-        });
+      // En el corazón del abrazo, los dos sprites individuales
+      // se ocultan y se dibuja el de la PAREJA (abrazo.png) en
+      // el punto medio. Sin el asset, el respaldo son los dos
+      // sprites individuales frente a frente, muy juntos, con
+      // la misma coreografía de partículas (drawHugFx).
+      const hugSprite = this.hug.phase === 'hold' && imgOk(abrazoImg);
+      if (hugSprite) {
+        items.push({ y: this.hug.my, fn: () => this.drawHugSprite(c, pan) });
+      } else {
+        for (const ch of chars) {
+          items.push({
+            y: ch.y, fn: () => {
+              let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
+              if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = walkIdxFor(ch.id, ch.dist); bobY = 0; }
+              drawChar2DAt(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
+            },
+          });
+        }
       }
       items.sort((a, b) => a.y - b.y);
       for (const it of items) it.fn();
@@ -1447,9 +1609,16 @@
         c.beginPath(); c.moveTo(-4, 0); c.lineTo(4, 0); c.stroke();
         c.restore();
       }
+      // las partículas del abrazo (pétalos y corazoncitos),
+      // sobre los personajes
+      this.drawHugFx(c, pan);
       // velas del suelo, fila delantera (sobre los pies)
       this.drawCandles(c, pan, true);
       if (this.phase === 'free' && this.nearDoor) G.prompt(c, 'ESPACIO: cruzar la Puerta', this.nearDoorX - pan, groundY - 96);
+      if (this.phase === 'free' && this.nearHug && this.hug.phase === 'off') {
+        const midX = (this.free.chars.ximena.x + this.free.chars.jose.x) / 2;
+        G.prompt(c, 'ESPACIO: abrazarse', midX - pan, groundY - 96);
+      }
       // luz de la Puerta: se disipa al llegar, crece al salir
       if (this.phase === 'light') { c.fillStyle = `rgba(255,244,214,${(1 - Math.min(1, this.phaseT)).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
@@ -1481,6 +1650,50 @@
           c.beginPath(); c.moveTo(Math.cos(a) * b.r * 0.3, Math.sin(a) * b.r * 0.3);
           c.lineTo(Math.cos(a + 0.7) * b.r * 0.95, Math.sin(a + 0.7) * b.r * 0.95); c.stroke();
         }
+        c.restore();
+      }
+    }
+    // El sprite de la pareja abrazándose, en el punto medio
+    // del abrazo y a la misma altura que los personajes de la
+    // franja (96 px), con su sombra al suelo y un balanceo
+    // suave (rotación ±1,5° y bob mínimo, por senos).
+    drawHugSprite(c, pan) {
+      const H = this.hug, t = this.t;
+      const h = 96, w = h * abrazoImg.naturalWidth / abrazoImg.naturalHeight;
+      const sway = Math.sin(t * 1.6) * 0.026, bob = Math.sin(t * 2.2) * 1.2;
+      c.save(); c.translate(H.mx - pan, H.my + bob); c.rotate(sway);
+      c.fillStyle = 'rgba(60,32,10,0.22)';
+      c.beginPath(); c.ellipse(0, 3, w * 0.42, 4.5, 0, 0, 6.3); c.fill();
+      c.drawImage(abrazoImg, -w / 2, -h, w, h);
+      c.restore();
+    }
+    // Las partículas del abrazo: pétalos rosas cayendo con
+    // vaivén alrededor de la pareja y corazoncitos que suben.
+    // El corazón es una forma geométrica dibujada con curvas
+    // (dos lóbulos y punta), nunca un carácter.
+    drawHugFx(c, pan) {
+      for (const p of this.petalFx) {
+        if (p.t < 0) continue;
+        const sx = p.x - pan;
+        if (sx < -20 || sx > 660) continue;
+        const fade = Math.min(1, p.t / 0.3, (p.life - p.t) / 0.5);
+        c.save(); c.translate(sx, p.y); c.rotate(p.rot);
+        c.fillStyle = `rgba(244,164,190,${(0.85 * fade).toFixed(3)})`;
+        c.beginPath(); c.ellipse(0, 0, 3.4, 2, 0, 0, 6.3); c.fill();
+        c.restore();
+      }
+      for (const p of this.heartFx) {
+        if (p.t < 0) continue;
+        const sx = p.x - pan;
+        if (sx < -20 || sx > 660) continue;
+        const fade = Math.min(1, p.t / 0.25, (p.life - p.t) / 0.5);
+        c.save(); c.translate(sx, p.y); c.scale(p.s / 10, p.s / 10);
+        c.beginPath();
+        c.moveTo(0, 3.2);
+        c.bezierCurveTo(-6.5, -2.5, -3.2, -8, 0, -3.8);
+        c.bezierCurveTo(3.2, -8, 6.5, -2.5, 0, 3.2);
+        c.fillStyle = `rgba(232,84,120,${(0.9 * fade).toFixed(3)})`;
+        c.fill();
         c.restore();
       }
     }
@@ -3069,7 +3282,7 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY, praderaClouds, dirigibleXAt, bandadaAt, calciferFlick, mariposaAt, FINALE, FINAL_TEXT,
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, SA_ABRAZO, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY, praderaClouds, dirigibleXAt, bandadaAt, calciferFlick, mariposaAt, FINALE, FINAL_TEXT,
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.
