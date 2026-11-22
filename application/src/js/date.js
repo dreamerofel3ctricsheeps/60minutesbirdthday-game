@@ -378,6 +378,22 @@
   const imgOk = (i) => !!(i && i.complete && i.naturalWidth);
   const avionImg = loadDateImg('assets/date/avion.png');
   const vochoImg = loadDateImg('assets/date/vocho.png');
+  // El TRÁFICO de la plaza (pedido de Jose): los ENCUENTROS en
+  // la calle (el Alebrije caminando y Teodora flotando, cameos
+  // con sus diseños definidos del juego) y los AUTOS CON
+  // CALAVERITA, los obstáculos de la escena (ver PLAZA_TRAFICO).
+  // Los autos son recortes de foto CC como el vocho, pero de
+  // OTROS modelos y colores (un Saab descapotable rojo y un
+  // Opel blanco), y las calaveritas al volante son los diseños
+  // del juego (la clásica de vestido rojo y la morada del
+  // corazón en la frente), recortadas en busto de sus sprites.
+  // Todo versionado; fuentes en FUENTES.md.
+  const alebrijeImg = loadDateImg('assets/date/alebrije-calle.png');
+  const teodoraImg = loadDateImg('assets/date/teodora-calle.png');
+  const autoRojoImg = loadDateImg('assets/date/auto-rojo.png');
+  const autoBlancoImg = loadDateImg('assets/date/auto-blanco.png');
+  const calClasicaImg = loadDateImg('assets/date/calaverita-clasica-busto.png');
+  const calMoradaImg = loadDateImg('assets/date/calaverita-morada-busto.png');
   const tacosImg = loadDateImg('assets/date/tacos.png');
   const parroquiaImg = loadDateImg('assets/date/parroquia.png');
   const bellasArtesImg = loadDateImg('assets/date/bellasartes.png');
@@ -467,6 +483,60 @@
     if (ph >= f.cruce) return 9999;
     return 790 - (ph / f.cruce) * 960;
   }
+
+  // ---------- El tráfico de la plaza: encuentros y autos con calaverita ----------
+  // Dos capas de vida en la calle de la escena 1 (pedido de
+  // Jose), ambas SOLO en el modo libre (nada durante el
+  // revelado) y en la capa de personajes ordenada por Y:
+  //
+  // A) ENCUENTROS: el ALEBRIJE y TEODORA cruzan la calle de
+  // derecha a izquierda como transeúntes con los que la pareja
+  // «se encuentra»: cameos SIN colisión ni interacción (como el
+  // de Manolo y María en San Ángel). Alternan (uno por cruce,
+  // con intervalos generosos) y nacen por delante de la cámara.
+  // El Alebrije CAMINA: su sprite es el perfil alb_side de su
+  // hoja de diseño (mirando a la derecha), así que al dibujarlo
+  // se espeja SOLO el perfil para que mire a su dirección de
+  // viaje — la convención del proyecto para perfiles (la del
+  // propio motor de franja con la pareja); su identidad (ojos
+  // negros enormes, lengua roja rizada fuera, mancha roja con
+  // puntos en el flanco, aleta dorsal amarilla) va intacta.
+  // Teodora FLOTA, como es su naturaleza en el juego: su sprite
+  // es su pose de flotación hacia la izquierda YA dibujada así
+  // en su diseño (no se espeja: su moño va en su lado izquierdo
+  // y así queda), con el bob por motor y los pies a floatAlt px
+  // sobre su línea de calle.
+  //
+  // B) AUTOS CON CALAVERITA: los obstáculos de la plaza. Como
+  // el vocho de Pollito, pero en OTROS autos (un descapotable
+  // rojo y un compacto blanco: nada de duplicar el vocho) y a
+  // la altura de la calle DE LA PAREJA (la banda caminable, no
+  // la calle de primer plano del vocho). Cada pasada lleva un
+  // CARRIL (una y dentro de la banda): se esquiva moviéndose en
+  // vertical dentro de la banda o dejando pasar el auto. Si el
+  // auto alcanza al personaje CONTROLADO con solape real (su x
+  // dentro del largo del auto y su y a ±laneTol del carril),
+  // trastabillea ×frenoK durante frenoT (la regla de la cita:
+  // frenar, nunca derrotar) y el auto sigue su camino, con una
+  // sola afectación por pasada. El SEGUIDOR es inmune. OJO: el
+  // vocho de Pollito (PLAZA_FX.vocho) NO es de esta familia: es
+  // un gag de primer plano, INOFENSIVO y sin colisión alguna.
+  // winCx/winBase/bustW de cada modelo: la ventanilla del
+  // conductor medida sobre su recorte (fracciones), con el
+  // busto de la calaverita compuesto como el de Pollito.
+  const PLAZA_TRAFICO = {
+    alebrije: { h: 100, vel: 62 },
+    teodora: { h: 94, vel: 80, floatAlt: 30 },
+    intervaloMin: 15, intervaloMax: 24,
+    autos: {
+      w: 232, velMin: 205, velMax: 245, cadMin: 9, cadMax: 14, maxVivos: 2,
+      frenoK: 0.4, frenoT: 0.7, laneTol: 18,
+      modelos: [
+        { img: autoRojoImg, bust: calClasicaImg, color: '#b03a3a', winCx: 0.46, winBase: 0.385, bustW: 0.145 },
+        { img: autoBlancoImg, bust: calMoradaImg, color: '#e8e4da', winCx: 0.46, winBase: 0.385, bustW: 0.145 },
+      ],
+    },
+  };
 
   // ---------- Escena 2: SAN ÁNGEL (recortes de la película) ----------
   // Todo lo de esta carpeta es arte de El Libro de la Vida
@@ -841,6 +911,16 @@
       // aeropuerto y las de allá devuelven a San Ángel, cuya
       // Puerta de entrada trae de vuelta aquí).
       this.exitDoorX = PLAZA_FX.vistaWorldX; this.nearExit = false;
+      // --- El tráfico de la calle (ver PLAZA_TRAFICO): los
+      // encuentros (Alebrije/Teodora, alternando) y los autos
+      // con calaverita viven SOLO en el modo libre. frenoT /
+      // speedK son el trastabilleo de los autos, con el mismo
+      // gancho del motor que usan las bolas de paja de San
+      // Ángel y los Calcifers de las praderas.
+      this.frenoT = 0; this.speedK = 1;
+      this.encuentros = []; this.encuentroTimer = 6 + Math.random() * 4;
+      this.encuentroNext = Math.random() < 0.5 ? 'alebrije' : 'teodora';
+      this.autos = []; this.autoTimer = 5 + Math.random() * 3;
     }
     // Altura en pantalla (px lógicos) de un segmento vertical con
     // la altura del sprite de Ximena, plantado en (x, z), visto
@@ -964,6 +1044,9 @@
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; D.tap = false;
+      // La calle queda limpia para la próxima visita: ni
+      // encuentros ni autos a mitad de cruce al volver.
+      this.encuentros = []; this.autos = []; this.frenoT = 0; this.speedK = 1;
       playDoorClose(); // la Puerta se cierra tras la pareja (grabación real)
     }
     // Vuelta desde San Ángel: se reaparece en modo libre junto
@@ -988,7 +1071,133 @@
       const F = this.free, A = F.chars[F.active];
       this.nearExit = Math.abs(A.x - this.exitDoorX) < 58 && Math.abs(A.y - this.groundY) < 40;
       if (this.nearExit && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
+      // El trastabilleo de los autos con calaverita: el motor
+      // compartido mueve al activo con speedK (×0,4) mientras
+      // dure (mismo patrón que San Ángel y las praderas).
+      if (this.frenoT > 0) this.frenoT = Math.max(0, this.frenoT - dt);
+      this.speedK = this.frenoT > 0 ? PLAZA_TRAFICO.autos.frenoK : 1;
+      this.updateEncuentros(dt);
+      this.updateAutos(dt);
       updateStripFree(this, dt);
+    }
+    // Los ENCUENTROS de la calle: el Alebrije y Teodora cruzan
+    // de derecha a izquierda, alternando, con intervalos
+    // generosos entre cruces (la plaza es larga: cada uno puede
+    // aparecer más de una vez en el paseo). Nacen por delante
+    // de la cámara y cruzan hasta salir del encuadre; al salir
+    // del todo se rearma el intervalo del siguiente. Sin
+    // colisión ni interacción: son transeúntes.
+    updateEncuentros(dt) {
+      const E = PLAZA_TRAFICO;
+      this.encuentroTimer -= dt;
+      if (this.encuentroTimer <= 0 && !this.encuentros.length) {
+        const kind = this.encuentroNext;
+        this.encuentros.push({
+          kind, x: this.pan + 640 + 150, y: this.groundY + (Math.random() * 36 - 16),
+          dist: 0, ph: Math.random() * 6.28,
+        });
+        this.encuentroNext = kind === 'alebrije' ? 'teodora' : 'alebrije';
+        this.encuentroTimer = E.intervaloMin + Math.random() * (E.intervaloMax - E.intervaloMin);
+      }
+      const keep = [];
+      for (const e of this.encuentros) {
+        const vel = e.kind === 'alebrije' ? E.alebrije.vel : E.teodora.vel;
+        e.x -= vel * dt; e.dist += vel * dt;
+        if (e.x > this.pan - 240) keep.push(e);
+        else if (!keep.length) this.encuentroTimer = Math.max(this.encuentroTimer, E.intervaloMin + Math.random() * (E.intervaloMax - E.intervaloMin));
+      }
+      this.encuentros = keep;
+    }
+    // Los AUTOS CON CALAVERITA: nacen por delante de la cámara
+    // con un carril (una y dentro de la banda caminable) y
+    // cruzan de derecha a izquierda hasta salir. El golpe exige
+    // SOLAPE REAL con el personaje CONTROLADO: su x dentro del
+    // largo del auto (con un pelo de margen por el borde blanco
+    // del recorte) y su y a ±laneTol del carril; el seguidor
+    // nunca se comprueba (es inmune) y cada auto afecta una
+    // sola vez por pasada. Cadencia prudente y nada de autos
+    // pegados a la Puerta de salida (no nacen con el aviso de
+    // cruce activo).
+    updateAutos(dt) {
+      const AU = PLAZA_TRAFICO.autos, F = this.free, A = F.chars[F.active];
+      this.autoTimer -= dt;
+      if (this.autoTimer <= 0) {
+        if (this.autos.length < AU.maxVivos && !this.nearExit) {
+          this.autos.push({
+            modelo: Math.random() < 0.5 ? 0 : 1,
+            x: this.pan + 640 + AU.w / 2 + 60,
+            laneY: this.groundY + (Math.random() * 48 - 24),
+            vel: AU.velMin + Math.random() * (AU.velMax - AU.velMin),
+            ph: Math.random() * 6.28, hitDone: false,
+          });
+        }
+        this.autoTimer = AU.cadMin + Math.random() * (AU.cadMax - AU.cadMin);
+      }
+      const keep = [];
+      for (const car of this.autos) {
+        car.x -= car.vel * dt;
+        if (car.x < this.pan - AU.w - 80 || car.x + AU.w / 2 < 0) continue; // salió del encuadre o del mundo
+        if (!car.hitDone && Math.abs(A.y - car.laneY) <= AU.laneTol && Math.abs(A.x - car.x) <= AU.w / 2 * 0.94) {
+          car.hitDone = true;
+          this.frenoT = AU.frenoT; // trastabilleo: el auto sigue su camino
+        }
+        keep.push(car);
+      }
+      this.autos = keep;
+    }
+    // Un encuentro en la capa de la calle: el Alebrije camina
+    // (bob por distancia, como la pareja) y Teodora flota (bob
+    // por tiempo y los pies por encima de su línea de calle).
+    drawEncuentro(c, e) {
+      const x = e.x - this.pan;
+      if (x < -240 || x > 880) return;
+      if (e.kind === 'alebrije') {
+        if (!imgOk(alebrijeImg)) return;
+        const h = PLAZA_TRAFICO.alebrije.h, w = h * alebrijeImg.naturalWidth / alebrijeImg.naturalHeight;
+        const bob = Math.sin(e.dist * 0.09) * 1.6;
+        c.fillStyle = 'rgba(20,14,26,0.20)'; c.beginPath(); c.ellipse(x, e.y + 3, w * 0.36, 4.5, 0, 0, 6.3); c.fill();
+        // El perfil de diseño mira a la derecha y él camina a
+        // la izquierda: se espeja SOLO este perfil (ver la nota
+        // de identidad en PLAZA_TRAFICO).
+        c.save(); c.translate(x, e.y - h + bob); c.scale(-1, 1);
+        c.drawImage(alebrijeImg, -w / 2, 0, w, h);
+        c.restore();
+      } else {
+        if (!imgOk(teodoraImg)) return;
+        const cfg = PLAZA_TRAFICO.teodora, h = cfg.h, w = h * teodoraImg.naturalWidth / teodoraImg.naturalHeight;
+        const bob = Math.sin(this.t * 2.1 + e.ph) * 3;
+        c.fillStyle = 'rgba(20,14,26,0.16)'; c.beginPath(); c.ellipse(x, e.y + 3, w * 0.3, 4, 0, 0, 6.3); c.fill();
+        c.drawImage(teodoraImg, x - w / 2, e.y - cfg.floatAlt + bob - h, w, h);
+      }
+    }
+    // Un auto con calaverita en la capa de la calle: el recorte
+    // de foto con su leve bob de suspensión y la calaverita al
+    // volante asomando por la ventanilla del conductor (busto
+    // compuesto como el de Pollito en el vocho). Si la foto no
+    // cargó, respaldo dibujado por código del color del modelo:
+    // el obstáculo nunca es invisible.
+    drawAuto(c, car) {
+      const AU = PLAZA_TRAFICO.autos, M = AU.modelos[car.modelo], W = AU.w;
+      const x = car.x - this.pan;
+      if (x < -W || x > 640 + W) return;
+      const t = this.t, foto = imgOk(M.img);
+      const H = foto ? W * M.img.naturalHeight / M.img.naturalWidth : W * 0.34;
+      const bottom = car.laneY + 16, top = bottom - H, left = x - W / 2;
+      const bob = Math.sin(t * 29 + car.ph) * 0.7;
+      if (foto) {
+        c.drawImage(M.img, left, top + bob, W, H);
+      } else {
+        c.fillStyle = M.color;
+        c.fillRect(left, top + bob + H * 0.38, W, H * 0.47);
+        c.fillRect(left + W * 0.27, top + bob + H * 0.1, W * 0.44, H * 0.32);
+        c.fillStyle = 'rgba(24,20,32,0.85)';
+        c.beginPath(); c.arc(left + W * 0.22, bottom - 5, H * 0.15, 0, 6.3); c.fill();
+        c.beginPath(); c.arc(left + W * 0.78, bottom - 5, H * 0.15, 0, 6.3); c.fill();
+      }
+      if (imgOk(M.bust)) {
+        const bw2 = W * M.bustW, bh2 = bw2 * M.bust.naturalHeight / M.bust.naturalWidth;
+        c.drawImage(M.bust, left + W * M.winCx - bw2 / 2, top + bob + H * M.winBase - bh2 + Math.sin(t * 17 + car.ph) * 0.6, bw2, bh2);
+      }
     }
     animStep(ch, physically, dt) { animStepChar(ch, physically, dt); }
     draw(dt) {
@@ -1167,19 +1376,29 @@
       const exitOpenK = this.phase === 'exitdoor' ? Math.min(1, this.phaseT) : 0;
       this.drawDoor2D(c, this.exitDoorX - pan, groundY, exitOpenK);
       const hop = this.joseReacted && this.phase === 'plaza' ? Math.abs(Math.sin(t * 5)) * 3 : 0;
-      // Se dibujan de atrás hacia adelante (menor y primero). En
-      // el revelado ambos están en idle; en 'free' quien se mueve
-      // usa su caminata lateral (walk_right, espejo a la
-      // izquierda) con el frame avanzando por DISTANCIA recorrida
-      // a la cadencia del juego (~9,8 u/frame, ciclos de 3 en
+      // La capa de la calle, ordenada por Y (de atrás hacia
+      // adelante, menor y primero): la pareja, los ENCUENTROS
+      // (el Alebrije y Teodora) y los AUTOS con calaverita
+      // comparten la banda y se tapan unos a otros según su y,
+      // como el cameo de San Ángel en su escena. En el revelado
+      // la pareja está en idle; en 'free' quien se mueve usa su
+      // caminata lateral (walk_right, espejo a la izquierda)
+      // con el frame avanzando por DISTANCIA recorrida a la
+      // cadencia del juego (~9,8 u/frame, ciclos de 3 en
       // ping-pong como en world.js); en reposo, idle.
-      const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
-      for (const ch of chars) {
-        let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
-        if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = this.walkIdx(ch.id, ch.dist); bobY = 0; }
-        if (ch.id === 'jose' && hop) bobY = -hop;
-        this.drawChar2D(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
+      const calle = [];
+      for (const ch of [this.free.chars.ximena, this.free.chars.jose]) {
+        calle.push({ y: ch.y, fn: () => {
+          let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
+          if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = this.walkIdx(ch.id, ch.dist); bobY = 0; }
+          if (ch.id === 'jose' && hop) bobY = -hop;
+          this.drawChar2D(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
+        } });
       }
+      for (const e of this.encuentros) calle.push({ y: e.y, fn: () => this.drawEncuentro(c, e) });
+      for (const car of this.autos) calle.push({ y: car.laneY, fn: () => this.drawAuto(c, car) });
+      calle.sort((a, b) => a.y - b.y);
+      for (const it of calle) it.fn();
       // L5 · poste en primer plano (desenfocado por código: alpha + sombra)
       const postX = ((566 - pan * 1.4) % 700 + 700) % 700 - 30;
       c.save();
@@ -1196,6 +1415,10 @@
       // interactúa: solo pasa manejando, con su cabeza y hombros
       // (recorte del frame idle definido) asomando por la
       // ventanilla del conductor y su propio bob de manejo.
+      // Es un gag INOFENSIVO, sin colisión de ningún tipo: NO
+      // confundir con los AUTOS CON CALAVERITA (PLAZA_TRAFICO),
+      // que cruzan por la banda caminable y sí frenan al
+      // personaje controlado si lo alcanzan en su carril.
       if (imgOk(vochoImg)) {
         const vx = vochoXAt(t);
         if (vx < 9000) {
@@ -3400,7 +3623,7 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, SA_ABRAZO, SA_VELAS_X0, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY, praderaClouds, dirigibleXAt, bandadaAt, calciferFlick, mariposaAt, FINALE, FINAL_TEXT,
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, PLAZA_TRAFICO, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, SA_ABRAZO, SA_VELAS_X0, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY, praderaClouds, dirigibleXAt, bandadaAt, calciferFlick, mariposaAt, FINALE, FINAL_TEXT,
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.

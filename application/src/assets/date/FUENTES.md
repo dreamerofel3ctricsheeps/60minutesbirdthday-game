@@ -281,3 +281,86 @@
   «sonido de pixel»; el juego principal no se tocó. Respeta
   el silencio de la cita (botón/M) y usa un elemento <audio>
   propio que no toca la canción ni el reloj.
+
+## auto-rojo.png — El descapotable rojo de la calaverita clásica (obstáculo de la plaza)
+- **Foto original:** «Red Saab 900 Turbo side view.jpg» (3512 × 1324)
+  — un Saab 900 Turbo descapotable rojo con la capota negra,
+  en perfil puro mirando a la izquierda (su dirección de viaje
+  en la escena: sin espejo).
+- **Autor:** Renée Kools
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Red_Saab_900_Turbo_side_view.jpg
+- **Licencia:** CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+- **Descargada:** 2026-11-21 (versión de 1920 px)
+- **Procesado:** `tools/mkcutout.py` (rembg) con recorte
+  x 0–0,965 (fuera la rueda de bicicleta del borde derecho),
+  borde blanco horneado y sombra suave. Salida: 1100 × 368.
+- **Uso:** uno de los dos AUTOS CON CALAVERITA de la escena 1:
+  cruza por la banda caminable en un carril y frena un
+  instante (×0,4 por 0,7 s) al personaje controlado si lo
+  alcanza con solape real. Lo conduce la calaverita clásica
+  (vestido rojo, a juego con el auto), cuyo busto se dibuja
+  sobre la ventanilla del conductor.
+
+## auto-blanco.png — El compacto blanco de la calaverita morada (obstáculo de la plaza)
+- **Foto original:** «White Opel Karl side view.jpg» — un Opel
+  Karl blanco, en perfil puro mirando a la izquierda (su
+  dirección de viaje en la escena: sin espejo).
+- **Autor:** Renée Kools (ReneeWrites)
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:White_Opel_Karl_side_view.jpg
+- **Licencia:** CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+- **Descargada:** 2026-11-21 (versión de 1920 px)
+- **Procesado:** `tools/mkcutout.py` (rembg), borde blanco
+  horneado y sombra suave. Salida: 1100 × 502.
+- **Uso:** el otro AUTO CON CALAVERITA de la escena 1 (misma
+  mecánica de carril y trastabilleo que el rojo). Lo conduce
+  la calaverita morada (la del corazón en la frente), cuyo
+  busto se dibuja sobre la ventanilla del conductor. Nota: se
+  probó primero un Dodge Challenger blanco de la misma
+  autora, pero su foto trae otro auto pegado tras el techo y
+  el recorte salía sucio; el Opel es el perfil limpio.
+
+## calaverita-clasica-busto.png y calaverita-morada-busto.png — Las conductoras
+- **Arte original del juego** (no es foto ni material de
+  película): los bustos son recortes de los sprites definidos
+  de las dos calaveritas del juego (las que sostienen la soga
+  en el final de Leyendas): la clásica de vestido rojo y la
+  morada del corazón rosa en la frente. Recorte de cabeza y
+  hombros (la parte alta del sprite: clásica 295 × 262 desde
+  su PNG de 295 × 440; morada 336 × 255 desde el suyo de
+  336 × 440), con su borde blanco horneado intacto.
+- **Uso:** cada una conduce su auto de la plaza (la clásica,
+  el rojo; la morada, el blanco): el busto se dibuja sobre la
+  ventanilla del conductor con su base en el marco inferior
+  de la ventana, compuesto como el busto de Pollito en el
+  vocho.
+
+## alebrije-calle.png — El Alebrije cruzando la calle de la plaza (encuentro)
+- **Arte original del juego** (no es foto ni material de
+  película): el perfil `alb_side` de su hoja de diseño
+  (turnaround v2, generada desde la adaptación de Jose: ojos
+  negros enormes, lengua roja rizada fuera, mancha roja con
+  puntos en el flanco, aleta dorsal amarilla, cola anillada).
+- **Procesado:** segmentación de la figura sobre el fondo
+  crema de la hoja (flood-fill desde los bordes) y borde
+  blanco Paper Mario re-horneado por dilatación, como en los
+  sprites definidos. Salida: 761 × 580.
+- **Uso:** ENCUENTRO de la escena 1: cruza la calle caminando
+  de derecha a izquierda, sin colisión ni interacción. El
+  perfil de diseño mira a la derecha, así que al dibujarlo se
+  espeja SOLO el perfil para que mire a su dirección de viaje
+  (la convención del proyecto para perfiles caminantes).
+
+## teodora-calle.png — Teodora flotando sobre la calle de la plaza (encuentro)
+- **Arte original del juego** (no es foto ni material de
+  película): su pose de flotación hacia la izquierda, generada
+  para su diseño (pelo naranja cobrizo, sombrero rosa con
+  banda a cuadros y moño lila en SU lado izquierdo, vestido en
+  capas morado/rosa, medias a rayas, botas magenta).
+- **Procesado:** fondo magenta retirado por clave de color,
+  conservando su borde blanco horneado; los bolsillos de
+  fondo que se ven entre el pelo, el brazo y el cuerpo quedan
+  transparentes (no se rellenan). Salida: 900 × 727.
+- **Uso:** ENCUENTRO de la escena 1: cruza la calle FLOTANDO
+  de derecha a izquierda (la pose ya mira a la izquierda: no
+  se espeja, jamás se espeja a Teodora), con el bob de
+  flotación por motor. Sin colisión ni interacción.

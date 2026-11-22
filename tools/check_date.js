@@ -1032,8 +1032,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     dateSrc.includes('bola-paja.png') && !!DM.debug.SA_BOLAS &&
     DM.debug.SA_BOLAS.frenoK === 0.4 && DM.debug.SA_BOLAS.frenoT === 0.7 && DM.debug.SA_BOLAS.zonaX === 2500 &&
     DM.debug.SA_BOLAS.maxVivas === 3 && DM.debug.SA_BOLAS.cadMin === 3.5 && DM.debug.SA_BOLAS.cadMax === 6.5);
-  check('el freno es opt-in de San Ángel: la plaza no define speedK (el motor compartido no cambia para las demás escenas)',
-    sc.speedK === undefined);
+  check('el freno es opt-in por escena: la plaza define el suyo (por sus autos con calaverita) y en reposo vale 1, sin freno pendiente (el motor compartido no cambia para las demás escenas)',
+    sc.speedK === 1 && sc.frenoT === 0);
   // Se re-entra a la cita y se cruza a San Ángel en modo libre.
   DM.start(() => {});
   DM.debug.travelTo('sanangel');
@@ -1739,6 +1739,134 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     DM.state.muted === true && doorPlays === 2 && G.scene === scQ, 'plays=' + doorPlays + ', muted=' + DM.state.muted);
   DM.debug.toggleMute();
   G.sfx = origSfxQ;
+  DM.stop();
+
+  console.log('\nR) Tráfico de la plaza: encuentros (Alebrije y Teodora) y autos con calaverita');
+  // Assets: dos autos de foto CC (Renée Kools, CC BY 4.0, como
+  // el vocho) DISTINTOS del vocho azul — un Saab descapotable
+  // rojo y un Opel compacto blanco —, los bustos de las dos
+  // calaveritas del juego y los perfiles definidos del Alebrije
+  // y de Teodora. Todo versionable (CC o arte propio): ningún
+  // .gitignore los tapa.
+  const TR = DM.debug.PLAZA_TRAFICO;
+  const traficoFiles = ['auto-rojo.png', 'auto-blanco.png', 'alebrije-calle.png', 'teodora-calle.png', 'calaverita-clasica-busto.png', 'calaverita-morada-busto.png'];
+  for (const file of traficoFiles) {
+    check(`el asset ${file} existe en assets/date y FUENTES.md lo registra`,
+      fs.existsSync(path.join(DATE_DIR, file)) && fuentes.includes(file));
+  }
+  const noIgnorado = (file) => {
+    try { require('child_process').execSync('git check-ignore -q application/src/assets/date/' + file, { cwd: path.join(__dirname, '..') }); return false; }
+    catch (e) { return true; } // exit 1 de check-ignore = NO ignorado (lo buscado)
+  };
+  check('ningún asset del tráfico está ignorado por git (son versionables) y FUENTES.md trae la autora y licencia de los autos',
+    traficoFiles.every(noIgnorado) && fuentes.includes('Renée Kools') && fuentes.includes('Red_Saab_900_Turbo_side_view') && fuentes.includes('White_Opel_Karl_side_view'));
+  check('date.js carga los 6 assets del tráfico',
+    traficoFiles.every((f) => dateSrc.includes(f)));
+  check('PLAZA_TRAFICO: Teodora FLOTA (floatAlt > 0) y el Alebrije camina a ras de calle (sin floatAlt); los autos frenan ×0,4 por 0,7 s con tolerancia de carril de 18 px',
+    !!TR && TR.teodora.floatAlt > 0 && !TR.alebrije.floatAlt &&
+    TR.autos.frenoK === 0.4 && TR.autos.frenoT === 0.7 && TR.autos.laneTol === 18 && TR.autos.maxVivos === 2);
+  check('los dos modelos son autos DISTINTOS entre sí (otra foto, otro busto de calaverita, ventanilla medida) y ninguno es el vocho de Pollito',
+    TR.autos.modelos.length === 2 && TR.autos.modelos[0].img !== TR.autos.modelos[1].img &&
+    TR.autos.modelos[0].bust !== TR.autos.modelos[1].bust &&
+    TR.autos.modelos.every((m) => m.winCx > 0 && m.winBase > 0 && m.bustW > 0));
+  // Se re-entra a la cita y se llega a la plaza en modo libre.
+  DM.start(() => {});
+  const scR = G.scene, xiR = scR.xi;
+  xiR.x = 510; xiR.y = 560; xiR.vx = xiR.vy = 0;
+  scR.update(0.016);
+  key('Space', true); scR.update(0.016); key('Space', false);
+  for (let i = 0; i < 30; i++) scR.update(0.05); // puerta cruzada, revelado en curso
+  check('durante el REVELADO no hay encuentros ni autos (la calle se puebla solo en el modo libre)',
+    scR.phase === 'plaza' && scR.encuentros.length === 0 && scR.autos.length === 0, 'phase=' + scR.phase);
+  for (let i = 0; i < 100 && scR.phase !== 'free'; i++) scR.update(0.05);
+  const FR = scR.free, XR = FR.chars.ximena, JR = FR.chars.jose;
+  if (FR.active !== 'ximena') scR.switchActive();
+  XR.x = 1500; XR.y = scR.groundY; JR.x = 1570; JR.y = scR.groundY; JR.follow = false;
+  scR.pan = 1180; // cámara asentada sobre la pareja
+  // --- Encuentros: nacen por delante de la cámara, cruzan de
+  // derecha a izquierda hasta salir, alternan, y pasan POR la
+  // pareja sin colisión (con los autos suprimidos para aislar).
+  scR.encuentros = []; scR.autos = []; scR.autoTimer = 9999; scR.encuentroTimer = 0;
+  const kind1 = scR.encuentroNext;
+  scR.update(0.05);
+  check('con el temporizador cumplido nace un encuentro por delante de la cámara (más allá del borde derecho)',
+    scR.encuentros.length === 1 && scR.encuentros[0].kind === kind1 && scR.encuentros[0].x > scR.pan + 640,
+    scR.encuentros.length ? 'x=' + scR.encuentros[0].x.toFixed(0) + ', pan=' + scR.pan.toFixed(0) : 'sin encuentro');
+  const e1 = scR.encuentros[0]; e1.y = XR.y; // que cruce justo por la línea de la pareja
+  let minKE = 1, frenoE = 0, pasosE = 0;
+  while (scR.encuentros.length && pasosE < 400) { scR.update(0.05); pasosE++; minKE = Math.min(minKE, scR.speedK); frenoE = Math.max(frenoE, scR.frenoT); }
+  check('el encuentro cruza de derecha a izquierda y sale del encuadre (despawn)',
+    scR.encuentros.length === 0 && pasosE < 400, 'pasos=' + pasosE);
+  check('el encuentro pasa POR la pareja sin colisión ni interacción: nunca frena (speedK = 1, frenoT = 0)',
+    minKE === 1 && frenoE === 0, `minK=${minKE}, freno=${frenoE}`);
+  check('los encuentros alternan: el siguiente en nacer es el otro personaje',
+    scR.encuentroNext !== kind1, 'next=' + scR.encuentroNext);
+  // --- Autos: nacimiento con carril, cruce y despawn; un pase
+  // por un carril distinto no toca al controlado.
+  scR.autos = []; scR.encuentroTimer = 9999; scR.autoTimer = 0;
+  scR.update(0.05);
+  check('con el temporizador cumplido nace un auto por delante de la cámara, con un carril dentro de la banda caminable (±26)',
+    scR.autos.length === 1 && scR.autos[0].x > scR.pan + 640 && Math.abs(scR.autos[0].laneY - scR.groundY) <= 26,
+    scR.autos.length ? 'laneY=' + scR.autos[0].laneY.toFixed(0) : 'sin auto');
+  const car1 = scR.autos[0];
+  car1.laneY = scR.groundY - 24; // carril distinto al de la controlada (ella va en groundY): |Δ| = 24 > 18
+  let minK1 = 1, pasosA = 0;
+  while (scR.autos.includes(car1) && pasosA < 300) { scR.update(0.05); pasosA++; minK1 = Math.min(minK1, scR.speedK); }
+  check('el auto cruza de derecha a izquierda y despierta fuera de escena',
+    !scR.autos.includes(car1) && pasosA < 300, 'pasos=' + pasosA);
+  check('un pase por un carril DISTINTO no frena al controlado (speedK siempre 1, sin freno al final)',
+    minK1 === 1 && scR.frenoT === 0, `minK=${minK1}, freno=${scR.frenoT}`);
+  // --- Golpe con solape real: mismo carril → trastabilleo
+  // medido en el desplazamiento (mismo paseo, con y sin auto).
+  scR.autos = []; scR.autoTimer = 9999; scR.frenoT = 0; scR.speedK = 1;
+  XR.x = 1500; XR.y = scR.groundY; JR.x = 1570; JR.y = scR.groundY; JR.follow = false; scR.pan = 1180;
+  key('ArrowRight', true);
+  const xa0 = XR.x; for (let i = 0; i < 24; i++) scR.update(0.05);
+  key('ArrowRight', false);
+  const dispSin = XR.x - xa0;
+  XR.x = 1500; XR.y = scR.groundY; JR.x = 1570; JR.y = scR.groundY; JR.follow = false; scR.pan = 1180; scR.frenoT = 0; scR.speedK = 1;
+  scR.autos.push({ modelo: 0, x: 1830, laneY: scR.groundY, vel: 230, ph: 0, hitDone: false });
+  let minK2 = 1;
+  key('ArrowRight', true);
+  const xb0 = XR.x; for (let i = 0; i < 24; i++) { scR.update(0.05); minK2 = Math.min(minK2, scR.speedK); }
+  key('ArrowRight', false);
+  const dispCon = XR.x - xb0;
+  check('un pase por el MISMO carril con solape real SÍ frena: speedK cae a 0,4 en el trastabilleo',
+    minK2 === 0.4, 'minK=' + minK2);
+  check('y el freno se mide en el desplazamiento (con auto camina claramente menos que sin auto)',
+    dispCon < dispSin - 30, `con=${dispCon.toFixed(0)}, sin=${dispSin.toFixed(0)}`);
+  check('el auto sigue su camino tras el golpe (no se detiene ni desaparece) y afecta una sola vez por pasada',
+    scR.autos.length === 1 && scR.autos[0].hitDone === true && scR.autos[0].x < 1830,
+    scR.autos.length ? 'x=' + scR.autos[0].x.toFixed(0) : 'sin auto');
+  // --- El seguidor es inmune: el auto cruza justo por su
+  // posición y su carril (fijado por el harness en cada paso,
+  // como se fijan posiciones en el resto de la suite) y nadie
+  // frena: el golpe solo se comprueba contra el controlado.
+  scR.autos = []; scR.autoTimer = 9999; scR.frenoT = 0; scR.speedK = 1;
+  XR.x = 900; XR.y = scR.groundY - 24; scR.pan = 580;
+  scR.autos.push({ modelo: 1, x: 1900, laneY: scR.groundY, vel: 230, ph: 0, hitDone: false });
+  const carF = scR.autos[0];
+  let frenoSeg = 0;
+  for (let i = 0; i < 40; i++) { JR.x = 1500; JR.y = scR.groundY; scR.update(0.05); frenoSeg = Math.max(frenoSeg, scR.frenoT); }
+  check('el auto pasa POR el seguidor en su carril y no frena a nadie (el seguidor es inmune; el golpe es solo contra el controlado)',
+    frenoSeg === 0 && scR.speedK === 1 && carF.hitDone === false && carF.x < 1500, 'freno=' + frenoSeg + ', x=' + carF.x.toFixed(0));
+  // --- El vocho de Pollito sigue siendo un gag inofensivo:
+  // cruza en pantalla justo sobre la pareja y no frena a nadie.
+  scR.autos = []; scR.autoTimer = 9999; scR.encuentroTimer = 9999; scR.frenoT = 0; scR.speedK = 1;
+  XR.x = 1500; XR.y = scR.groundY; JR.x = 1570; JR.y = scR.groundY; JR.follow = false; scR.pan = 1180;
+  scR.t = 24.43; // vochoXAt(24,43) ≈ 320 = el centro de pantalla, donde está la pareja
+  const vxR = DM.debug.vochoXAt(scR.t);
+  let frenoV = 0;
+  for (let i = 0; i < 10; i++) { scR.update(0.05); frenoV = Math.max(frenoV, scR.frenoT); }
+  check('el vocho de Pollito cruza sobre la pareja (solape en pantalla) y no frena a nadie: es un gag sin colisión',
+    Math.abs(vxR - (XR.x - 1180)) < 130 && frenoV === 0 && scR.speedK === 1, 'vochoX=' + vxR.toFixed(0));
+  // La plaza se dibuja con encuentros y autos en la calle sin
+  // explotar (en el harness las fotos no cargan: los autos van
+  // por su respaldo dibujado y los encuentros se omiten).
+  scR.autos.push({ modelo: 1, x: 1600, laneY: scR.groundY, vel: 220, ph: 0, hitDone: false });
+  scR.encuentros.push({ kind: 'teodora', x: 1700, y: scR.groundY, dist: 0, ph: 0 });
+  scR.draw(0.016);
+  check('la plaza se dibuja con encuentros y autos en la calle sin explotar', true);
   DM.stop();
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
