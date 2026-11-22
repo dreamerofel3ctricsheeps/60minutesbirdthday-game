@@ -3095,6 +3095,43 @@ const tick = () => new Promise((r) => setImmediate(r));
     delete sandbox.location.replace;
   }
 
+  // --- Sección Y: vertical — HUD y elección compactos ---
+  // Playtest de Jose en vertical (IMG_7628, 2026-11-22): el HUD
+  // apilaba ~4 filas y la elección de personaje cubría casi
+  // todo el chat. El bloque de retrato de style.css (las mismas
+  // consultas que el portraitMQ de game.js) deja el HUD en
+  // botones + 2 filas de medidores 2×2 y convierte las tarjetas
+  // de personaje (.card de ui.assign) en filas horizontales.
+  // El arnés no mide layout: checks de FUENTE sobre el bloque,
+  // y de que las reglas base/fuera del bloque NO cambiaron.
+  {
+    console.log('\nY) Vertical — HUD en botones + 2 filas y elección de personaje en filas compactas');
+    const cssY = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const iPor = cssY.indexOf('(max-width: 760px) and (orientation: portrait)');
+    const por = iPor >= 0 ? cssY.slice(iPor) : '';
+    check('vertical: existe el bloque de retrato acotado (aspect-ratio 4/5 o ≤760px en portrait) DESPUÉS del compacto horizontal',
+      iPor >= 0 && iPor > cssY.indexOf('(orientation: landscape) and (max-height: 700px)'), '');
+    check('vertical HUD: los medidores van en rejilla 2×2 (flex 47% sin encoger, barra flexible) — botones + solo 2 filas de medidores',
+      por.includes('#hud .meter { flex: 1 0 47%') && por.includes('grid-template-columns: auto 1fr auto'), '');
+    check('vertical HUD: la marca se reduce a icono + «1 MINUTO» (font-size:0 en .brand y talla propia en el <b>)',
+      por.includes('.brand { font-size: 0') && por.includes('.brand b { font-size: 12px'), '');
+    check('vertical HUD: el sueño conserva segmentos y estado SIN la etiqueta larga y SIN el min-width de 128px (ellipsis con tope, como en horizontal)',
+      por.includes('#m-sleep label { display: none') && por.includes('#m-sleep .val { min-width: 0; max-width: 104px')
+      && por.includes('text-overflow: ellipsis') && por.includes('.seg { width: 9px'), '');
+    check('vertical elección: las tarjetas de personaje son FILAS (contenedor en columna, tarjeta en fila, retrato ≤40px, alto táctil ≥48px)',
+      por.includes('.cards { flex-direction: column') && por.includes('.card { flex-direction: row')
+      && por.includes('.card img { width: 38px; height: 38px') && por.includes('.card {') && por.includes('min-height: 48px'), '');
+    check('vertical elección: la nota larga se recorta con ellipsis en la misma línea y el % va a la derecha; el foco se marca con el borde (sin levantado)',
+      por.includes('.card small.note { min-height: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis')
+      && por.includes('.card strong { margin-left: auto') && por.includes('.card:focus-visible { border-color: var(--yellow)')
+      && por.includes('.card:hover:not(:disabled) { transform: none'), '');
+    check('vertical: fuera del bloque NADA cambió — la tarjeta base sigue en columna con retrato de 52px y el min-width base del sueño sigue en 128px',
+      cssY.includes('.card { flex: 1;') && cssY.includes('.card img { width: 52px; height: 52px')
+      && cssY.includes('#m-sleep .val { min-width: 128px; }') && cssY.includes('.cards { display: flex; gap: 6px; }'), '');
+    check('vertical: el selector compacto acota a las tarjetas con retrato (.card de ui.assign) — las opciones de texto (.opt) no aparecen en el bloque',
+      !por.includes('.opt {') && !por.includes('.pcard {'), '');
+  }
+
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR FATAL en la prueba:', e); process.exit(2); });
