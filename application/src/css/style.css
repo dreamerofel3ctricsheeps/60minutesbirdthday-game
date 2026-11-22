@@ -150,6 +150,9 @@ button.big.locked { opacity: .55; filter: grayscale(.75); } /* candado de Miniju
    la altura de 32px le da un área táctil cómoda en móvil. */
 .optrow input[type="range"] { flex: 1 1 130px; min-width: 110px; height: 32px; margin: 0; accent-color: var(--yellow); cursor: pointer; }
 .optrow .volval { flex: none; width: 42px; text-align: right; font-size: 13px; color: var(--dim); }
+.optrow .clearbtn { flex: none; max-width: 48%; background: transparent; color: var(--red); border: 2px solid var(--red); border-radius: 8px; padding: 8px 12px; font-family: inherit; font-size: 12px; font-weight: bold; letter-spacing: .5px; cursor: pointer; opacity: .8; }
+.optrow .clearbtn:hover { opacity: 1; }
+.optrow .clearbtn.armed { background: var(--red); color: #120f1b; opacity: 1; }
 
 /* ---------- Controles táctiles ---------- */
 /* La capa es hija de #stagewrap (position:relative) y el cableado

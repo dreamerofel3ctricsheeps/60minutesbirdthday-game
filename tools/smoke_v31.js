@@ -129,6 +129,17 @@
       menú sonando (la llamada exacta de main) y afirma que
       el nivel baja al esperado y SE MANTIENE tras los ticks
       de los fades, y que el silencio lo deja en cero fijo.
+   X) Borrar caché y datos (pedido de Jose, 2026-11-22): el
+      panel de Ajustes gana la acción de PRUEBAS «Borrar caché
+      y datos del juego», la alternativa a la ventana de
+      incógnito: confirmación en dos pasos dentro del propio
+      botón (sin confirm() nativo), y al confirmar limpia el
+      almacenamiento del origen, purga la Cache Storage si
+      existe (sin desregistrar workers) y recarga la misma
+      ruta con cache-bust. La sección la ejercita con el panel
+      REAL: sin confirmar no se borra nada; confirmando, el
+      almacenamiento falso queda vacío y la recarga lleva el
+      parámetro ?v=.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -3033,6 +3044,55 @@ const tick = () => new Promise((r) => setImmediate(r));
     const bandOffW = G.touchBandSync(false);
     check('banda: al salir de vertical la capa vuelve a #stagewrap (vuelve el modo superpuesto/márgenes intacto)',
       bandOffW === false && padFake.parent === wrapFake, '');
+  }
+
+  // --- Sección X: botón de pruebas «Borrar caché y datos» ---
+  // Pedido de Jose (2026-11-22): dejar de depender de la ventana
+  // de incógnito para ver la versión fresca y para resetear el
+  // estado. El panel de Ajustes gana la acción con confirmación
+  // en dos pasos dentro del propio botón; al confirmar limpia el
+  // almacenamiento del origen, purga la Cache Storage si existe
+  // y recarga con cache-bust. Aquí se ejercita con el panel REAL:
+  // sin confirmar no se borra nada; confirmando, el localStorage
+  // falso queda vacío y la recarga (con stub) lleva el bust.
+  {
+    console.log('\nX) Borrar caché y datos — botón de pruebas en Ajustes (dos pasos, sin incógnito)');
+    const gameX = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const cssX = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const iScrX = gameX.indexOf('function settingsScreen');
+    const scrX = iScrX >= 0 ? gameX.slice(iScrX, iScrX + 6000) : '';
+    check('borrar: el panel de Ajustes trae la acción «Borrar caché y datos del juego» en su propia fila, con la advertencia de qué se pierde en este navegador',
+      scrX.includes('id="sclear"') && scrX.includes('Borrar caché y datos del juego') && scrX.includes('EN ESTE navegador'), scrX.slice(0, 120));
+    check('borrar: el botón tiene estilo propio sobrio de advertencia y estado armado (CSS del panel)',
+      cssX.includes('.optrow .clearbtn') && cssX.includes('.optrow .clearbtn.armed'), '');
+    check('borrar: la ejecución limpia ambos almacenamientos, purga la Cache Storage si existe y recarga con cache-bust vía location.replace (sin desregistrar workers)',
+      gameX.includes('localStorage.clear()') && gameX.includes('sessionStorage.clear()') && gameX.includes('caches.keys()')
+      && gameX.includes('location.replace') && gameX.includes('?v=${Date.now()}') && !gameX.includes('serviceWorker'), '');
+
+    // Comportamiento con el panel REAL y los stubs del arnés.
+    fakeLocalStorage.setItem('1mtp.settings', '{"musicVol":33}');
+    fakeLocalStorage.setItem('1mtp.minigames', '1');
+    let replacedX = null;
+    sandbox.location.replace = (u) => { replacedX = u; };
+    const panelX = G.debug.settingsScreen();
+    await tick();
+    const btnX = documentFake.querySelector('#sclear');
+    check('borrar: el botón existe en el panel con su manejador cableado',
+      !!btnX && typeof btnX.onclick === 'function', '');
+    btnX.onclick(); // primer toque: solo ARMA
+    check('borrar: el primer toque NO borra nada — arma el botón con la advertencia (clase «armed» y texto de confirmación)',
+      fakeLocalStorage.getItem('1mtp.settings') !== null && fakeLocalStorage.getItem('1mtp.minigames') === '1'
+      && replacedX === null && btnX.classList.contains('armed') && String(btnX.textContent).includes('¿Seguro?'),
+      `armed=${btnX.classList.contains('armed')} txt=${btnX.textContent}`);
+    btnX.onclick(); // segundo toque: EJECUTA
+    check('borrar: el segundo toque VACÍA el almacenamiento del origen (ajustes y desbloqueo incluidos)',
+      fakeLocalStorage.getItem('1mtp.settings') === null && fakeLocalStorage.getItem('1mtp.minigames') === null, '');
+    check('borrar: y recarga la MISMA ruta con parámetro cache-bust único (?v=<timestamp>)',
+      typeof replacedX === 'string' && /^\/index\.html\?v=\d+$/.test(replacedX), `replace=${replacedX}`);
+    const backX = documentFake.querySelector('#sback');
+    if (backX && backX.onclick) backX.onclick();
+    await panelX;
+    delete sandbox.location.replace;
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

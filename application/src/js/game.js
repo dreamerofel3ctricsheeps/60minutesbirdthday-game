@@ -558,6 +558,8 @@
           <input type="range" id="ssfx" min="0" max="100" step="1" value="${G.settings.sfxVol}"><span class="volval" id="ssfxv">${G.settings.sfxVol}%</span></div>
         <div class="optrow"><div><b>Silencio general</b><small>Apaga TODO el sonido (música y efectos) sin perder tus volúmenes: al desactivarlo, cada uno vuelve tal cual estaba.</small></div>
           <label class="switch"><input type="checkbox" id="smute" ${G.settings.muted ? 'checked' : ''}><span class="track"></span></label></div>
+        <div class="optrow"><div><b>Borrar caché y datos</b><small>Solo para pruebas: borra los ajustes, el desbloqueo de Minijuegos y el progreso guardados EN ESTE navegador, y recarga el juego pidiendo la versión más reciente. Es la alternativa a abrir una ventana de incógnito.</small></div>
+          <button class="clearbtn" id="sclear">Borrar caché y datos del juego</button></div>
         <button class="big alt" id="sback">← Volver</button>`);
       $('#stouch').onchange = (e) => {
         G.settings.touch = e.target.checked; saveSettings(); applySettings();
@@ -579,6 +581,35 @@
       wireVol('#smusic', '#smusicv', 'musicVol');
       wireVol('#ssfx', '#ssfxv', 'sfxVol');
       $('#smute').onchange = (e) => { G.settings.muted = e.target.checked; saveSettings(); applySoundSettings(); };
+      // Botón de PRUEBAS «Borrar caché y datos del juego»: la
+      // confirmación va en DOS PASOS dentro del propio botón (sin
+      // confirm() nativo): el primer toque lo arma con la
+      // advertencia y el segundo ejecuta. El panel se reconstruye
+      // en cada apertura, así que si no se confirma, el botón nace
+      // desarmado la próxima vez. Al ejecutar limpia el
+      // almacenamiento del origen (local y de sesión), purga la
+      // Cache Storage si existe — sin desregistrar ningún worker:
+      // la futura PWA no debe pelear con este botón — y recarga la
+      // misma ruta con un parámetro cache-bust para pedir el
+      // documento fresco (la alternativa a la ventana de incógnito).
+      const clearBtn = $('#sclear');
+      if (clearBtn) {
+        let clearArmed = false;
+        clearBtn.onclick = () => {
+          if (!clearArmed) {
+            clearArmed = true;
+            clearBtn.textContent = '¿Seguro? Toca de nuevo para borrarlo todo';
+            clearBtn.classList.add('armed');
+            return;
+          }
+          try { localStorage.clear(); } catch (e) { /* almacenamiento no disponible */ }
+          try { sessionStorage.clear(); } catch (e) { /* almacenamiento de sesión no disponible */ }
+          const reloadFresh = () => location.replace(`${location.pathname}?v=${Date.now()}`);
+          if (typeof caches !== 'undefined' && caches.keys) {
+            caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k)))).then(reloadFresh, reloadFresh);
+          } else reloadFresh();
+        };
+      }
       $('#sback').onclick = () => { G.sfx('pick'); menuHide(); res(); };
     });
   }
