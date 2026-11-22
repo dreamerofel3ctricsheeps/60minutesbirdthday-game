@@ -7,6 +7,7 @@ const http = require('http'), fs = require('fs'), path = require('path'), os = r
 const PORT = Number(process.env.PORT) || 3001;
 const DIST = path.join(__dirname, '..', 'dist');
 const CONTROL = path.join(__dirname, 'control.html');
+let QR = null; try { QR = require('qrcode'); } catch (e) {} // generador de QR (opcional)
 const rooms = new Map(); // room -> Set<res> (suscriptores SSE = el juego)
 const MIME = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.png':'image/png',
   '.svg':'image/svg+xml', '.json':'application/json', '.webmanifest':'application/manifest+json',
@@ -26,6 +27,14 @@ function sendFile(res, file, fallback) {
 }
 http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x'); const p = u.pathname;
+  if (p === '/qr') { // QR del emparejamiento (SVG); degrada si qrcode no está
+    if (!QR) { res.writeHead(503); return res.end('qrcode no instalado (npm install)'); }
+    QR.toString(u.searchParams.get('data') || '', { type: 'svg', margin: 1, width: 240 }, (err, svg) => {
+      if (err) { res.writeHead(500); return res.end('qr error'); }
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-cache' }); res.end(svg);
+    });
+    return;
+  }
   if (p === '/lan') { res.writeHead(200, { 'Content-Type':'application/json' }); return res.end(JSON.stringify({ ip: lanIP(), port: PORT })); }
   if (p === '/control') return sendFile(res, CONTROL);
   if (p === '/events') { // el juego se suscribe a su sala

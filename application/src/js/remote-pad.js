@@ -39,10 +39,13 @@
     panel.className = 'rp-panel';
     panel.innerHTML =
       '<div class="rp-box"><div class="rp-title">📱 Tu teléfono como mando</div>' +
-      '<div class="rp-sub">En un teléfono en la <b>misma Wi-Fi</b>, abre esta dirección:</div>' +
-      '<div class="rp-url"></div><div class="rp-status">Esperando teléfono…</div>' +
+      '<div class="rp-sub">Escanea con la cámara del teléfono (<b>misma Wi-Fi</b>):</div>' +
+      '<img class="rp-qr" alt="QR del mando">' +
+      '<div class="rp-sub">o abre la dirección a mano:</div><div class="rp-url"></div>' +
+      '<div class="rp-status">Esperando teléfono…</div>' +
       '<button class="rp-close">Cerrar</button></div>';
     panel.querySelector('.rp-url').textContent = url;
+    panel.querySelector('.rp-qr').src = '/qr?data=' + encodeURIComponent(url);
     panel.querySelector('.rp-close').onclick = close;
     document.body.appendChild(panel);
   }
@@ -53,7 +56,8 @@
       '.rp-panel{position:fixed;inset:0;background:rgba(10,8,16,.88);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:system-ui,sans-serif}' +
       '.rp-box{background:#1a1626;border:1px solid #3a3350;border-radius:14px;padding:22px 26px;max-width:92vw;text-align:center;color:#e8e4f0}' +
       '.rp-title{font-size:18px;font-weight:700;margin-bottom:6px}.rp-sub{font-size:13px;color:#9a8fb8;margin-bottom:10px}' +
-      '.rp-url{font-size:16px;font-weight:700;color:#6fd3ff;background:#120f1b;border-radius:8px;padding:12px;word-break:break-all;margin-bottom:12px}' +
+      '.rp-qr{width:220px;height:220px;background:#fff;border-radius:10px;padding:8px;margin:4px auto 12px;display:block}' +
+      '.rp-url{font-size:14px;font-weight:700;color:#6fd3ff;background:#120f1b;border-radius:8px;padding:12px;word-break:break-all;margin-bottom:12px}' +
       '.rp-status{font-size:14px;color:#ffb86b;margin:8px 0 14px}' +
       '.rp-close{background:#3a3350;color:#e8e4f0;border:0;border-radius:8px;padding:8px 18px;font-size:14px;cursor:pointer}' +
       '.rp-open{position:fixed;left:10px;bottom:10px;z-index:9998;background:#1a1626;border:1px solid #3a3350;color:#e8e4f0;border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;opacity:.82}';
