@@ -455,9 +455,16 @@ body.date-mode #dateMuteBtn { display: flex; }
    para que el escenario se quede con TODO el alto restante:
    HUD de UNA fila (~35px), main con padding/gap de 6px e
    inventario de 32px → la escena pasa a ~78% del alto a 390px
-   y ~87% a 650px. Sin overlays sobre el canvas: los chips de
-   las escenas viven en el borde superior del canvas y una barra
-   DOM encima los taparía — por eso se adelgaza el flujo.
+   y ~87% a 650px.
+   SEGUNDA VUELTA — MODO INMERSIVO (Opción A de Jose, 2026-11-22):
+   ni adelgazado bastaba (~18% del alto seguía siendo cromo).
+   Ahora el HUD y el inventario SALEN del flujo y FLOTAN sobre
+   la escena, semitransparentes y auto-ocultables, con la misma
+   filosofía del chat del teléfono (máquina `cromo` en game.js:
+   aparecen con las novedades y se retiran solos; Pausa y
+   Teléfono quedan siempre visibles). La escena ocupa el 100%
+   del hueco. Las reglas de adelgazado de este bloque se quedan:
+   son el aspecto del cromo cuando está visible.
    Cobertura: (a) cualquier horizontal de ≤700px de alto CSS
    (teléfonos en horizontal, con o sin puntero táctil) y (b)
    horizontales de ≤900px de alto CSS con puntero grueso
@@ -480,21 +487,32 @@ body.date-mode #dateMuteBtn { display: flex; }
   .meter label { font-size: 9px; letter-spacing: 0; }
   #m-sleep label { display: none; } /* la etiqueta larga («Sueño de Ximena») no cabe en la fila única; quedan los segmentos y el estado */
   .meter .val { min-width: 0; font-size: 10px; }
-  #m-sleep .val { font-size: 9px; }
+  /* El min-width:128px de la regla base (#m-sleep .val) le gana
+     en especificidad al min-width:0 genérico de .meter .val, así
+     que en la fila única el estado («Dormida profunda») exigía
+     128px y se montaba sobre la barra de RUIDO (captura de Jose,
+     2026-11-22). Aquí se anula y la etiqueta se recorta con
+     ellipsis: el estado se sigue leyendo y nunca invade al
+     vecino. Fuera del modo compacto el HUD envuelve a dos filas
+     y el solape no existe: la regla base queda intacta. */
+  #m-sleep .val { font-size: 9px; min-width: 0; max-width: 76px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bar { height: 9px; }
   .segs { gap: 2px; }
   .seg { width: 8px; height: 8px; }
   #pausebtn, #settingsbtn, #phonebtn { padding: 3px 7px; font-size: 11px; }
   .pic { margin-right: 4px; }
-  /* Escenario: contenedor y doble tope como en la regla base,
-     pero la reserva vertical baja a 38px (inventario de 32 +
-     gap de 6) y el respaldo sin-contenedor a 100px de cromo
-     (HUD ~35 + padding de main 12 + inventario/gap 38 + aire). */
+  /* Escenario: contenedor y doble tope como en la regla base.
+     Con el modo inmersivo el cromo ya NO reserva alto (HUD e
+     inventario flotan, ver el final de este bloque), así que el
+     tope por alto usa el hueco COMPLETO — (100cqh × 16/9) sin
+     restar la antigua reserva de 38px — y el respaldo
+     sin-contenedor solo descuenta el padding de main (12px) y
+     un aire mínimo: la escena es el 100% de la pantalla útil. */
   #stagewrap { flex: 1; width: auto; min-width: 0; min-height: 0; container-type: size; gap: 6px; }
-  #stage { width: min(100%, calc((100vh - 100px) * 16 / 9));
-    width: min(100%, calc((100svh - 100px) * 16 / 9));
-    width: min(100%, calc((100dvh - 100px) * 16 / 9));
-    width: min(100cqw, calc((100cqh - 38px) * 16 / 9)); }
+  #stage { width: min(100%, calc((100vh - 20px) * 16 / 9));
+    width: min(100%, calc((100svh - 20px) * 16 / 9));
+    width: min(100%, calc((100dvh - 20px) * 16 / 9));
+    width: min(100cqw, calc(100cqh * 16 / 9)); }
   /* Inventario adelgazado */
   #inv { gap: 5px; }
   .slot { width: 32px; height: 32px; }
@@ -505,4 +523,37 @@ body.date-mode #dateMuteBtn { display: flex; }
      lateral derecho de main, con el alto completo disponible y
      sus mensajes con scroll interno, como siempre. */
   #phone { position: absolute; top: 6px; right: 6px; bottom: 6px; width: min(320px, 44%); max-height: none; z-index: 30; }
+  /* ----- Modo inmersivo (Opción A): el cromo FLOTA sobre la escena -----
+     #hud sale del flujo de #app y cuelga del borde superior de
+     la pantalla (con los safe-area de siempre: en horizontal el
+     notch cae en un lateral y el inset izquierdo/derecho lo
+     aparta de él); #inv sale del flujo de #stagewrap y cuelga
+     centrado del borde inferior del hueco — cuando la escena
+     manda por alto (el caso típico en horizontal) su borde
+     inferior ES el del hueco, así que el inventario flota sobre
+     el borde inferior de la escena. Orden de capas: modales del
+     escenario y teléfono (z 30) por encima del cromo (z 5), el
+     cromo por encima de la capa táctil (z 4): con un modal
+     abierto la máquina `cromo` retira las estadísticas y solo
+     quedan los botones, así que nada importante queda tapado.
+     El inventario es SOLO lectura (sus slots no reciben clics):
+     pointer-events:none siempre, para no robarle ni un toque
+     al joystick ni al botón de acción. */
+  #app { position: relative; }
+  #hud { position: absolute; top: env(safe-area-inset-top, 0px); left: env(safe-area-inset-left, 0px); right: env(safe-area-inset-right, 0px); z-index: 5;
+    background: linear-gradient(180deg, rgba(46, 38, 68, .88), rgba(35, 29, 53, .88)); }
+  #hud .brand, #hud .meter, #hud #settingsbtn { transition: opacity .35s ease; }
+  /* Estado retirado (.chrome-off, lo pone la máquina de game.js):
+     la franja se vuelve transparente y deja pasar los toques, y
+     se apagan marca, medidores y Ajustes. Pausa y Teléfono NO
+     están en la lista de apagado a propósito: son la puerta a
+     los menús y quedan como controles flotantes siempre
+     visibles y pulsables. */
+  #hud.chrome-off { background: transparent; box-shadow: none; border-bottom-color: transparent; pointer-events: none; }
+  #hud.chrome-off .brand, #hud.chrome-off .meter, #hud.chrome-off #settingsbtn { opacity: 0; pointer-events: none; }
+  #hud.chrome-off #pausebtn, #hud.chrome-off #phonebtn { pointer-events: auto; }
+  #inv { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); z-index: 5; pointer-events: none;
+    background: rgba(23, 18, 38, .55); border: 2px solid rgba(18, 15, 27, .55); border-radius: 10px; padding: 4px 6px;
+    transition: opacity .35s ease; }
+  #inv.chrome-off { opacity: 0; }
 }

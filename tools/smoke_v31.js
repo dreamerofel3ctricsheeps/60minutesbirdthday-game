@@ -261,11 +261,12 @@ load('scenes.js');
 // suma showMinigames/showEnding (el candado de Minijuegos) y un reset
 // del respaldo en memoria del candado (mgSession), para poder simular
 // una sesión sin desbloqueo tras haberlo abierto. La sección T suma
-// saveSettings/applySoundSettings (los controles de sonido).
+// saveSettings/applySoundSettings (los controles de sonido). La
+// sección V suma cromo (la máquina del modo inmersivo).
 load('game.js', (code) => {
   const from = 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect };';
   if (!code.includes(from)) throw new Error('no se encontró G.debug en game.js');
-  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings, settingsScreen };');
+  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings, settingsScreen, cromo };');
 });
 
 const G = sandbox.G, Sc = G.Scenes, W = G.World;
@@ -2636,8 +2637,8 @@ const tick = () => new Promise((r) => setImmediate(r));
       iCompact >= 0 && cssS.includes('(orientation: landscape) and (max-height: 900px) and (pointer: coarse)'), '');
     check('horizontal: el HUD se compacta a UNA fila delgada (nowrap, sin segunda fila)',
       compact.includes('#hud { flex-wrap: nowrap'), '');
-    check('horizontal: el inventario se adelgaza (slots de 32px) y la reserva del escenario baja a 38px',
-      compact.includes('.slot { width: 32px; height: 32px; }') && compact.includes('width: min(100cqw, calc((100cqh - 38px) * 16 / 9))'), '');
+    check('horizontal: el inventario se adelgaza (slots de 32px) y el escenario usa el hueco completo (modo inmersivo, sección V: sin reserva de 38px)',
+      compact.includes('.slot { width: 32px; height: 32px; }') && compact.includes('width: min(100cqw, calc(100cqh * 16 / 9))') && !compact.includes('(100cqh - 38px)'), '');
     check('horizontal: el teléfono NO reserva columna en este modo: flota sobre el lateral de main',
       compact.includes('#phone { position: absolute') && compact.includes('main { position: relative'), '');
     check('modales: el ancho se topa en cqw (nada asoma por la derecha) en normal y wide',
@@ -2821,6 +2822,100 @@ const tick = () => new Promise((r) => setImmediate(r));
     if (back && back.onclick) back.onclick();
     await panelP;
     MU.stop();
+  }
+
+  // --- Sección V: modo inmersivo (Opción A de Jose, 2026-11-22) ---
+  // En el horizontal compacto el HUD y el inventario salen del
+  // flujo y flotan sobre la escena (la escena pasa al 100% del
+  // hueco), semitransparentes y auto-ocultables con la máquina
+  // `cromo` de game.js — la misma filosofía del chat. El arnés no
+  // tiene matchMedia (la máquina nace inactiva, como en un
+  // navegador sin ese modo), así que el comportamiento se
+  // ejercita activándola a mano (cromo.active) con una gracia
+  // corta, sobre los MISMOS elementos falsos que game.js capturó.
+  {
+    console.log('\nV) Modo inmersivo — escena al 100% y cromo flotante que se retira solo');
+    const waitV = (ms) => new Promise((r) => setTimeout(r, ms));
+    const cssV = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameV = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const iCompactV = cssV.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const compactV = iCompactV >= 0 ? cssV.slice(iCompactV) : '';
+
+    // --- Fuente CSS: todo vive SOLO dentro del bloque compacto ---
+    check('inmersivo: el HUD sale del flujo en el modo compacto (absoluto sobre el borde superior, con safe-area)',
+      compactV.includes('#hud { position: absolute') && compactV.includes('top: env(safe-area-inset-top, 0px)'), '');
+    check('inmersivo: el inventario sale del flujo en el modo compacto (absoluto y centrado sobre el borde inferior)',
+      compactV.includes('#inv { position: absolute') && compactV.includes('left: 50%') && compactV.includes('transform: translateX(-50%)'), '');
+    check('inmersivo: el escenario usa el hueco COMPLETO (la fórmula ya no resta la reserva del inventario)',
+      compactV.includes('width: min(100cqw, calc(100cqh * 16 / 9))') && !compactV.includes('(100cqh - 38px)'), '');
+    check('inmersivo: fuera del bloque compacto el HUD y el inventario NO son absolutos (retrato/escritorio intactos)',
+      !cssV.slice(0, iCompactV).includes('#hud { position: absolute') && !cssV.slice(0, iCompactV).includes('#inv { position: absolute'), '');
+    check('inmersivo: al retirarse solo se apagan marca, medidores y Ajustes — Pausa y Teléfono quedan SIEMPRE visibles y pulsables',
+      compactV.includes('#hud.chrome-off .brand, #hud.chrome-off .meter, #hud.chrome-off #settingsbtn { opacity: 0; pointer-events: none; }')
+      && compactV.includes('#hud.chrome-off #pausebtn, #hud.chrome-off #phonebtn { pointer-events: auto; }'), '');
+    check('inmersivo: el fondo del cromo flotante es semitransparente (se lee sin tapar la escena) y el retirado deja pasar los toques',
+      compactV.includes('rgba(46, 38, 68, .88)') && compactV.includes('rgba(23, 18, 38, .55)')
+      && compactV.includes('#hud.chrome-off { background: transparent;') && compactV.includes('#inv { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); z-index: 5; pointer-events: none;'), '');
+    check('defecto de la captura: el estado de sueño ya no se monta sobre RUIDO (min-width:128px anulado en compacto y etiqueta con ellipsis)',
+      compactV.includes('#m-sleep .val { font-size: 9px; min-width: 0;') && compactV.includes('text-overflow: ellipsis'), '');
+
+    // --- Fuente JS: máquina, constante y cableado ---
+    check('inmersivo: la máquina del cromo existe con su constante nombrada de auto-ocultado (3500 ms) y la media query espejo del CSS',
+      gameV.includes('const IMMERSIVE_HIDE_MS = 3500') && gameV.includes('ui.cromo = cromo')
+      && gameV.includes("window.matchMedia('(orientation: landscape) and (max-height: 700px), (orientation: landscape) and (max-height: 900px) and (pointer: coarse)')"), '');
+    check('inmersivo: disparadores cableados — setScene→kick, refreshHUD→watchHud, refreshInv→watchInv, bordes del escenario→edge, frame→frameSync',
+      gameV.includes('G.ui.cromo.kick()') && gameV.includes('G.ui.cromo.watchHud(S.sus, S.quality)') && gameV.includes('G.ui.cromo.watchInv()')
+      && gameV.includes("wrapEl.addEventListener('pointerdown', (e) => cromo.edge(e), true)") && gameV.includes('G.ui.cromo.frameSync()'), '');
+
+    // --- Comportamiento de la máquina (activada a mano, gracia corta) ---
+    const cromo = G.debug.cromo;
+    const hudFake = documentFake.querySelector('#hud'), invFake = documentFake.querySelector('#inv');
+    const ovFake = documentFake.querySelector('#overlay'), povFake = documentFake.querySelector('#pauseov');
+    ovFake.classList.remove('show'); povFake.classList.remove('show'); G.paused = false;
+    check('inmersivo: sin la media query compacta la máquina nace INACTIVA (no toca el layout de siempre)',
+      !!cromo && cromo.state().active === false && !hudFake.classList.contains('chrome-off') && !invFake.classList.contains('chrome-off'), '');
+    cromo.active = true; cromo.hideMs = 40; cromo.reset();
+    cromo.kick();
+    check('inmersivo: al arrancar la escena (kick) HUD e inventario están visibles',
+      cromo.state().hudVis === true && cromo.state().invVis === true && !hudFake.classList.contains('chrome-off') && !invFake.classList.contains('chrome-off'), '');
+    await waitV(110);
+    check('inmersivo: tras la gracia sin novedades AMBOS se retiran (clase chrome-off puesta)',
+      cromo.state().hudVis === false && cromo.state().invVis === false && hudFake.classList.contains('chrome-off') && invFake.classList.contains('chrome-off'), '');
+    cromo.reveal('top');
+    check('inmersivo: tocar el borde superior trae SOLO el HUD de vuelta (el inventario sigue retirado)',
+      cromo.state().hudVis === true && cromo.state().invVis === false && !hudFake.classList.contains('chrome-off') && invFake.classList.contains('chrome-off'), '');
+    await waitV(110);
+    cromo.reveal('bottom');
+    check('inmersivo: tocar el borde inferior trae SOLO el inventario de vuelta',
+      cromo.state().invVis === true && cromo.state().hudVis === false && !invFake.classList.contains('chrome-off'), '');
+    // Novedad relevante: sube la Sospecha → el HUD reaparece.
+    await waitV(110);
+    S.sus = 0; G.ui.refreshHUD(); // foto previa con la sospecha a cero (determinista)
+    S.sus = 10; G.ui.refreshHUD();
+    check('inmersivo: si SUBE la Sospecha el HUD reaparece solo',
+      cromo.state().hudVis === true && !hudFake.classList.contains('chrome-off'), '');
+    // Novedad en el inventario: recoger un ítem → el inventario reaparece.
+    await waitV(110);
+    G.ui.refreshInv(); // fija la firma previa
+    cromo.hideInv();   // y se parte de oculto: lo que se prueba es la REAPARICIÓN
+    const anyItem = Object.keys(G.ITEMS).find((id) => !S.inv[id]) || Object.keys(G.ITEMS)[0];
+    S.inv[anyItem] = true;
+    G.ui.refreshInv();
+    check('inmersivo: al recoger un ítem el inventario reaparece solo',
+      cromo.state().invVis === true && !invFake.classList.contains('chrome-off'), `item=${anyItem}`);
+    delete S.inv[anyItem]; G.ui.refreshInv();
+    // Con un modal abierto el cromo se retira; al cerrarse vuelve.
+    cromo.kick();
+    G.paused = true; cromo.frameSync();
+    check('inmersivo: con pausa/modal abierto el cromo se retira (el modal manda)',
+      cromo.state().hudVis === false && cromo.state().invVis === false, '');
+    G.paused = false; cromo.frameSync();
+    check('inmersivo: al cerrar la pausa/modal el cromo vuelve (kick de frameSync)',
+      cromo.state().hudVis === true && cromo.state().invVis === true, '');
+    // Limpieza: máquina inactiva y sin clases, como en un navegador sin el modo.
+    cromo.active = false; cromo.hideMs = 3500; cromo.reset();
+    check('inmersivo: al salir del modo las clases se quitan y el layout vuelve a ser el de siempre',
+      !hudFake.classList.contains('chrome-off') && !invFake.classList.contains('chrome-off'), '');
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
