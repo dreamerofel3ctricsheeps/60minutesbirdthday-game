@@ -120,6 +120,16 @@
       el botón de acción bajan a una banda inferior en flujo
       (bajo el chat, a la altura de los pulgares) en vez de ir
       superpuestos sobre la escena.
+   W3) Decisiones en el FLUJO (propuesta de Jose, 2026-11-22):
+      las opciones de choose/assign dejan la zona fija #actions
+      (retirada) y pasan a ser el último mensaje del chat: se
+      van con el historial al deslizar hacia arriba y aparecen
+      al deslizar hasta abajo; su llegada no mueve scrollTop en
+      ningún caso. Si el bloque queda bajo el pliegue con la
+      decisión pendiente, avisa la pastilla «Decisión pendiente
+      ↓» — sin mover nada por sí sola: solo su toque baja la
+      vista hasta el bloque — y al responder el bloque sale del
+      flujo y queda el eco de siempre.
    U) Sonido por la RUTA REAL (bug de Jose, 2026-11-22): el
       nivel audible de la música vive en un GainNode de
       WebAudio, no en el.volume del <audio> (que iOS/WebKit
@@ -523,8 +533,8 @@ const tick = () => new Promise((r) => setImmediate(r));
     let it = 0;
     while (!settled && it++ < 6000) {
       await tick();
-      const actions = documentFake.querySelector('#actions');
-      const card = actions && queryWithin(actions, '.card', true).find((b) => b.onclick && !b.disabled);
+      const msgsD = documentFake.querySelector('#msgs');
+      const card = msgsD && queryWithin(msgsD, '.card', true).find((b) => b.onclick && !b.disabled);
       if (card) card.onclick();
       const mok = idRegistry.get('mok');
       if (mok && mok.onclick) { const f = mok.onclick; mok.onclick = null; f(); }
@@ -916,8 +926,8 @@ const tick = () => new Promise((r) => setImmediate(r));
   let itw = 0;
   while (!settledW && itw++ < 2000) {
     await tick();
-    const actions = documentFake.querySelector('#actions');
-    const cards = actions ? queryWithin(actions, '.card', true).filter((b) => b.onclick) : [];
+    const msgsG = documentFake.querySelector('#msgs');
+    const cards = msgsG ? queryWithin(msgsG, '.card', true).filter((b) => b.onclick) : [];
     if (cards.length) { if (cardCount < 0) cardCount = cards.length; const b = cards.find((x) => !x.disabled); if (b) b.onclick(); }
   }
   await pw;
@@ -1462,8 +1472,8 @@ const tick = () => new Promise((r) => setImmediate(r));
       let it = 0;
       while (!settled && it++ < 30000) {
         await tick();
-        const actions = documentFake.querySelector('#actions');
-        const card = actions && queryWithin(actions, '.card', true).find((b) => b.onclick && !b.disabled);
+        const msgsEv = documentFake.querySelector('#msgs');
+        const card = msgsEv && queryWithin(msgsEv, '.card', true).find((b) => b.onclick && !b.disabled);
         if (card) card.onclick();
         const mok = idRegistry.get('mok');
         if (mok && mok.onclick) { const f = mok.onclick; mok.onclick = null; f(); }
@@ -2427,7 +2437,8 @@ const tick = () => new Promise((r) => setImmediate(r));
   }
   // --- Chat: máquina de estados (con la gracia acortada para la prueba) ---
   {
-    const ph = G.ui.phone, phoneElO = documentFake.querySelector('#phone'), actsElO = documentFake.querySelector('#actions');
+    const ph = G.ui.phone, phoneElO = documentFake.querySelector('#phone'), msgsElO = documentFake.querySelector('#msgs');
+    const optBtnInFlow = () => queryWithin(msgsElO, '.opt', true).find((c) => c.onclick); // las opciones viven en el flujo de mensajes (sección W3)
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ph.graceMs = 60; // la gracia real es 4000 ms (PHONE_GRACE_MS en game.js)
     ph.reset();
@@ -2442,7 +2453,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('chat: una decisión pendiente lo muestra y lo marca pendiente', ph.state().visible === true && ph.state().pending === true, JSON.stringify(ph.state()));
     await sleep(160);
     check('chat: con la decisión pendiente NO se auto-oculta aunque pase la gracia', ph.state().visible === true && ph.state().pending === true, JSON.stringify(ph.state()));
-    const optBtn = actsElO.children.find((c) => c.onclick);
+    const optBtn = optBtnInFlow();
     if (optBtn) optBtn.onclick();
     await pChoose;
     check('chat: al decidir, la promesa se resuelve y el pendiente se libera', chosen === 0 && ph.state().pending === false, 'chosen=' + chosen);
@@ -2460,7 +2471,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     const pChoose2 = G.ui.choose([{ label: 'Sí' }, { label: 'No' }]).then((i) => { chosen2 = i; });
     check('chat: una decisión pendiente rompe el silencio manual y se muestra siempre',
       ph.state().visible === true && ph.state().pending === true && ph.state().unread === 0, JSON.stringify(ph.state()));
-    const optBtn2 = actsElO.children.find((c) => c.onclick);
+    const optBtn2 = optBtnInFlow();
     if (optBtn2) optBtn2.onclick();
     await pChoose2;
     ph.reset(); ph.graceMs = 4000;
@@ -2985,7 +2996,7 @@ const tick = () => new Promise((r) => setImmediate(r));
       && gameW.includes('G.input.touchLayout') && gameW.includes("pad.classList.toggle('joy-margin'") && gameW.includes("pad.classList.toggle('act-margin'"), '');
 
     // --- Comportamiento: el teléfono en modo flotante ---
-    const phW = G.ui.phone, badgeFake = documentFake.querySelector('#phonebadge'), phoneFake = documentFake.querySelector('#phone'), actsFake = documentFake.querySelector('#actions');
+    const phW = G.ui.phone, badgeFake = documentFake.querySelector('#phonebadge'), phoneFake = documentFake.querySelector('#phone'), msgsW = documentFake.querySelector('#msgs');
     phW.floatMode = true; // sin getComputedStyle en el arnés: el modo se fija a mano
     phW.reset();
     await G.ui.post({ who: 'sistema', text: 'Mensaje flotante uno' });
@@ -2999,7 +3010,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('flotante: una decisión pendiente TAMPOCO abre el panel; la insignia pasa a alerta «!» (el juego espera esa elección)',
       phW.state().visible === false && phW.state().pending === true && badgeFake.textContent === '!' && badgeFake.classList.contains('alert'),
       JSON.stringify(phW.state()) + ' badge=' + badgeFake.textContent);
-    const optBtnW = actsFake.children.find((c) => c.onclick);
+    const optBtnW = queryWithin(msgsW, '.opt', true).find((c) => c.onclick);
     if (optBtnW) optBtnW.onclick();
     await pChooseW;
     check('flotante: al responder la decisión la alerta se apaga (la insignia vuelve a ser contador)',
@@ -3084,7 +3095,7 @@ const tick = () => new Promise((r) => setImmediate(r));
 
     // --- Comportamiento: el teléfono en modo retrato ---
     const ph2 = G.ui.phone, badge2 = documentFake.querySelector('#phonebadge'), phoneEl2 = documentFake.querySelector('#phone'),
-      acts2 = documentFake.querySelector('#actions'), msgs2 = documentFake.querySelector('#msgs');
+      msgs2 = documentFake.querySelector('#msgs');
     ph2.floatMode = false; ph2.portraitMode = true; // sin matchMedia en el arnés: el modo se fija a mano, como floatMode
     ph2.reset();
     check('retrato: el panel NACE cerrado (la insignia es la campana) y el modo se reporta manual/retrato',
@@ -3106,7 +3117,7 @@ const tick = () => new Promise((r) => setImmediate(r));
       JSON.stringify(ph2.state()) + ' badge=' + badge2.textContent);
     check('decisiones: renderizada con el lector AL FINAL, el scroll NO se mueve (la razón de la elección queda en pantalla)',
       msgs2.scrollTop === 700, 'scrollTop=' + msgs2.scrollTop);
-    const optBtnW2 = acts2.children.find((c) => c.onclick);
+    const optBtnW2 = queryWithin(msgs2, '.opt', true).find((c) => c.onclick);
     if (optBtnW2) optBtnW2.onclick();
     await pChooseW2;
     check('decisiones: al responderla, el eco de la elección es un MENSAJE normal y SÍ sigue la regla de seguimiento (salta al final)',
@@ -3137,6 +3148,106 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('escritorio: sin flotante ni retrato el chat sigue apareciendo solo con contenido nuevo (modo automático intacto)',
       ph2.state().visible === true && ph2.state().manual === false, JSON.stringify(ph2.state()));
     ph2.reset(); ph2.graceMs = 4000;
+  }
+
+  // --- Sección W3: las decisiones viven DENTRO del flujo de
+  // mensajes (propuesta de Jose, 2026-11-22) ---
+  // Las opciones de choose/assign dejan la zona fija #actions
+  // (retirada del HTML, del CSS y de game.js) y se añaden como
+  // último nodo de #msgs: si Jose desliza hacia arriba se van
+  // con el historial; si desliza hasta abajo, aparecen. Su
+  // llegada no mueve scrollTop en NINGÚN caso (ni lector arriba
+  // ni lector al final). Si el bloque queda bajo el pliegue con
+  // la decisión pendiente, avisa la PASTILLA «Decisión
+  // pendiente ↓» — que no mueve nada por sí sola: solo su toque
+  // baja la vista hasta el bloque — y desaparece cuando el
+  // bloque entra en vista o al responderse. Al responder, el
+  // bloque sale del flujo y queda el eco de siempre.
+  {
+    console.log('\nW3) Decisiones dentro del flujo de mensajes y pastilla de aviso');
+    const gameW3 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const htmlW3 = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+    const cssW3 = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+
+    // --- Fuente: el nuevo hogar del bloque ---
+    const iChooseW3 = gameW3.indexOf('choose(options, timer)');
+    const chooseTxtW3 = iChooseW3 >= 0 ? gameW3.slice(iChooseW3, gameW3.indexOf('assign(prompt, info)')) : '';
+    const iAssignW3 = gameW3.indexOf('assign(prompt, info)');
+    const assignTxtW3 = iAssignW3 >= 0 ? gameW3.slice(iAssignW3, gameW3.indexOf('modal(html, btn)')) : '';
+    check('flujo: choose y assign montan su bloque AL FINAL de los mensajes (mountDecision), no en una zona fija',
+      iChooseW3 >= 0 && iAssignW3 >= 0 && chooseTxtW3.includes('mountDecision(block)') && assignTxtW3.includes('mountDecision(block)'), '');
+    check('flujo: el viejo #actions desapareció del juego (sin referencia en game.js, sin nodo en index.html, sin reglas en el CSS)',
+      !gameW3.includes("$('#actions')") && !gameW3.includes('actions.innerHTML') && !gameW3.includes('actions.appendChild')
+      && !htmlW3.includes('id="actions"') && !cssW3.includes('#actions {'), '');
+    check('flujo: el bloque lleva la clase .decision con su fondo propio y la pastilla .dpill existe (fija al pie del panel, con su detector de pliegue)',
+      cssW3.includes('.decision {') && cssW3.includes('.dpill {') && gameW3.includes('Decisión pendiente ↓') && gameW3.includes('decisionOutOfView'), '');
+
+    // --- Comportamiento: choose en el flujo, sin mover el scroll ---
+    const ph3 = G.ui.phone, msgs3 = documentFake.querySelector('#msgs'), pill3 = documentFake.querySelector('#dpill');
+    ph3.floatMode = false; ph3.portraitMode = false; ph3.reset();
+    msgs3.scrollHeight = 2000; msgs3.clientHeight = 300; msgs3.scrollTop = 0; // lector arriba del todo
+    let chosen3 = -1;
+    const pChoose3 = G.ui.choose([{ label: 'Flujo A' }, { label: 'Flujo B' }]).then((i) => { chosen3 = i; });
+    const block3 = queryWithin(msgs3, '.decision', false);
+    check('flujo: el bloque de opciones es el ÚLTIMO nodo de los mensajes y la máquina lo marca pendiente (insignia y lógica intactas)',
+      !!block3 && msgs3.children[msgs3.children.length - 1] === block3 && ph3.state().pending === true, '');
+    check('flujo: la llegada de la decisión NO mueve el scroll (lector arriba)',
+      msgs3.scrollTop === 0, 'scrollTop=' + msgs3.scrollTop);
+    check('flujo: sin geometría medible la pastilla no aparece (no afirma lo que no puede medir)',
+      !!pill3 && pill3.style.display === 'none', '');
+
+    // Geometría simulada: el panel visible mide 300px (top 100 →
+    // bottom 400) y el bloque nace a 900px del origen del
+    // contenido, así que su posición en pantalla depende del
+    // scroll, como en un navegador real.
+    msgs3.getBoundingClientRect = () => ({ top: 100, bottom: 400, left: 0, right: 300, width: 300, height: 300 });
+    block3.getBoundingClientRect = () => ({ top: 900 - msgs3.scrollTop, bottom: 990 - msgs3.scrollTop, left: 0, right: 300, width: 300, height: 90 });
+    const pillShown3 = G.ui.decisionPillSync();
+    check('pastilla: con la decisión pendiente y el bloque BAJO EL PLIEGUE, la pastilla aparece (y solo avisa: no mueve nada por sí sola)',
+      pillShown3 === true && pill3.style.display !== 'none' && msgs3.scrollTop === 0, 'scrollTop=' + msgs3.scrollTop);
+    pill3.onclick(); // el toque de Jose: la vista baja hasta el bloque
+    check('pastilla: SOLO su toque desplaza la vista hasta el bloque (y al entrar el bloque en vista, la pastilla desaparece)',
+      msgs3.scrollTop === 794 && pill3.style.display === 'none', 'scrollTop=' + msgs3.scrollTop);
+    msgs3.scrollTop = 0; // Jose vuelve a subir a releer la razón: el bloque sale de vista…
+    const pillBack3 = G.ui.decisionPillSync(); // …que es lo que dispara el listener de scroll en el navegador
+    check('pastilla: si el bloque vuelve a salir de vista con la decisión pendiente, la pastilla reaparece',
+      pillBack3 === true && pill3.style.display !== 'none', '');
+    const opt3 = queryWithin(block3, '.opt', true).find((b) => b.onclick);
+    if (opt3) opt3.onclick();
+    await pChoose3;
+    const lastRow3 = msgs3.children[msgs3.children.length - 1];
+    check('flujo: al responder, el bloque SALE del flujo, la pastilla se apaga y queda el eco como último mensaje (el eco tampoco arrastra al lector que estaba arriba)',
+      chosen3 === 0 && queryWithin(msgs3, '.decision', false) === null && pill3.style.display === 'none' && msgs3.scrollTop === 0
+      && !!lastRow3 && lastRow3._html.includes('mine') && lastRow3._html.includes('Flujo A'),
+      'chosen=' + chosen3 + ' scrollTop=' + msgs3.scrollTop);
+
+    // Lector AL FINAL: tampoco hay excepción a la regla
+    msgs3.scrollTop = 1700; // pegado al final (2000 − 300)
+    let chosen3b = -1;
+    const pChoose3b = G.ui.choose([{ label: 'Final A' }, { label: 'Final B' }]).then((i) => { chosen3b = i; });
+    const block3b = queryWithin(msgs3, '.decision', false);
+    check('flujo: con el lector AL FINAL, la llegada de la decisión tampoco mueve el scroll (sin excepciones)',
+      !!block3b && msgs3.scrollTop === 1700, 'scrollTop=' + msgs3.scrollTop);
+    const opt3b = queryWithin(block3b, '.opt', true).find((b) => b.onclick);
+    if (opt3b) opt3b.onclick();
+    await pChoose3b;
+    check('flujo: la segunda decisión también se resuelve y su bloque sale del flujo',
+      chosen3b === 0 && queryWithin(msgs3, '.decision', false) === null, 'chosen=' + chosen3b);
+
+    // assign también vive en el flujo, con su pregunta dentro del bloque
+    let assigned3 = null;
+    const pAssign3 = G.ui.assign('¿Quién va?', () => ({ stats: 'Vel 1', odds: null, note: '' })).then((id) => { assigned3 = id; });
+    const blockA3 = queryWithin(msgs3, '.decision', false);
+    const cardA3 = blockA3 && queryWithin(blockA3, '.card', true).find((b) => b.onclick && !b.disabled);
+    check('flujo: assign monta en el flujo su bloque con la pregunta (.ask) y las tarjetas, como un mensaje más (y sin mover el scroll)',
+      !!blockA3 && blockA3._html.includes('ask') && !!cardA3 && msgs3.scrollTop === 2000, 'scrollTop=' + msgs3.scrollTop);
+    if (cardA3) cardA3.onclick();
+    await pAssign3;
+    const lastRowA3 = msgs3.children[msgs3.children.length - 1];
+    check('flujo: al asignar, el bloque sale del flujo y queda el eco «Va …» como último mensaje',
+      !!assigned3 && queryWithin(msgs3, '.decision', false) === null && !!lastRowA3 && lastRowA3._html.includes('Va '), 'assigned=' + assigned3);
+    delete msgs3.getBoundingClientRect; // la geometría simulada no debe contaminar a las secciones siguientes
+    ph3.reset();
   }
 
   // --- Sección X: botón de pruebas «Borrar caché y datos» ---
