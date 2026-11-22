@@ -14,7 +14,7 @@ const MIME = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', 
   '.svg':'image/svg+xml', '.json':'application/json', '.webmanifest':'application/manifest+json',
   '.ico':'image/x-icon', '.mp3':'audio/mpeg', '.ogg':'audio/ogg', '.webp':'image/webp', '.woff2':'font/woff2' };
 function lanIP() { for (const ifs of Object.values(os.networkInterfaces())) for (const i of ifs) if (i.family === 'IPv4' && !i.internal) return i.address; return 'localhost'; }
-function sendFile(res, file) { fs.readFile(file, (e, d) => { if (e) { res.writeHead(404); return res.end('not found'); } res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' }); res.end(d); }); }
+function sendFile(res, file) { fs.readFile(file, (e, d) => { if (e) { res.writeHead(404); return res.end('not found'); } res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(d); }); }
 
 http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x'); const p = u.pathname;

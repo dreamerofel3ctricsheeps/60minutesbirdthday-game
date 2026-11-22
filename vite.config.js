@@ -32,6 +32,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true, clientsClaim: true, cleanupOutdatedCaches: true, // actualiza al instante
+        navigateFallbackDenylist: [/^\/(events|send|input|lan|qr|control)(\/|\?|$)/], // nunca servir index.html por estas
         // Precarga el app-shell (JS/CSS/HTML + iconos). Los assets de runtime
         // (sheets/audio/date/img) se copian DESPUÉS del build, así que no están
         // al generar el SW: se cachean en runtime al jugar (CacheFirst).
