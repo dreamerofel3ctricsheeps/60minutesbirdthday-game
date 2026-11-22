@@ -3,3 +3,8 @@
 # El LEEME.txt de la carpeta SÍ se versiona (no casa con *.m4a/*.mp3).
 application/src/assets/audio/*.m4a
 application/src/assets/audio/*.mp3
+
+# El castillo ambulante (castillo.png) es arte de una película
+# aportado por Jose: SOLO-LOCAL, como la canción — nunca se
+# sube al repo. El código lo dibuja solo si el archivo está.
+application/src/assets/date/castillo.png

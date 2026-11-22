@@ -105,6 +105,11 @@
     { id: 'plaza', t0: 12, t1: 41, w: 4350, suckFx: 'polvo', suckAt: 39.2 },
     { id: 'sanangel', t0: 41, t1: 67, w: 3900, suckFx: 'petalos', suckAt: 65.2 },
     { id: 'aero', t0: 67, t1: 91, w: 3600, suckFx: 'boletos', suckAt: 89.2 },
+    // «Praderas del castillo» (decisión de Jose, 2026-11-21: la
+    // escena 4 ya NO es el castillo flotante — son las praderas
+    // cercanas al castillo ambulante, dibujadas por código, con
+    // el castillo recortado de su imagen al final de la franja).
+    // El id conserva el nombre del bloque en la tabla.
     { id: 'castillo', t0: 91, t1: 120, w: 4350, suckFx: 'estrellas', suckAt: 118.2 },
     { id: 'cita', t0: 120, t1: 149, finaleAt: 137 },
   ];
@@ -127,8 +132,8 @@
 
   // ---------- Estado propio del modo ----------
   const D = {
-    active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|sanangel|aero|done
-    scene: null, plazaScene: null, angelScene: null, aeroScene: null,
+    active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|sanangel|aero|castillo|done
+    scene: null, plazaScene: null, angelScene: null, aeroScene: null, praderaScene: null,
     arrived: false, joseJoined: false,
     clockRunning: false, clockStarted: false, factor: 1, tap: false,
     // clockStarted: la canción ya arrancó en ESTA sesión de la
@@ -335,6 +340,16 @@
   const bellasArtesImg = loadDateImg('assets/date/bellasartes.png');
   const angelImg = loadDateImg('assets/date/angel.png');
   const vistaImg = loadDateImg('assets/date/sanangel-vista.png');
+  // El CASTILLO AMBULANTE: recorte del póster de la película
+  // aportado por Jose (SOLO el castillo, sin los personajes),
+  // hecho localmente desde su imagen. Como la vista de San
+  // Ángel, es material de película: SOLO-LOCAL, fuera de git
+  // (ver FUENTES.md), SIN borde blanco (es paisaje lejano, no
+  // un sticker) y con un fundido suave en la base, porque en el
+  // póster la base se pierde en la niebla. Se dibuja SOLO si
+  // cargó (imgOk): sin el archivo, ni el aeropuerto ni las
+  // praderas lo muestran y ambas escenas se juegan igual.
+  const castilloImg = loadDateImg('assets/date/castillo.png');
 
   // Geometría y ciclos de los complementos. Las x de los elementos
   // fijos viven en el espacio de SU capa (pantalla con pan=0): la
@@ -484,6 +499,18 @@
     // inicio del ciclo ocurre con el avión invisible, así que
     // nunca se le ve teletransportarse.
     avion: { w: 420, par: 0.15, baseY: 206, ciclo: 140, taxi: 100, vel: 18, x0: -500, x1: 1300 },
+    // El castillo ambulante A LO LEJOS, quieto en el horizonte
+    // tras el ventanal (decisión de Jose: desde el aeropuerto
+    // ya se anuncia el destino de la escena 4). Vive en una
+    // capa aún más lejana que la del avión (parallax 0,1, sin
+    // movimiento propio): su centro cruza el centro de la
+    // pantalla a pan = (468 − 320)/0,1 = 1480, el 50% del
+    // paseo. Se dibuja por ALTO (h=150): el recorte es alto y
+    // esbelto (793×1097) y la banda del ventanal manda — a
+    // 150–200 px de ancho mediría 207–276 de alto y las
+    // torres quedarían fuera del cristal. Con velo de
+    // distancia y la base sobre el horizonte de la pista.
+    castillo: { par: 0.1, layerCx: 468, h: 150, baseY: 198 },
   };
   // Centro del avión del aeropuerto (px de SU capa) en el
   // tiempo t: monótono creciente durante el rodaje y quieto
@@ -1536,6 +1563,17 @@
       B.x = this.entryDoorX + 190; B.y = this.groundY; B.follow = false;
       this.pan = 0; this.nearDoor = false;
     }
+    // Vuelta desde las praderas del castillo (por cualquiera
+    // de sus dos Puertas): se reaparece junto a la Puerta de
+    // SALIDA de la terminal, la que conecta con la escena 4.
+    enterFromPradera() {
+      this.phase = 'light'; this.phaseT = 0;
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      A.x = this.exitDoorX - 70; A.y = this.groundY;
+      B.x = this.exitDoorX - 140; B.y = this.groundY; B.follow = false;
+      this.pan = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
+      this.nearDoor = false;
+    }
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
@@ -1549,12 +1587,15 @@
         return;
       }
       if (this.phase === 'exitdoor') {
-        // AMBAS Puertas del aeropuerto devuelven por ahora a
-        // San Ángel, junto a su Puerta del árbol: la de SALIDA
-        // seguirá al castillo flotante cuando exista la escena
-        // 4 — hoy es un MARCADOR, no la conexión definitiva.
+        // La Puerta usada manda en la cadena: la de ENTRADA
+        // devuelve a San Ángel, junto a su Puerta del árbol;
+        // la de SALIDA sigue el paseo a las PRADERAS del
+        // castillo (escena 4). Sin reloj nuevo en ningún caso.
         this.phaseT += dt;
-        if (this.phaseT >= 1) travelTo('sanangel', 'tree');
+        if (this.phaseT >= 1) {
+          if (this.usedDoorX === this.exitDoorX) travelTo('castillo');
+          else travelTo('sanangel', 'tree');
+        }
         return;
       }
       if (this.phase === 'free') {
@@ -1588,6 +1629,25 @@
       c.fillStyle = 'rgba(255,255,255,0.55)';
       const dashOff = -(((pan * AERO.avion.par) % 46) + 46) % 46;
       for (let x = dashOff; x < 640; x += 46) c.fillRect(x, 198, 22, 3);
+      // EL CASTILLO AMBULANTE a lo lejos (solo si el asset
+      // solo-local cargó): quieto en el horizonte, en su capa
+      // lejana (parallax 0,1), con VELO DE DISTANCIA (tinte
+      // celeste y la base fundida en la luz del horizonte,
+      // como la vista de San Ángel en la plaza). El avión
+      // rueda DELANTE de él, en su primer plano exterior: el
+      // castillo es el fondo del fondo y no se enciman.
+      if (imgOk(castilloImg)) {
+        const cf = AERO.castillo, chh = cf.h, cw2 = chh * castilloImg.naturalWidth / castilloImg.naturalHeight;
+        const ccx = cf.layerCx - pan * cf.par;
+        if (ccx + cw2 / 2 > -10 && ccx - cw2 / 2 < 650) {
+          c.drawImage(castilloImg, ccx - cw2 / 2, cf.baseY - chh, cw2, chh);
+          const veil = c.createLinearGradient(0, cf.baseY - chh, 0, cf.baseY);
+          veil.addColorStop(0, 'rgba(168,203,228,0.42)');
+          veil.addColorStop(0.75, 'rgba(190,214,232,0.30)');
+          veil.addColorStop(1, 'rgba(242,227,194,0.55)');
+          c.fillStyle = veil; c.fillRect(ccx - cw2 / 2, cf.baseY - chh, cw2, chh);
+        }
+      }
       // EL AVIÓN (el mismo recorte de la plaza, ya registrado),
       // grande y rodando lento por la pista, FUERA del ventanal
       if (imgOk(avionImg)) {
@@ -1746,13 +1806,311 @@
     }
   }
 
+  // ---------- Escena 4: PRADERAS DEL CASTILLO (dibujada) ----------
+  // Decisión de Jose (2026-11-21): la escena 4 ya NO es el
+  // castillo flotante — son las PRADERAS cercanas al castillo
+  // ambulante: lugares amplios con fondos de montañas, praderas
+  // y nubes, todo dibujado por código (paramétrico en pan), y
+  // el castillo — el recorte de su imagen, solo-local — de pie
+  // al final de la franja, con la Puerta de salida frente a él.
+  // Geometría: 4350 px de mundo (el w de su bloque en la tabla
+  // maestra: 29 s × PACE), Puerta de entrada a la izquierda
+  // (x=90) y la del castillo al final (x=4250).
+  const PRADERA = {
+    worldW: sceneOf('castillo').w, entryDoorX: 90, exitDoorX: 4250, groundY: 316, horizon: 252,
+    naboX: 2150, // el espantapájaros Cabeza de Nabo, junto a la vereda en la zona media
+    // El castillo al final: capa de paisaje (parallax 0,25,
+    // como el árbol de San Ángel). Su centro de capa está
+    // puesto para que, con la cámara al fondo (pan 3710), su
+    // centro caiga a pantalla ≈505 — justo tras la Puerta de
+    // salida (4250 → pantalla 540): la Puerta queda frente al
+    // castillo, como su entrada. Entra en pantalla recién en
+    // el último tercio del paseo (a pan 1200 aún no se ve) y
+    // se apoya en baseY, sobre la pradera lejana.
+    castillo: { par: 0.25, layerCx: 1432, h: 450, baseY: 262 },
+    // Las bocas de chimenea del recorte, en fracciones de su
+    // caja (x desde la izquierda, y desde arriba): de ahí
+    // sale el humo dibujado por código.
+    humo: [[0.448, 0.02], [0.565, 0.08], [0.615, 0.10]],
+  };
+  // Cresta de montaña determinista (suma de senos): el mismo
+  // perfil para cualquier pan, sin memoria ni azar por frame.
+  function ridgeY(x, seed) {
+    return Math.sin(x * 0.008 + seed) * 22 + Math.sin(x * 0.021 + seed * 1.7) * 13 + Math.sin(x * 0.047 + seed * 0.6) * 6;
+  }
+  // Semilla estable por posición, para repartir matas y flores.
+  function hashN(n) { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+
+  class PraderaScene {
+    constructor() {
+      this.id = 'castillo';
+      this.phase = 'light'; this.t = 0; this.phaseT = 0;
+      this.worldW = PRADERA.worldW; this.groundY = PRADERA.groundY; this.horizon = PRADERA.horizon;
+      this.entryDoorX = PRADERA.entryDoorX; this.exitDoorX = PRADERA.exitDoorX;
+      this.pan = 0; this.joseExpr = 'happy';
+      this.nearDoor = false; this.nearDoorX = this.entryDoorX; this.usedDoorX = this.entryDoorX;
+      this.free = makeStripChars(210, 280, this.groundY);
+    }
+    switchActive() {
+      if (this.phase !== 'free') return;
+      this.free.active = this.free.active === 'ximena' ? 'jose' : 'ximena';
+      if (G.input && G.input.flush) G.input.flush();
+    }
+    // Llegada desde el aeropuerto (por su Puerta de salida):
+    // fundido de luz (~1 s) y la escena queda explorable en
+    // modo libre.
+    enterFromAero() {
+      this.phase = 'light'; this.phaseT = 0;
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      A.x = this.entryDoorX + 120; A.y = this.groundY;
+      B.x = this.entryDoorX + 190; B.y = this.groundY; B.follow = false;
+      this.pan = 0; this.nearDoor = false;
+    }
+    beginExit() {
+      if (this.phase !== 'free') return;
+      this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
+      G.sfx('door');
+    }
+    update(dt) {
+      this.t += dt;
+      if (this.phase === 'light') {
+        this.phaseT += dt;
+        if (this.phaseT >= 1) { this.phase = 'free'; this.phaseT = 0; }
+        return;
+      }
+      if (this.phase === 'exitdoor') {
+        // AMBAS Puertas de las praderas devuelven por ahora
+        // al aeropuerto, junto a su Puerta de salida: la de
+        // ENTRADA porque es la vuelta natural de la cadena, y
+        // la del CASTILLO como MARCADOR hasta que exista la
+        // escena 5 (el departamento final de la cita).
+        this.phaseT += dt;
+        if (this.phaseT >= 1) travelTo('aero', 'pradera');
+        return;
+      }
+      if (this.phase === 'free') {
+        this.phaseT += dt;
+        this.updateFree(dt);
+      }
+    }
+    updateFree(dt) {
+      const F = this.free, A = F.chars[F.active];
+      const dE = Math.abs(A.x - this.entryDoorX), dX = Math.abs(A.x - this.exitDoorX);
+      this.nearDoor = Math.min(dE, dX) < 58 && Math.abs(A.y - this.groundY) < 40;
+      this.nearDoorX = dE <= dX ? this.entryDoorX : this.exitDoorX;
+      if (this.nearDoor && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
+      updateStripFree(this, dt);
+    }
+    draw(dt) {
+      const c = G.ovCtx; if (!c) return;
+      c.setTransform(2, 0, 0, 2, 0, 0);
+      c.clearRect(0, 0, 640, 360);
+      const t = this.t, pan = this.pan, groundY = this.groundY, horizon = this.horizon;
+      // ===== cielo amplio de tarde clara =====
+      const sky = c.createLinearGradient(0, 0, 0, horizon + 30);
+      sky.addColorStop(0, '#6f9fd0'); sky.addColorStop(0.6, '#bcd9ea'); sky.addColorStop(1, '#f6e2b4');
+      c.fillStyle = sky; c.fillRect(0, 0, 640, horizon + 30);
+      // nubes algodonosas a dos profundidades, derivando lento
+      // con el viento (como las del póster: blancas y redondas)
+      const cloud = (x, y, s, a) => {
+        c.fillStyle = `rgba(255,252,246,${a})`;
+        c.beginPath();
+        c.ellipse(x, y, 27 * s, 8.5 * s, 0, 0, 6.3);
+        c.ellipse(x + 19 * s, y + 2 * s, 18 * s, 6.5 * s, 0, 0, 6.3);
+        c.ellipse(x - 21 * s, y + 2 * s, 16 * s, 5.5 * s, 0, 0, 6.3);
+        c.fill();
+      };
+      for (let i = 0; i < 5; i++) {
+        const lx = i * 340 + hashN(i * 3.3) * 120;
+        const sx = (((lx + t * 2.2 - pan * 0.08) % 900) + 900) % 900 - 130;
+        cloud(sx, 34 + hashN(i * 7.1) * 44, 0.75 + hashN(i * 5.7) * 0.4, 0.75);
+      }
+      for (let i = 0; i < 4; i++) {
+        const lx = i * 430 + 140 + hashN(i * 4.9) * 130;
+        const sx = (((lx + t * 4.5 - pan * 0.18) % 980) + 980) % 980 - 170;
+        cloud(sx, 66 + hashN(i * 9.3) * 52, 1.15 + hashN(i * 6.1) * 0.5, 0.92);
+      }
+      // ===== montañas al fondo, en dos capas =====
+      const ridgePts = (par, baseOff, amp, seed) => {
+        const pts = [];
+        for (let sx = -8; sx <= 648; sx += 16) pts.push([sx, horizon + baseOff + ridgeY(sx + pan * par, seed) * amp]);
+        return pts;
+      };
+      // la lejana (parallax 0,12): azulada y con velo, cumbres
+      // nevadas en los picos altos
+      let pts = ridgePts(0.12, -34, 1, 3.1);
+      c.fillStyle = '#8ea6c6';
+      c.beginPath(); c.moveTo(-8, horizon + 10);
+      for (const [x, y] of pts) c.lineTo(x, y);
+      c.lineTo(648, horizon + 10); c.closePath(); c.fill();
+      c.fillStyle = 'rgba(250,252,255,0.8)';
+      for (const [x, y] of pts) {
+        if (y >= horizon - 52) continue;
+        c.beginPath();
+        c.moveTo(x - 8, y + 7); c.lineTo(x, y - 1); c.lineTo(x + 8, y + 7);
+        c.lineTo(x + 3, y + 4); c.lineTo(x, y + 7); c.lineTo(x - 3, y + 4);
+        c.closePath(); c.fill();
+      }
+      // la cercana (parallax 0,22): verdosa y más baja
+      pts = ridgePts(0.22, -14, 0.7, 7.3);
+      c.fillStyle = '#74917c';
+      c.beginPath(); c.moveTo(-8, horizon + 12);
+      for (const [x, y] of pts) c.lineTo(x, y);
+      c.lineTo(648, horizon + 12); c.closePath(); c.fill();
+      // ===== la pradera =====
+      // colina lejana ondulada (parallax 0,45), verde claro
+      c.fillStyle = '#a8cf7a';
+      c.beginPath(); c.moveTo(-8, horizon + 34);
+      for (let sx = -8; sx <= 648; sx += 24) {
+        const lx = sx + pan * 0.45;
+        c.lineTo(sx, horizon + 6 + Math.sin(lx * 0.013 + 1.2) * 5 + Math.sin(lx * 0.031) * 3);
+      }
+      c.lineTo(648, horizon + 34); c.closePath(); c.fill();
+      // el suelo de la pradera (la capa de la vereda)
+      const gr = c.createLinearGradient(0, horizon + 20, 0, 360);
+      gr.addColorStop(0, '#93c168'); gr.addColorStop(1, '#679c46');
+      c.fillStyle = gr; c.fillRect(0, horizon + 20, 640, 360 - horizon - 20);
+      // la vereda de tierra clara por donde caminan
+      c.fillStyle = '#dcc794'; c.fillRect(0, groundY - 16, 640, 36);
+      c.fillStyle = 'rgba(160,132,84,0.5)';
+      c.fillRect(0, groundY - 16, 640, 2.5); c.fillRect(0, groundY + 17.5, 640, 2.5);
+      // piedritas de la vereda, paramétricas en pan
+      c.fillStyle = 'rgba(150,124,80,0.45)';
+      for (let wx = Math.floor(pan / 34) * 34; wx < pan + 660; wx += 34) {
+        const h1 = hashN(wx * 0.61);
+        if (h1 < 0.4) continue;
+        c.beginPath(); c.ellipse(wx - pan + h1 * 14, groundY - 10 + hashN(wx * 1.13) * 24, 2.6, 1.4, 0, 0, 6.3); c.fill();
+      }
+      // matas de pasto y florecitas, con el VIENTO recorriendo
+      // la pradera: la inclinación de cada mata es un seno
+      // viajero (fase = t·2,2 − x·0,02) y la mata se dobla con él
+      for (let wx = Math.floor(pan / 26) * 26; wx < pan + 666; wx += 26) {
+        const h1 = hashN(wx * 0.37);
+        if (h1 < 0.35) continue;
+        const bx = wx - pan + h1 * 12, by = groundY - 34 + hashN(wx * 0.83) * 84;
+        if (by > groundY - 20 && by < groundY + 24) continue; // la vereda va pelada
+        const lean = Math.sin(t * 2.2 - wx * 0.02) * 2.6, hh = 6 + h1 * 5;
+        c.strokeStyle = 'rgba(52,102,38,0.75)'; c.lineWidth = 1.4;
+        c.beginPath();
+        c.moveTo(bx - 2.5, by); c.quadraticCurveTo(bx - 2 + lean * 0.5, by - hh * 0.6, bx - 3 + lean, by - hh);
+        c.moveTo(bx, by); c.quadraticCurveTo(bx + lean * 0.5, by - hh * 0.7, bx + lean, by - hh - 1.5);
+        c.moveTo(bx + 2.5, by); c.quadraticCurveTo(bx + 2 + lean * 0.5, by - hh * 0.6, bx + 3 + lean, by - hh);
+        c.stroke();
+        if (h1 > 0.86) { // una florecita sobre la mata
+          const fc = ['#ffffff', '#ffd94d', '#f2a7c3'][Math.floor(hashN(wx * 2.9) * 3) % 3];
+          const fx2 = bx + lean, fy2 = by - hh - 2;
+          c.fillStyle = fc;
+          c.beginPath(); c.arc(fx2 - 1.6, fy2, 1.5, 0, 6.3); c.arc(fx2 + 1.6, fy2, 1.5, 0, 6.3); c.arc(fx2, fy2 - 1.6, 1.5, 0, 6.3); c.fill();
+          c.fillStyle = '#e8a13c'; c.beginPath(); c.arc(fx2, fy2 - 0.4, 1.1, 0, 6.3); c.fill();
+        }
+      }
+      // ===== EL CASTILLO al final de la franja (solo si el
+      // asset solo-local cargó): de pie sobre la pradera en su
+      // capa de paisaje, con el humo de sus chimeneas dibujado
+      // por código y la banda de niebla en su base, que
+      // disimula el fundido del recorte =====
+      if (imgOk(castilloImg)) {
+        const cf = PRADERA.castillo, chh = cf.h, cw2 = chh * castilloImg.naturalWidth / castilloImg.naturalHeight;
+        const ccx = cf.layerCx - pan * cf.par;
+        if (ccx + cw2 / 2 > -20 && ccx - cw2 / 2 < 660) {
+          c.drawImage(castilloImg, ccx - cw2 / 2, cf.baseY - chh, cw2, chh);
+          c.fillStyle = 'rgba(190,208,228,0.10)'; // un velo apenas: es el destino, ya está cerca
+          c.fillRect(ccx - cw2 / 2, cf.baseY - chh, cw2, chh);
+          // el humo: bocanadas que suben, crecen y se disipan
+          for (let s = 0; s < PRADERA.humo.length; s++) {
+            const [fx, fy] = PRADERA.humo[s];
+            const ox = ccx - cw2 / 2 + fx * cw2, oy = cf.baseY - chh + fy * chh;
+            for (let k = 0; k < 4; k++) {
+              const age = (t * 0.13 + k * 0.25 + s * 0.37) % 1;
+              const px2 = ox + age * 15 + Math.sin(age * 6 + k * 2.1 + s) * 3;
+              const py2 = oy - 4 - age * 46, r = 2.5 + age * 8.5;
+              c.fillStyle = `rgba(246,247,243,${(0.30 * (1 - age)).toFixed(3)})`;
+              c.beginPath(); c.arc(px2, py2, r, 0, 6.3); c.fill();
+            }
+          }
+          // la niebla de la base
+          const fog = c.createLinearGradient(0, cf.baseY - 15, 0, cf.baseY + 9);
+          fog.addColorStop(0, 'rgba(255,255,255,0)');
+          fog.addColorStop(0.62, 'rgba(255,255,255,0.55)');
+          fog.addColorStop(1, 'rgba(255,255,255,0)');
+          c.fillStyle = fog; c.fillRect(ccx - cw2 * 0.64, cf.baseY - 15, cw2 * 1.28, 24);
+        }
+      }
+      // el espantapájaros Cabeza de Nabo, junto a la vereda
+      this.drawNabo(c, PRADERA.naboX - pan, groundY - 30);
+      // las dos Puertas de la franja (la misma Puerta de siempre)
+      const usedOpen = this.phase === 'exitdoor' ? Math.min(1, this.phaseT) : 0;
+      const entryOpen = this.phase === 'light' && this.phaseT < 0.9 ? 1 - this.phaseT / 0.9 : (this.usedDoorX === this.entryDoorX ? usedOpen : 0);
+      drawDoor2DAt(c, this.entryDoorX - pan, groundY, entryOpen);
+      drawDoor2DAt(c, this.exitDoorX - pan, groundY, this.usedDoorX === this.exitDoorX ? usedOpen : 0);
+      // los personajes, ordenados por Y, con su sombra suave
+      const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
+      for (const ch of chars) {
+        c.fillStyle = 'rgba(20,40,18,0.20)';
+        c.beginPath(); c.ellipse(ch.x - pan, ch.y + 3, 19, 4.5, 0, 0, 6.3); c.fill();
+        let anim = 'idle', idx = Math.floor(t * 1.4), bobY = Math.sin(t * 2.2 + (ch.id === 'jose' ? 1 : 0)) * 1.2;
+        if (this.phase === 'free' && ch.animWalk) { anim = 'walk_right'; idx = walkIdxFor(ch.id, ch.dist); bobY = 0; }
+        drawChar2DAt(c, ch.id, ch.x - pan, ch.y, 96, anim, idx, ch.id === 'jose' ? this.joseExpr : null, ch.dir === 'left', bobY);
+      }
+      if (this.phase === 'free' && this.nearDoor) G.prompt(c, 'ESPACIO: cruzar la Puerta', this.nearDoorX - pan, groundY - 96);
+      // luz de la Puerta: se disipa al llegar, crece al salir
+      if (this.phase === 'light') { c.fillStyle = `rgba(255,244,214,${(1 - Math.min(1, this.phaseT)).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+      if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+    }
+    // El espantapájaros Cabeza de Nabo, DIBUJADO por código
+    // (homenaje dibujado, sin usar la imagen de la película):
+    // poste y travesaño, traje oscuro con los brazos en cruz,
+    // moño azul, cabeza de nabo pálida con su sonrisa cosida y
+    // el sombrero de copa con su cinta.
+    drawNabo(c, x, baseY) {
+      if (x < -70 || x > 710) return;
+      c.fillStyle = 'rgba(20,40,18,0.20)';
+      c.beginPath(); c.ellipse(x, baseY + 3, 20, 4, 0, 0, 6.3); c.fill();
+      c.strokeStyle = '#6d4c2f'; c.lineWidth = 4;
+      c.beginPath(); c.moveTo(x, baseY); c.lineTo(x, baseY - 80); c.stroke(); // el poste
+      c.lineWidth = 3.4;
+      c.beginPath(); c.moveTo(x - 30, baseY - 64); c.lineTo(x + 30, baseY - 64); c.stroke(); // el travesaño
+      // el traje: un abrigo oscuro que se abre hacia abajo
+      c.fillStyle = '#2e2a33';
+      c.beginPath();
+      c.moveTo(x - 7, baseY - 68); c.lineTo(x + 7, baseY - 68);
+      c.lineTo(x + 15, baseY - 16); c.lineTo(x + 5, baseY - 20); c.lineTo(x, baseY - 14);
+      c.lineTo(x - 5, baseY - 20); c.lineTo(x - 15, baseY - 16);
+      c.closePath(); c.fill();
+      // las mangas sobre el travesaño y las manitos pálidas
+      c.strokeStyle = '#2e2a33'; c.lineWidth = 6;
+      c.beginPath(); c.moveTo(x - 4, baseY - 64); c.lineTo(x - 29, baseY - 63); c.moveTo(x + 4, baseY - 64); c.lineTo(x + 29, baseY - 63); c.stroke();
+      c.fillStyle = '#e8e2d2';
+      c.beginPath(); c.arc(x - 31, baseY - 63, 3.4, 0, 6.3); c.arc(x + 31, baseY - 63, 3.4, 0, 6.3); c.fill();
+      // el moño azul del cuello
+      c.fillStyle = '#7a9cc6';
+      c.beginPath(); c.moveTo(x, baseY - 66); c.lineTo(x - 6, baseY - 70); c.lineTo(x - 6, baseY - 62); c.closePath(); c.fill();
+      c.beginPath(); c.moveTo(x, baseY - 66); c.lineTo(x + 6, baseY - 70); c.lineTo(x + 6, baseY - 62); c.closePath(); c.fill();
+      // la cabeza de nabo: pálida, con la puntita y su sonrisa
+      c.fillStyle = '#f0ead8';
+      c.beginPath(); c.arc(x, baseY - 76, 10, 0, 6.3); c.fill();
+      c.beginPath(); c.moveTo(x - 3.4, baseY - 68); c.lineTo(x + 3.4, baseY - 68); c.lineTo(x, baseY - 63); c.closePath(); c.fill();
+      c.fillStyle = '#33302c';
+      c.beginPath(); c.arc(x - 3.6, baseY - 78, 1.3, 0, 6.3); c.arc(x + 3.6, baseY - 78, 1.3, 0, 6.3); c.fill();
+      c.strokeStyle = '#33302c'; c.lineWidth = 1.2;
+      c.beginPath(); c.arc(x, baseY - 74.5, 5.4, 0.25, Math.PI - 0.25); c.stroke();
+      // el sombrero de copa, con su cinta
+      c.fillStyle = '#1d1a20';
+      c.fillRect(x - 17, baseY - 86, 34, 3.6);
+      c.fillRect(x - 10, baseY - 99, 20, 13.5);
+      c.fillStyle = '#8a2f35'; c.fillRect(x - 10, baseY - 89.5, 20, 3);
+    }
+  }
+
   // Viajes entre escenas por la Puerta (la cadena del paseo:
-  // plaza ⇄ San Ángel ⇄ aeropuerto). NO tocan el reloj ni la
-  // canción: si el audio ya terminó, las escenas siguen en
-  // silencio (nada de play() forzado). `at` distingue la llegada
-  // a San Ángel: 'plaza' = por su Puerta de entrada (desde la
-  // plaza); 'tree' = junto a su Puerta del árbol (desde el
-  // aeropuerto, cuyas dos Puertas devuelven ahí por ahora).
+  // plaza ⇄ San Ángel ⇄ aeropuerto ⇄ praderas). NO tocan el
+  // reloj ni la canción: si el audio ya terminó, las escenas
+  // siguen en silencio (nada de play() forzado). `at` distingue
+  // la llegada: a San Ángel, 'plaza' = por su Puerta de entrada
+  // (desde la plaza) y 'tree' = junto a su Puerta del árbol
+  // (desde el aeropuerto); al aeropuerto, 'pradera' = junto a
+  // su Puerta de salida (la vuelta desde las praderas) y sin
+  // `at` = por su Puerta de entrada (desde San Ángel).
   function travelTo(dest, at) {
     if (dest === 'sanangel') {
       if (!D.angelScene) D.angelScene = new SanAngelScene();
@@ -1764,8 +2122,15 @@
     } else if (dest === 'aero') {
       if (!D.aeroScene) D.aeroScene = new AeroScene();
       D.scene = D.aeroScene;
-      D.aeroScene.enterFromSanAngel();
+      if (at === 'pradera') D.aeroScene.enterFromPradera();
+      else D.aeroScene.enterFromSanAngel();
       D.state = 'aero';
+      G.setScene(D.scene);
+    } else if (dest === 'castillo') {
+      if (!D.praderaScene) D.praderaScene = new PraderaScene();
+      D.scene = D.praderaScene;
+      D.praderaScene.enterFromAero();
+      D.state = 'castillo';
       G.setScene(D.scene);
     } else {
       D.scene = D.plazaScene;
@@ -1784,7 +2149,7 @@
     if (G.S) G.S.phase = 'date';
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.add('date-mode');
     D.scene = new DateScene(onDone);
-    D.plazaScene = D.scene; D.angelScene = null; D.aeroScene = null;
+    D.plazaScene = D.scene; D.angelScene = null; D.aeroScene = null; D.praderaScene = null;
     G.setScene(D.scene);
   }
   function stop() {
@@ -1793,7 +2158,7 @@
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('date-mode');
     W.closet.target = 0; W.xDoorOpen = false;
-    D.scene = null; D.plazaScene = null; D.angelScene = null; D.aeroScene = null;
+    D.scene = null; D.plazaScene = null; D.angelScene = null; D.aeroScene = null; D.praderaScene = null;
   }
   G.DateMode = {
     start, stop, setPaused, verify: verifyCode, dateNow,
@@ -1804,7 +2169,7 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt,
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY,
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.

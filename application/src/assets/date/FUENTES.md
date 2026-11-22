@@ -154,3 +154,31 @@
   obstáculo de la calle: el viento la arrastra de derecha a
   izquierda rodando, y al chocar con el personaje controlado
   estalla en pajitas y lo frena un instante (×0,4 por 0,7 s).
+
+## castillo.png — El castillo ambulante, a lo lejos y al final de las praderas (NO versionado)
+- El castillo ambulante, del póster de la película — imagen
+  aportada por Jose, uso personal, **asset solo-local no
+  incluido en el repositorio** (protegido en `.gitignore`,
+  como la canción y la vista de San Ángel: es arte de una
+  película con derechos).
+- **Procesado local:** recorte SOLO del castillo del póster
+  vertical de Jose (1200 × 2598; el castillo ocupa aprox.
+  x 0,07–0,82 / y 0,25–0,76): rembg (u2net) con conservación
+  del componente mayor, exclusión poligonal del parche de
+  cielo y montaña atrapado entre los cañones de la derecha y
+  la aleta, y fundido suave en la base (en el póster la base
+  se pierde en la niebla, así que el fundido es fiel al
+  original y además disimula el corte). SIN borde blanco:
+  en sus dos usos es paisaje lejano, no un sticker. Salida:
+  793 × 1097. Los personajes del póster (Howl, Sophie,
+  Markl, el espantapájaros Cabeza de Nabo, el perro y
+  Calcifer) NO entran en el recorte.
+- **Usos:** (1) desde el aeropuerto (escena 3) se ve a lo
+  lejos, quieto en el horizonte tras el ventanal, con velo
+  de distancia — es el anuncio del destino; (2) corona la
+  escena 4, las praderas: de pie en grande al final de la
+  franja, con el humo de sus chimeneas dibujado por código,
+  una banda de niebla dibujada en su base y la Puerta de
+  salida frente a él. Si el archivo no está en la copia
+  local, ninguna de las dos escenas lo dibuja y ambas se
+  juegan igual.

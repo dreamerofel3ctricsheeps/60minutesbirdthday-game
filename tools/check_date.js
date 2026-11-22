@@ -738,6 +738,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('el avión se ve a través del ventanal en algún punto del paseo (centro en pantalla, caja dentro de la banda de cristal)', visOk);
   check('el aeropuerto reutiliza el recorte avion.png ya registrado (sin assets nuevos) y FUENTES.md anota el reuso',
     dateSrc.includes('aeroPlaneXAt') && fuentes.includes('Reuso (escena 3'));
+  // El castillo ambulante A LO LEJOS en el exterior (decisión
+  // de Jose): quieto en una capa aún más lejana que la del
+  // avión, pequeño y con la base en el horizonte de la pista;
+  // su momento protagonista (su centro cruzando el centro de
+  // la pantalla) cae hacia la mitad del paseo.
+  const AC = AE.castillo;
+  check('el castillo lejano del aeropuerto: capa muy lejana (parallax 0,1), QUIETO (sin ciclo ni velocidad propios) y pequeño (h≈150, base en el horizonte y≈198)',
+    !!AC && Math.abs(AC.par - 0.1) < 1e-9 && AC.vel === undefined && AC.ciclo === undefined &&
+    AC.h >= 130 && AC.h <= 170 && AC.baseY >= 190 && AC.baseY <= 205,
+    AC ? `par=${AC.par}, h=${AC.h}, baseY=${AC.baseY}` : 'sin AERO.castillo');
+  const protCas = (AC.layerCx - 320) / AC.par;
+  check('su momento protagonista cae hacia la mitad del paseo del aeropuerto (40–60% de pan 0..2960)',
+    protCas / 2960 >= 0.4 && protCas / 2960 <= 0.6, `protagonista=${protCas.toFixed(0)} (${(protCas / 2960 * 100).toFixed(0)}%)`);
+  check('el castillo lejano no se encima con el avión: el avión rueda DELANTE (parallax mayor) y el castillo queda dentro de la banda del ventanal (34..212)',
+    AC.par < AE.avion.par && (AC.baseY - AC.h) >= 30 && AC.baseY <= 212,
+    `techo=${AC.baseY - AC.h}, base=${AC.baseY}`);
+  check('el castillo se dibuja solo si el asset solo-local cargó (imgOk(castilloImg)) y FUENTES.md lo registra como solo-local aportado por Jose',
+    dateSrc.includes('imgOk(castilloImg)') && dateSrc.includes("loadDateImg('assets/date/castillo.png')") &&
+    fuentes.includes('castillo.png') && fuentes.includes('solo-local'));
+  const castilloVersionado = (() => {
+    try {
+      const out = require('child_process').execSync(
+        'git ls-files application/src/assets/date/castillo.png',
+        { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+      return out.trim().length > 0;
+    } catch (e) { return true; } // sin git a la vista: fallar cerrado
+  })();
+  check('castillo.png existe en la copia local y NO está versionado (material de película aportado por Jose, como la canción)',
+    fs.existsSync(path.join(DATE_DIR, 'castillo.png')) && !castilloVersionado);
   // La cinta caminadora: tramo central y empuje de +90 px/s.
   check('la cinta caminadora cubre el tramo central (1200–2400) y empuja a +90 px/s; la escena la expone al motor (sc.belt)',
     AE.belt.x0 === 1200 && AE.belt.x1 === 2400 && AE.belt.speed === 90 && aer.belt === AE.belt,
@@ -797,27 +826,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('la Puerta del árbol vuelve a cruzar al aeropuerto (la cadena es estable en ambos sentidos)',
     G.scene === aer && DM.state.state === 'aero', 'state=' + DM.state.state);
   for (let i = 0; i < 25 && aer.phase !== 'free'; i++) aer.update(0.05);
-  // …y la Puerta de SALIDA del aeropuerto devuelve, POR AHORA,
-  // también a San Ángel junto al árbol (marcador hasta que
-  // exista la escena 4, el castillo flotante).
+  // …y la Puerta de SALIDA del aeropuerto sigue el paseo a
+  // las PRADERAS del castillo (escena 4): se entra por su
+  // Puerta de entrada, en modo libre tras la luz.
   if (EF.active !== 'ximena') aer.switchActive();
   EX.x = aer.exitDoorX - 10; EX.y = aer.groundY;
   aer.update(0.05);
   check('junto a la Puerta de salida del aeropuerto se ofrece cruzarla (nearDoor)', aer.nearDoor === true && aer.nearDoorX === aer.exitDoorX);
   key('Space', true); aer.update(0.016); key('Space', false);
   for (let i = 0; i < 25 && G.scene === aer; i++) aer.update(0.05);
-  check('la Puerta de salida del aeropuerto devuelve (por ahora) a San Ángel junto al árbol — marcador hasta la escena 4',
-    G.scene === ang && DM.state.state === 'sanangel' && Math.abs(ang.free.chars[ang.free.active].x - ang.exitDoorX) < 220,
-    'state=' + DM.state.state);
+  const praL = G.scene;
+  check('la Puerta de salida del aeropuerto lleva a las PRADERAS del castillo (escena 4, id de bloque «castillo»)',
+    praL !== aer && !!praL && praL.id === 'castillo' && DM.state.state === 'castillo',
+    'id=' + (praL && praL.id) + ', state=' + DM.state.state);
+  for (let i = 0; i < 25 && praL.phase !== 'free'; i++) praL.update(0.05);
+  check('las praderas amanecen en modo libre tras ~1 s de luz (sin paneo largo)', praL.phase === 'free', 'phase=' + praL.phase);
+  check('se llega a las praderas junto a su Puerta de entrada (primer tramo de la franja)',
+    praL.free.chars.ximena.x < 400 && praL.free.chars.jose.x < 500,
+    `ximena=${praL.free.chars.ximena.x}, jose=${praL.free.chars.jose.x}`);
+  // Cierre de la cadena: de vuelta en San Ángel (viaje directo
+  // del gancho de depuración), su Puerta de entrada sigue
+  // devolviendo a la plaza en modo libre.
+  DM.debug.travelTo('sanangel');
   for (let i = 0; i < 25 && ang.phase !== 'free'; i++) ang.update(0.05);
-  // Cierre de la cadena: la Puerta de entrada de San Ángel
-  // sigue devolviendo a la plaza en modo libre.
   const SA3 = ang.free.chars[ang.free.active];
   SA3.x = ang.entryDoorX - 10; SA3.y = ang.groundY;
   ang.update(0.05);
   key('Space', true); ang.update(0.016); key('Space', false);
   for (let i = 0; i < 25 && G.scene === ang; i++) ang.update(0.05);
-  check('la Puerta de entrada de San Ángel sigue devolviendo a la plaza en modo libre (cadena completa plaza ⇄ San Ángel ⇄ aeropuerto)',
+  check('la Puerta de entrada de San Ángel sigue devolviendo a la plaza en modo libre (cadena completa plaza ⇄ San Ángel ⇄ aeropuerto ⇄ praderas)',
     G.scene === sc && sc.phase === 'free' && DM.state.state === 'plaza-arrived', 'state=' + DM.state.state + ', phase=' + sc.phase);
   sc.draw(0.016); // de vuelta en la plaza, el dibujo sigue sano
 
@@ -1004,6 +1041,93 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let sa2DrawOk = true;
   for (const p of [0, 1200, 3260]) { sa2.pan = p; try { sa2.draw(0.016); } catch (e) { sa2DrawOk = false; } }
   check('draw() de San Ángel con bolas vivas no explota en ningún punto del paseo (pan 0/1200/3260)', sa2DrawOk);
+  DM.stop();
+
+  console.log('\nN) Escena 4 «Praderas del castillo»: franja dibujada por código, el castillo al final y la cadena de Puertas');
+  // Se re-entra a la cita y se salta directo a las praderas
+  // con el gancho de viajes (la llegada caminando ya quedó
+  // verificada al final de la sección L).
+  DM.start(() => {});
+  DM.debug.travelTo('castillo');
+  const pr = G.scene;
+  for (let i = 0; i < 25 && pr.phase !== 'free'; i++) pr.update(0.05);
+  const PR = DM.debug.PRADERA, PF = pr.free, PX = PF.chars.ximena, PJ = PF.chars.jose;
+  check('se llega a las praderas en modo libre (id de bloque «castillo», estado castillo)',
+    !!pr && pr.id === 'castillo' && pr.phase === 'free' && DM.state.state === 'castillo',
+    'id=' + (pr && pr.id) + ', phase=' + (pr && pr.phase) + ', state=' + DM.state.state);
+  check('la franja de las praderas mide 4350 px (29 s × PACE, el w de su tabla; cámara 0..3710) y sale de DATE_SCENES',
+    pr.worldW === 4350 && pr.worldW === DM.scenes.find((s) => s.id === 'castillo').w && (pr.worldW - 640) === 3710 &&
+    PR.worldW === pr.worldW, 'worldW=' + pr.worldW);
+  check('Puertas de las praderas: entrada en x=90 y la del castillo al final, en x=4250',
+    pr.entryDoorX === 90 && pr.exitDoorX === 4250 && PR.exitDoorX === pr.exitDoorX,
+    `entry=${pr.entryDoorX}, exit=${pr.exitDoorX}`);
+  check('se llega junto a la Puerta de entrada (los personajes parten del primer tramo de la franja)',
+    PX.x < 400 && PJ.x < 500, `ximena=${PX.x}, jose=${PJ.x}`);
+  // La cámara llega al fondo de la franja sin salirse.
+  PX.x = pr.worldW - 100; PX.y = pr.groundY;
+  for (let i = 0; i < 30; i++) pr.update(0.05);
+  check('la cámara se asienta al fondo de la franja (pan > 3300, sin pasar de 3710)', pr.pan > 3300 && pr.pan <= 3710.01, `pan=${pr.pan.toFixed(0)}`);
+  // El castillo grande corona el final (el master mide
+  // 793×1097): con la cámara al fondo, su centro cae en
+  // pantalla junto a la Puerta de salida (pantalla 540), y a
+  // mitad del paseo aún no ha entrado en escena.
+  const cas = PR.castillo, casW = cas.h * 793 / 1097;
+  const casCxFondo = cas.layerCx - 3710 * cas.par;
+  check('el castillo es GRANDE (h 420–470) y corona el final: con la cámara al fondo su centro cae en pantalla, junto a la Puerta de salida',
+    cas.h >= 420 && cas.h <= 470 && casCxFondo > 380 && casCxFondo < 640 && Math.abs(casCxFondo - 540) < 170,
+    `h=${cas.h}, centro al fondo=${casCxFondo.toFixed(0)}`);
+  check('el castillo entra en escena solo en el último tramo (a pan 1200 su borde izquierdo aún no entra en pantalla)',
+    cas.layerCx - 1200 * cas.par - casW / 2 > 640,
+    `borde a pan 1200=${(cas.layerCx - 1200 * cas.par - casW / 2).toFixed(0)}`);
+  check('el castillo lleva humo en 3 chimeneas (fracciones de su caja) y su base se apoya sobre la pradera lejana (baseY 250–275)',
+    Array.isArray(PR.humo) && PR.humo.length === 3 && cas.baseY >= 250 && cas.baseY <= 275,
+    `humo=${PR.humo.length}, baseY=${cas.baseY}`);
+  check('el espantapájaros Cabeza de Nabo está junto a la vereda en la zona media (x 1800–2500) y se DIBUJA por código (drawNabo, sin asset de la película)',
+    PR.naboX >= 1800 && PR.naboX <= 2500 && typeof pr.drawNabo === 'function' && dateSrc.includes('drawNabo'),
+    'naboX=' + PR.naboX);
+  check('las montañas se generan con la cresta determinista (ridgeY: mismo perfil para el mismo x, sin azar por frame)',
+    typeof DM.debug.ridgeY === 'function' && DM.debug.ridgeY(500, 3.1) === DM.debug.ridgeY(500, 3.1) &&
+    DM.debug.ridgeY(500, 3.1) !== DM.debug.ridgeY(900, 3.1));
+  let prDrawOk = true;
+  for (const p of [0, 1200, 2400, 3710]) { pr.pan = p; try { pr.draw(0.016); } catch (e) { prDrawOk = false; } }
+  check('draw() de las praderas no explota en ningún punto del paseo (pan 0/1200/2400/3710)', prDrawOk);
+  // Cadena de vueltas: la Puerta de ENTRADA de las praderas
+  // devuelve al aeropuerto, junto a su Puerta de salida.
+  if (PF.active !== 'ximena') pr.switchActive();
+  PX.x = pr.entryDoorX - 10; PX.y = pr.groundY; pr.pan = 0;
+  pr.update(0.05);
+  check('junto a la Puerta de entrada de las praderas se ofrece cruzarla (nearDoor)', pr.nearDoor === true && pr.nearDoorX === pr.entryDoorX);
+  key('Space', true); pr.update(0.016); key('Space', false);
+  for (let i = 0; i < 25 && G.scene === pr; i++) pr.update(0.05);
+  const ae2 = G.scene;
+  check('la Puerta de entrada de las praderas devuelve al aeropuerto, junto a su Puerta de salida',
+    !!ae2 && ae2.id === 'aero' && DM.state.state === 'aero' &&
+    Math.abs(ae2.free.chars[ae2.free.active].x - ae2.exitDoorX) < 220,
+    'state=' + DM.state.state + ', x=' + (ae2 && ae2.free ? ae2.free.chars[ae2.free.active].x.toFixed(0) : '?'));
+  for (let i = 0; i < 25 && ae2.phase !== 'free'; i++) ae2.update(0.05);
+  // De nuevo a las praderas por la Puerta de salida del
+  // aeropuerto: la cadena es estable en ambos sentidos.
+  const AX3 = ae2.free.chars[ae2.free.active];
+  AX3.x = ae2.exitDoorX - 10; AX3.y = ae2.groundY;
+  ae2.update(0.05);
+  key('Space', true); ae2.update(0.016); key('Space', false);
+  for (let i = 0; i < 25 && G.scene === ae2; i++) ae2.update(0.05);
+  check('la Puerta de salida del aeropuerto vuelve a cruzar a las praderas (la cadena es estable en ambos sentidos)',
+    G.scene === pr && DM.state.state === 'castillo', 'state=' + DM.state.state);
+  for (let i = 0; i < 25 && pr.phase !== 'free'; i++) pr.update(0.05);
+  // …y la Puerta del CASTILLO devuelve, POR AHORA, también al
+  // aeropuerto junto a su salida (marcador hasta que exista
+  // la escena 5, el departamento final).
+  const PX2 = pr.free.chars[pr.free.active];
+  PX2.x = pr.exitDoorX - 10; PX2.y = pr.groundY;
+  pr.update(0.05);
+  check('junto a la Puerta del castillo se ofrece cruzarla (nearDoor)', pr.nearDoor === true && pr.nearDoorX === pr.exitDoorX);
+  key('Space', true); pr.update(0.016); key('Space', false);
+  for (let i = 0; i < 25 && G.scene === pr; i++) pr.update(0.05);
+  check('la Puerta del castillo devuelve (por ahora) al aeropuerto, junto a su salida — marcador hasta la escena 5 (el depa final)',
+    G.scene === ae2 && DM.state.state === 'aero' &&
+    Math.abs(ae2.free.chars[ae2.free.active].x - ae2.exitDoorX) < 220,
+    'state=' + DM.state.state);
   DM.stop();
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
