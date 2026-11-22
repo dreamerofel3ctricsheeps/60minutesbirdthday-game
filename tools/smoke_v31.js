@@ -110,6 +110,15 @@
       el deck que suena), sobre G.sfx (la lee en cada disparo) y
       sobre el audio de La Cita (date.js la consulta y recibe
       applySoundSettings).
+   U) Sonido por la RUTA REAL (bug de Jose, 2026-11-22): el
+      nivel audible de la música vive en un GainNode de
+      WebAudio, no en el.volume del <audio> (que iOS/WebKit
+      ignora por completo, silencio general incluido). La
+      sección abre el panel REAL de Ajustes, dispara los
+      manejadores REALES de sus controles con la música del
+      menú sonando (la llamada exacta de main) y afirma que
+      el nivel baja al esperado y SE MANTIENE tras los ticks
+      de los fades, y que el silencio lo deja en cero fijo.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -141,6 +150,19 @@ function parseButtons(root, html) {
     const cls = /class="([^"]+)"/.exec(attrs); if (cls) b.className = cls[1];
     const did = /data-id="([^"]+)"/.exec(attrs); if (did) b.dataset.id = did[1];
     b.parent = root; root.children.push(b);
+  }
+  // También los <input>: la sección U abre el panel REAL de
+  // Ajustes y necesita encontrar sus deslizadores e interruptor
+  // por id, como hace el navegador (antes el arnés solo parseaba
+  // botones y el panel era inalcanzable para el humo).
+  const re2 = /<input\b([^>]*)>/g;
+  while ((m = re2.exec(html))) {
+    const attrs = m[1], inp = new FakeEl('input');
+    const id = /id="([^"]+)"/.exec(attrs); if (id) inp.id = id[1];
+    const val = /value="([^"]*)"/.exec(attrs); if (val) inp.value = val[1];
+    inp.checked = /\bchecked\b/.test(attrs);
+    inp.type = (/type="([^"]+)"/.exec(attrs) || [])[1] || '';
+    inp.parent = root; root.children.push(inp);
   }
 }
 function queryWithin(root, sel, all) {
@@ -229,7 +251,7 @@ load('data.js');
 load('music.js', (code) => {
   const from = 'current: () => currentName,';
   if (!code.includes(from)) throw new Error('no se encontró G.Music.current en music.js');
-  return code.replace(from, 'current: () => currentName, debugActiveEl: () => (active ? active.el : null),');
+  return code.replace(from, 'current: () => currentName, debugActiveEl: () => (active ? active.el : null), debugActiveGain: () => (active && active.gain ? active.gain.gain.value : null),');
 });
 load('gl3d.js');
 load('world.js');
@@ -243,7 +265,7 @@ load('scenes.js');
 load('game.js', (code) => {
   const from = 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect };';
   if (!code.includes(from)) throw new Error('no se encontró G.debug en game.js');
-  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings };');
+  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings, settingsScreen };');
 });
 
 const G = sandbox.G, Sc = G.Scenes, W = G.World;
@@ -2725,6 +2747,80 @@ const tick = () => new Promise((r) => setImmediate(r));
       && dateT.includes('applySoundSettings: applySongSound'), '');
     check('sonido: la puerta de la cita respeta el silencio general y escala su volumen con la ganancia de efectos',
       dateT.includes('g != null && g <= 0') && dateT.includes('0.9 * (g == null ? 1 : g)'), '');
+  }
+
+  // --- Sección U: el bug de Jose — los controles «no funcionaban» ---
+  // La sección T ejercita la API (applySoundSettings → setUserGain)
+  // pero NUNCA el camino real: el panel de Ajustes con sus
+  // manejadores DOM y la ruta de arranque del título. Y destapó la
+  // causa raíz: el nivel audible vivía SOLO en el.volume del
+  // <audio>, que iOS/WebKit acepta sin que cambie lo que suena
+  // (ni a cero con el silencio general). Ahora music.js enruta
+  // cada deck por WebAudio (MediaElementSource → GainNode) y el
+  // nivel vive en el GainNode. Esta sección lo comprueba por la
+  // ruta REAL: instala un AudioContext falso completo, hace sonar
+  // el menú con la llamada exacta de main() (G.Music.play('menu');
+  // main() en sí no corre en el sandbox por falta de WebGL), abre
+  // el panel REAL de Ajustes y dispara los manejadores REALES de
+  // sus controles (oninput del deslizador, onchange del silencio),
+  // dejando correr los ticks del sistema de fades para afirmar
+  // que el nivel nuevo SE MANTIENE.
+  {
+    console.log('\nU) Sonido — la ruta real de Jose: panel de Ajustes → manejadores DOM → GainNode del deck del menú');
+    const waitMs = (ms) => new Promise((r) => setTimeout(r, ms));
+    const MU = G.Music;
+    // AudioContext falso COMPLETO (sustituye al de la sección T):
+    // con createMediaElementSource para que el enrutado exista.
+    sandbox.AudioContext = class {
+      constructor() { this.state = 'running'; this.destination = {}; }
+      createMediaElementSource() { return { connect: (n) => n }; }
+      createGain() { return { gain: { value: 1 }, connect: (n) => n }; }
+      createOscillator() { return { type: '', frequency: { value: 0 }, connect: (n) => n, start() {}, stop() {} }; }
+      resume() { this.state = 'running'; return Promise.resolve(); }
+    };
+    G.settings.musicVol = 100; G.settings.sfxVol = 100; G.settings.muted = false;
+    G.debug.applySoundSettings();
+    MU.play('menu'); // la llamada exacta con que main() arranca la música del título
+    await waitMs(1150); // el fade de entrada (900 ms) se completa
+    const gain0 = MU.debugActiveGain();
+    check('sonido real: el deck del menú queda ENRUTADO por WebAudio y su nivel vive en el GainNode (0.45 del cue), no en el.volume',
+      gain0 !== null && Math.abs(gain0 - 0.45) < 1e-9 && MU.debugActiveEl().volume === 1,
+      `gain=${gain0} el.volume=${MU.debugActiveEl() && MU.debugActiveEl().volume}`);
+
+    // El panel REAL de Ajustes y los manejadores REALES de sus controles.
+    const panelP = G.debug.settingsScreen();
+    await tick();
+    const inpM = documentFake.querySelector('#smusic');
+    const muteBox = documentFake.querySelector('#smute');
+    check('sonido real: el panel de Ajustes expone el deslizador de Música y el Silencio con sus manejadores cableados',
+      !!inpM && typeof inpM.oninput === 'function' && !!muteBox && typeof muteBox.onchange === 'function', '');
+    inpM.value = '30';
+    inpM.oninput(); // el MISMO manejador que dispara el DOM al arrastrar
+    const gain1 = MU.debugActiveGain();
+    check('sonido real: arrastrar Música al 30% con el manejador del propio control deja el GainNode en 0.45 × 0.3 = 0.135',
+      Math.abs(G.settings.musicVol - 30) < 1e-9 && Math.abs(MU.userGain() - 0.3) < 1e-9 && gain1 !== null && Math.abs(gain1 - 0.135) < 1e-9,
+      `vol=${G.settings.musicVol} gain=${gain1}`);
+    await waitMs(1200); // ticks del sistema de fades: nada debe pisar el nivel
+    const gain1b = MU.debugActiveGain();
+    check('sonido real: el nivel SE MANTIENE tras los ticks de los fades (ningún camino lo recalcula sin la ganancia del jugador)',
+      gain1b !== null && Math.abs(gain1b - 0.135) < 1e-9, `gain=${gain1b}`);
+    muteBox.checked = true;
+    muteBox.onchange({ target: muteBox }); // el MISMO manejador del interruptor
+    const gain2 = MU.debugActiveGain();
+    check('sonido real: el Silencio general (manejador real) lleva el GainNode a cero en vivo',
+      G.settings.muted === true && gain2 === 0, `gain=${gain2}`);
+    await waitMs(1200);
+    check('sonido real: el cero del silencio SE MANTIENE tras los ticks (la música del menú no «revive» sola)',
+      MU.debugActiveGain() === 0, `gain=${MU.debugActiveGain()}`);
+    // Limpieza: ajustes por defecto y panel cerrado.
+    muteBox.checked = false;
+    muteBox.onchange({ target: muteBox });
+    inpM.value = '100';
+    inpM.oninput();
+    const back = documentFake.querySelector('#sback');
+    if (back && back.onclick) back.onclick();
+    await panelP;
+    MU.stop();
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

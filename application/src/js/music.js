@@ -35,6 +35,17 @@
      G.settings.musicVol + el silencio general) y entra por
      G.Music.setUserGain(0..1): multiplica el volumen propio de
      cada cue y se aplica EN VIVO al deck que esté sonando.
+   - El nivel AUDIBLE de cada deck NO se controla con
+     el.volume: en iOS (Safari y Chrome, ambos WebKit) la
+     propiedad volume de un <audio> se acepta pero NO cambia
+     lo que suena — ni siquiera a cero con el silencio
+     general — (bug reportado por Jose, 2026-11-22: los
+     controles de los Ajustes «no funcionaban» en su
+     dispositivo). Cada deck se enruta por WebAudio
+     (MediaElementSource → GainNode → destino) y el nivel
+     vive SOLO en su GainNode, que todos los motores
+     respetan; el.volume queda fijo en 1. Sin WebAudio
+     disponible se cae al control por el.volume de siempre.
    - El easter egg «La Cita» tiene SU canción en date.js: este
      módulo NO la toca. Al entrar a la cita, game.js llama a
      G.Music.stop() y ningún gancho de fase vuelve a disparar
@@ -93,13 +104,63 @@
   // Volumen efectivo de un cue: el suyo propio × el del jugador.
   function targetFor(cue) { return Math.max(0, Math.min(1, cue.volume * userGain)); }
 
+  // ---------- Enrutado WebAudio (el nivel vive en un GainNode) ----------
+  // Ver la nota del encabezado: el.volume no es fiable en iOS.
+  // El contexto es compartido y perezoso; si algo falla, cada
+  // deck queda sin enrutar y setLevel cae a el.volume (el
+  // comportamiento anterior, correcto en escritorio).
+  let actx = null;        // AudioContext compartido
+  let actxFailed = false; // WebAudio presente pero inútil para enrutar: no reintentar
+  function ensureCtx() {
+    if (actx || actxFailed) return actx;
+    const AC = (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) || null;
+    if (!AC) return null; // aún no disponible: se reintenta en el próximo play, sin sellar
+    let ctx = null;
+    try { ctx = new AC(); } catch (e) { actxFailed = true; return null; }
+    if (!ctx || typeof ctx.createMediaElementSource !== 'function' || typeof ctx.createGain !== 'function') { actxFailed = true; return null; }
+    actx = ctx;
+    return actx;
+  }
+  function resumeCtx() {
+    const ctx = ensureCtx();
+    if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+      try { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* tolerante */ }
+    }
+  }
+  // Enruta el elemento de un deck: source → gain → destino.
+  // Idempotente (un elemento solo admite UN MediaElementSource):
+  // si ya tiene gain, no hace nada. Al enrutar, el.volume del
+  // elemento queda fijo en 1 para no aplicar el nivel dos veces
+  // (la salida del elemento alimenta la fuente ya escalada).
+  function routeDeck(d) {
+    if (d.gain) return;
+    const ctx = ensureCtx();
+    if (!ctx) return;
+    try {
+      const src = ctx.createMediaElementSource(d.el);
+      const g = ctx.createGain();
+      g.gain.value = d.level;
+      src.connect(g); g.connect(ctx.destination);
+      d.gain = g;
+      try { d.el.volume = 1; } catch (e) { /* tolerante */ }
+    } catch (e) { d.gain = null; /* sin enrutar: manda el.volume */ }
+  }
+  // ÚNICO punto donde se fija el nivel audible de un deck:
+  // el GainNode si está enrutado; si no, el.volume de siempre.
+  function setLevel(d, v) {
+    d.level = Math.min(1, Math.max(0, isFinite(v) ? v : 0));
+    if (d.gain) { try { d.gain.gain.value = d.level; } catch (e) { /* tolerante */ } }
+    else { try { d.el.volume = d.level; } catch (e) { /* tolerante */ } }
+  }
+
   function makeDeck() {
     let el = null;
     try { el = document.createElement('audio'); } catch (e) { el = null; }
     if (!el) return null;
     el.preload = 'auto';
     el.volume = 0;
-    const d = { el, cue: null, name: null, track: 0, fade: null, wantStart: false };
+    const d = { el, cue: null, name: null, track: 0, fade: null, wantStart: false, level: 0, gain: null };
+    routeDeck(d);
     if (el.addEventListener) {
       // Error de carga/reproducción (p. ej. el MP3 no está en la
       // copia local): se marca el archivo y el juego sigue mudo.
@@ -162,6 +223,7 @@
   function tryPlay(d) {
     if (!d || !d.el || typeof d.el.play !== 'function') return;
     if (pausedByGame) return;
+    resumeCtx(); // un contexto suspendido dejaría el enrutado en silencio
     const t = d.cue && tracksOf(d.cue)[d.track];
     if (t && broken.has(t.file)) return; // archivo ausente: silencio, sin insistir
     try {
@@ -172,12 +234,12 @@
 
   function fadeTo(d, target, done) {
     if (d.fade) { clearInterval(d.fade); d.fade = null; }
-    const el = d.el, steps = Math.max(1, Math.round(FADE_MS / FADE_STEP));
-    const from = isFinite(el.volume) ? el.volume : 0, delta = (target - from) / steps;
+    const steps = Math.max(1, Math.round(FADE_MS / FADE_STEP));
+    const from = d.level, delta = (target - from) / steps;
     let i = 0;
     d.fade = setInterval(() => {
       i++;
-      try { el.volume = Math.min(1, Math.max(0, from + delta * i)); } catch (e) { /* tolerante */ }
+      setLevel(d, from + delta * i);
       if (i >= steps) {
         clearInterval(d.fade); d.fade = null;
         if (done) done();
@@ -199,8 +261,9 @@
     const prev = active;
     next.cue = cue; next.name = name; next.track = 0;
     active = next; currentName = name;
+    routeDeck(next); // por si WebAudio apareció después de crear los decks
     loadTrack(next, cue);
-    next.el.volume = 0;
+    setLevel(next, 0);
     tryPlay(next);
     fadeTo(next, targetFor(cue));
     if (prev && prev !== next) {
@@ -234,13 +297,14 @@
     userGain = isFinite(g) ? Math.max(0, Math.min(1, g)) : 1;
     if (!active || !active.cue || pausedByGame) return;
     if (active.fade) { clearInterval(active.fade); active.fade = null; }
-    try { active.el.volume = targetFor(active.cue); } catch (e) { /* tolerante */ }
+    setLevel(active, targetFor(active.cue));
   }
 
   // Autoplay: el primer gesto del usuario reintenta el cue activo
   // SOLO si un play() fue rechazado (nada de reintentos agresivos).
   if (typeof window !== 'undefined' && window.addEventListener) {
     const onGesture = () => {
+      resumeCtx(); // el gesto también despierta el contexto de WebAudio
       if (!needGesture) return;
       needGesture = false;
       if (active && !pausedByGame) tryPlay(active);
