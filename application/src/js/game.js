@@ -92,6 +92,70 @@
 
   // ---------- Interfaz ----------
   const msgs = $('#msgs'), actions = $('#actions'), overlay = $('#overlay');
+
+  // ---------- Teléfono: aparece SOLO si tiene algo que mostrar ----------
+  // (Pedido de Jose, 2026-11-21: «el chat se esconde o aparece si es
+  // que realmente tiene algo que mostrar, no se debe mantener en
+  // pantalla activa».) Máquina de estados:
+  //   · OCULTO por defecto (clase .ph-off sobre #phone).
+  //   · Contenido nuevo (todo lo que entra por ui.raw: mensajes,
+  //     avisos del sistema, resultados) → APARECE al instante.
+  //   · Decisión pendiente (ui.choose / ui.assign) → APARECE y NO se
+  //     oculta mientras siga pendiente: la historia está bloqueada
+  //     esperándola, así que ocultarla sería un callejón sin salida.
+  //   · Sin decisión pendiente ni fijado a mano, tras PHONE_GRACE_MS
+  //     sin contenido nuevo → se oculta solo.
+  //   · El jugador puede abrirlo/cerrarlo a mano (botón del HUD o la
+  //     × de la cabecera): si lo ABRE a mano queda fijado (no se
+  //     auto-oculta); si lo CIERRA a mano queda silenciado — el
+  //     contenido nuevo no lo reabre, solo suma al contador del
+  //     botón del HUD — hasta que llegue una DECISIÓN (que siempre
+  //     rompe el silencio) o el jugador lo abra de nuevo.
+  // Ningún mensaje se pierde por estar oculto: los posts se pintan
+  // igual en el DOM (la cadena de la historia los espera con los
+  // mismos tiempos de antes) y el teléfono aparece en el mismo
+  // instante en que llega el primero; y ninguna decisión puede
+  // empezar sin mostrarlo, porque ui.choose/ui.assign lo fuerzan.
+  const PHONE_GRACE_MS = 4000; // gracia antes del auto-ocultado
+  const phoneEl = $('#phone'), phoneBadge = $('#phonebadge');
+  const phone = {
+    visible: false, pending: false, pinned: false, muted: false, unread: 0, graceT: null, graceMs: PHONE_GRACE_MS,
+    state() { return { visible: this.visible, pending: this.pending, pinned: this.pinned, muted: this.muted, unread: this.unread }; },
+    paint() {
+      if (phoneEl) phoneEl.classList.toggle('ph-off', !this.visible);
+      if (phoneBadge) {
+        phoneBadge.textContent = this.unread > 0 ? String(this.unread) : '';
+        phoneBadge.style.display = this.unread > 0 ? 'grid' : 'none';
+      }
+    },
+    armGrace() {
+      clearTimeout(this.graceT);
+      if (!this.visible || this.pending || this.pinned) return;
+      this.graceT = setTimeout(() => {
+        // Si al vencer la gracia el juego está en pausa, se rearma:
+        // el teléfono no desaparece debajo del menú de pausa.
+        if (this.pending || this.pinned || G.paused) this.armGrace();
+        else this.hide();
+      }, this.graceMs);
+    },
+    show() { this.visible = true; this.unread = 0; this.paint(); this.armGrace(); },
+    hide() { this.visible = false; clearTimeout(this.graceT); this.paint(); },
+    content() { // llegó algo al chat (ui.raw)
+      if (!this.visible && this.muted) { this.unread++; this.paint(); return; }
+      this.show();
+    },
+    decision(on) { // una decisión del jugador empieza/termina
+      this.pending = !!on;
+      if (on) { this.muted = false; this.show(); clearTimeout(this.graceT); }
+      else this.armGrace();
+      this.paint();
+    },
+    toggle() { // apertura/cierre manual (botón del HUD o ×)
+      if (this.visible) { this.pinned = false; this.muted = true; this.hide(); }
+      else { this.muted = false; this.pinned = true; this.show(); }
+    },
+    reset() { this.pending = false; this.pinned = false; this.muted = false; this.unread = 0; this.hide(); },
+  };
   const ui = (G.ui = {
     fast: false,
     refreshHUD() {
@@ -111,7 +175,7 @@
       recalc();
     },
     scroll() { msgs.scrollTop = msgs.scrollHeight; },
-    raw(html) { const d = el('div', 'row', html); msgs.appendChild(d); ui.scroll(); return d; },
+    raw(html) { const d = el('div', 'row', html); msgs.appendChild(d); ui.scroll(); phone.content(); return d; },
     system(text) { ui.raw(`<div class="sys">${text}</div>`); },
     header(kind, title) { ui.raw(`<div class="evhead"><span>${kind}</span>${title}</div>`); },
     async post(m) {
@@ -136,8 +200,9 @@
     async postAll(list) { for (const m of list) await ui.post(m); ui.fast = false; },
     choose(options, timer) {
       return new Promise((res) => {
+        phone.decision(true); // decisión pendiente: el chat se muestra y NO se oculta hasta resolverla
         actions.innerHTML = ''; let tm = null, left = timer;
-        const finish = (i) => { if (G.practiceMode) return; if (tm) clearInterval(tm); actions.innerHTML = ''; ui.raw(`<div class="mine">${options[i].label}</div>`); res(i); };
+        const finish = (i) => { phone.decision(false); if (G.practiceMode) return; if (tm) clearInterval(tm); actions.innerHTML = ''; ui.raw(`<div class="mine">${options[i].label}</div>`); res(i); };
         if (timer) {
           const bar = el('div', 'tbar', '<i></i>'); actions.appendChild(bar);
           // La cuenta regresiva de la decisión corre con setInterval (reloj
@@ -158,12 +223,13 @@
     // se ofrece el roster completo.
     assign(prompt, info) {
       return new Promise((res) => {
+        phone.decision(true); // asignación pendiente: misma regla que ui.choose
         actions.innerHTML = `<div class="ask">${prompt}</div>`;
         const wrap = el('div', 'cards');
         (S.party.length ? S.party : G.PLAYABLE).forEach((id) => {
           const c = G.CHARS[id], tired = S.tired === id, inf = info(id);
           const b = el('button', 'card', `<img src="${Sp.portrait(id, tired ? 'tired' : null)}" alt=""><b>${c.name}</b><small>${inf.stats}</small>${inf.odds != null ? `<strong class="${inf.odds >= 0.6 ? 'hi' : inf.odds >= 0.35 ? 'mid' : 'lo'}">${Math.round(inf.odds * 100)}%</strong>` : ''}<small class="note">${tired ? 'Descansando (acaba de actuar)' : inf.note || ''}</small>`);
-          b.disabled = tired; b.onclick = () => { actions.innerHTML = ''; ui.raw(`<div class="mine">Va ${c.name}</div>`); res(id); };
+          b.disabled = tired; b.onclick = () => { phone.decision(false); actions.innerHTML = ''; ui.raw(`<div class="mine">Va ${c.name}</div>`); res(id); };
           wrap.appendChild(b);
         });
         actions.appendChild(wrap); ui.scroll();
@@ -177,6 +243,12 @@
       });
     },
   });
+  ui.phone = phone; // la máquina de estados del teléfono (también la ejercita el humo)
+  phone.paint(); // arranca oculto (clase .ph-off) y sin contador
+  const phoneBtn = $('#phonebtn');
+  if (phoneBtn) phoneBtn.onclick = () => phone.toggle();
+  const phoneClose = phoneEl ? phoneEl.querySelector('#phoneclose') : null;
+  if (phoneClose) phoneClose.onclick = () => { if (phone.visible) phone.toggle(); };
   msgs.addEventListener('click', () => (ui.fast = true));
 
   // ---------- Pausa ----------
@@ -257,7 +329,7 @@
   function settingsScreen() {
     return new Promise((res) => {
       menuShow(`<h2><span class="pic pic-gear"><i></i></span>Ajustes</h2>
-        <div class="optrow"><div><b>Controles táctiles</b><small>D-pad y botón de acción en pantalla, para jugar con el dedo en celular o tablet. El teclado sigue funcionando igual, estén activos o no.</small></div>
+        <div class="optrow"><div><b>Controles táctiles</b><small>Joystick circular y botón de acción en pantalla, para jugar con el dedo en celular o tablet: arrastra el joystick en cualquier dirección para moverte (cuanto más lejos del centro, más rápido). El teclado sigue funcionando igual, estén activos o no.</small></div>
           <label class="switch"><input type="checkbox" id="stouch" ${G.settings.touch ? 'checked' : ''}><span class="track"></span></label></div>
         <button class="big alt" id="sback">← Volver</button>`);
       $('#stouch').onchange = (e) => {
@@ -277,11 +349,11 @@
     if (G.paused) showPauseMenu();
   };
 
-  // ---------- Wiring del D-pad y botón de acción táctiles ----------
+  // ---------- Wiring del botón de acción táctil ----------
   // Pointer events (no touchstart/touchend): funcionan igual con un dedo,
-  // un mouse o un lápiz, y cada botón suelta su tecla lógica aunque el
-  // dedo se levante fuera del botón (pointercancel/pointerleave) para que
-  // nunca quede una dirección "trabada" si el dedo se resbala.
+  // un mouse o un lápiz, y el botón suelta su tecla lógica aunque el
+  // dedo se levante fuera (pointercancel/pointerleave) para que nunca
+  // quede "trabada" si el dedo se resbala.
   (function initTouchpad() {
     const pad = $('#touchpad'); if (!pad) return;
     pad.querySelectorAll('.tbtn').forEach((btn) => {
@@ -294,6 +366,53 @@
       btn.addEventListener('pointerleave', up);
       btn.addEventListener('contextmenu', (e) => e.preventDefault());
     });
+  })();
+
+  // ---------- Wiring del joystick circular (reemplaza al D-pad) ----------
+  // Zona circular fija en la esquina inferior izquierda: al arrastrar,
+  // el desplazamiento del dedo desde el centro de la base pasa por la
+  // función pura G.input.joyVector (dirección libre 360° + intensidad
+  // con zona muerta) y el resultado se fija con G.input.joySet, que es
+  // lo que leen TODAS las escenas vía G.input.axis()/held()/hit().
+  // El joystick captura SU pointerId y el botón de acción el suyo:
+  // se pueden usar a la vez con dos dedos (multitáctil real). La
+  // perilla sigue al dedo recortada al interior de la base; al soltar,
+  // el vector vuelve a cero y la perilla al centro.
+  (function initJoystick() {
+    const zone = $('#joystick'); if (!zone) return;
+    const knob = zone.querySelector('.joy-knob');
+    let pid = null;
+    const move = (e) => {
+      const r = zone.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2, rad = r.width / 2;
+      const dx = e.clientX - cx, dy = e.clientY - cy;
+      const v = G.input.joyVector(dx, dy, rad);
+      G.input.joySet(v.x, v.y);
+      if (knob) {
+        const d = Math.hypot(dx, dy), maxT = Math.max(0, rad - knob.offsetWidth / 2);
+        const cl = Math.min(d, maxT), a = d ? Math.atan2(dy, dx) : 0;
+        knob.style.transform = `translate(calc(-50% + ${(Math.cos(a) * cl).toFixed(1)}px), calc(-50% + ${(Math.sin(a) * cl).toFixed(1)}px))`;
+      }
+      zone.classList.toggle('on', v.mag > 0);
+    };
+    const end = (e) => {
+      if (e.pointerId !== pid) return;
+      pid = null;
+      G.input.joySet(0, 0);
+      if (knob) knob.style.transform = 'translate(-50%, -50%)';
+      zone.classList.remove('on');
+    };
+    zone.addEventListener('pointerdown', (e) => {
+      if (pid !== null) return; // ya lo está usando un dedo: el segundo no lo roba
+      pid = e.pointerId;
+      if (zone.setPointerCapture) { try { zone.setPointerCapture(pid); } catch (err) { /* sin captura: pointerup fuera se pierde, pero pointercancel/blur resetean */ } }
+      e.preventDefault();
+      move(e);
+    });
+    zone.addEventListener('pointermove', (e) => { if (e.pointerId === pid) move(e); });
+    zone.addEventListener('pointerup', end);
+    zone.addEventListener('pointercancel', end);
+    zone.addEventListener('contextmenu', (e) => e.preventDefault());
   })();
   window.addEventListener('blur', () => G.input.touchReset());
   window.addEventListener('keydown', (e) => {
@@ -382,6 +501,7 @@
     // Es solo cosmética de 0,6 s; ninguna lógica depende de él.
     setTimeout(() => {
       G.dropTimers(); // la historia no puede resucitar dentro del easter egg
+      phone.reset(); // en la cita el teléfono ni existe (CSS), pero el estado queda limpio
       G.paused = false; document.body.classList.remove('paused');
       pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
       S.phase = 'date';
@@ -391,7 +511,7 @@
     }, 620);
   }
   function enterPractice() {
-    if (!G.practiceMode) { G.practiceMode = true; G.dropTimers(); actions.innerHTML = ''; }
+    if (!G.practiceMode) { G.practiceMode = true; G.dropTimers(); actions.innerHTML = ''; phone.reset(); }
     G.paused = false; document.body.classList.remove('paused');
     pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
     S.phase = 'practice';
