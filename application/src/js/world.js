@@ -61,6 +61,36 @@
     const mag = (n - JOY_DEAD) / (1 - JOY_DEAD);
     return { x: (dx / d) * mag, y: (dy / d) * mag, mag };
   }
+  // ---------- Controles táctiles en los márgenes del letterbox ----------
+  // Pedido de Jose (2026-11-22, con captura de su teléfono en
+  // horizontal): «en los casos donde la escena queda en el centro
+  // hay espacio suficiente para poner los joysticks en esos
+  // espacios libres». Cuando el escenario 16:9 queda centrado y
+  // sobran franjas laterales (pantalla más ancha que 16:9), el
+  // joystick y el botón de acción se mudan a esas franjas en vez de
+  // tapar las esquinas de la escena (el minimapa, abajo a la
+  // izquierda, era la víctima habitual).
+  // touchLayout es una función PURA y testeable, como joyVector:
+  // recibe las franjas libres a cada lado del escenario (px, ya
+  // medidas del layout real por el cableado del DOM en game.js), el
+  // ancho del escenario y el tamaño de cada control, y devuelve el
+  // `left` que debe llevar cada control RELATIVO al #touchpad (que
+  // el cableado calca sobre el rect del escenario, así que la
+  // franja izquierda vive en coordenadas negativas y la derecha
+  // pasado el ancho del escenario). Cada lado se decide POR
+  // SEPARADO: una franja alcanza si cabe el control más un hueco
+  // mínimo (TOUCH_MARGIN_MIN) — así una franja asimétrica (p. ej.
+  // por el safe-area de un solo lado) mueve solo el control de su
+  // lado. Si la franja no alcanza, el valor es null y el control se
+  // queda superpuesto sobre la escena, como siempre.
+  const TOUCH_MARGIN_MIN = 16;
+  function touchLayout(o) {
+    const res = { joyLeft: null, actLeft: null };
+    if (!o || !(o.joyW > 0) || !(o.btnW > 0) || !(o.stageW > 0)) return res;
+    if (o.fringeL >= o.joyW + TOUCH_MARGIN_MIN) res.joyLeft = -(o.fringeL + o.joyW) / 2;
+    if (o.fringeR >= o.btnW + TOUCH_MARGIN_MIN) res.actLeft = o.stageW + (o.fringeR - o.btnW) / 2;
+    return res;
+  }
   let joyVec = { x: 0, y: 0, mag: 0 };
   const joyDirs = { left: false, right: false, up: false, down: false };
   G.input = {
@@ -110,6 +140,8 @@
     joyVector,
     JOY_DEAD,
     JOY_AXIS,
+    touchLayout,
+    TOUCH_MARGIN_MIN,
   };
 
   // ---------- Geometría lógica (x, y≡z) ----------

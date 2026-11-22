@@ -26,13 +26,18 @@
         <div id="fade"></div>
         <div id="overlay"></div>
         <div id="pauseov"></div>
-        <div id="touchpad">
-          <div id="joystick" role="application" aria-label="Joystick: arrastra en cualquier dirección para moverte">
-            <div class="joy-base"></div>
-            <div class="joy-knob"></div>
-          </div>
-          <button class="tbtn taction" data-k="action" aria-label="Acción">●</button>
+      </div>
+      <!-- La capa táctil vive FUERA del escenario (hija de #stagewrap):
+           el cableado de game.js la calca sobre el rect del escenario
+           y, cuando el letterbox deja franjas laterales anchas, muda
+           el joystick y el botón de acción a esas franjas; dentro del
+           escenario quedarían recortados por su overflow:hidden. -->
+      <div id="touchpad">
+        <div id="joystick" role="application" aria-label="Joystick: arrastra en cualquier dirección para moverte">
+          <div class="joy-base"></div>
+          <div class="joy-knob"></div>
         </div>
+        <button class="tbtn taction" data-k="action" aria-label="Acción">●</button>
       </div>
       <div id="inv" aria-label="Inventario"></div>
     </section>

@@ -2320,6 +2320,34 @@ const tick = () => new Promise((r) => setImmediate(r));
       && cssTxt.includes('env(safe-area-inset-left)') && cssTxt.includes('env(safe-area-inset-right)'), '');
     check('móvil: el escenario se mantiene 16:9 con letterbox (aspect-ratio; la imagen nunca se estira)',
       cssTxt.includes('aspect-ratio: 16 / 9'), '');
+    // --- Controles en los márgenes del letterbox (pedido de Jose, 2026-11-22) ---
+    // Función pura: cada lado se decide por separado; la franja
+    // alcanza si cabe el control + TOUCH_MARGIN_MIN (16px).
+    const layWide = inp.touchLayout({ fringeL: 200, fringeR: 200, stageW: 800, joyW: 148, btnW: 78 });
+    check('márgenes: con franjas anchas, el joystick queda CENTRADO en la franja izquierda (left relativo a la capa = −(franja+base)/2)',
+      near(layWide.joyLeft, -(200 + 148) / 2) && near(layWide.joyLeft + 148 / 2, -200 / 2), JSON.stringify(layWide));
+    check('márgenes: con franjas anchas, el botón de acción queda CENTRADO en la franja derecha (pasado el ancho del escenario)',
+      near(layWide.actLeft, 800 + (200 - 78) / 2) && near(layWide.actLeft + 78 / 2, 800 + 200 / 2), JSON.stringify(layWide));
+    const layNarrow = inp.touchLayout({ fringeL: 100, fringeR: 50, stageW: 800, joyW: 148, btnW: 78 });
+    check('márgenes: franjas que no alcanzan (100 < 148+16 y 50 < 78+16) = controles superpuestos como siempre (null)',
+      layNarrow.joyLeft === null && layNarrow.actLeft === null, JSON.stringify(layNarrow));
+    const layAsym = inp.touchLayout({ fringeL: 164, fringeR: 93, stageW: 800, joyW: 148, btnW: 78 });
+    check('márgenes: franja asimétrica — la izquierda justo en el umbral (164 = 148+16) mueve SOLO el joystick; la derecha a 1px del umbral no mueve el botón',
+      near(layAsym.joyLeft, -(164 + 148) / 2) && layAsym.actLeft === null, JSON.stringify(layAsym));
+    const layBad = inp.touchLayout({ fringeL: 300, fringeR: 300, stageW: 800, joyW: 0, btnW: 78 });
+    check('márgenes: tamaños inválidos (control sin medir) = sin mudanza (null, sin NaN)',
+      layBad.joyLeft === null && layBad.actLeft === null, JSON.stringify(layBad));
+    check('márgenes: el umbral es la constante documentada TOUCH_MARGIN_MIN = 16',
+      inp.TOUCH_MARGIN_MIN === 16, String(inp.TOUCH_MARGIN_MIN));
+    // --- Fuente: la capa vive fuera del escenario y el cableado la calca y la muda ---
+    const htmlNoComments = htmlTxt.replace(/<!--[\s\S]*?-->/g, '');
+    check('márgenes: la capa táctil es hija de #stagewrap (fuera de #stage: su overflow:hidden no puede recortar los controles en las franjas)',
+      /id="pauseov"><\/div>\s*<\/div>\s*<div id="touchpad">/.test(htmlNoComments), '');
+    check('márgenes: #stagewrap es el ancla (position:relative) y la ocultación con modal mira dentro del escenario con :has()',
+      cssTxt.includes('#stagewrap { position: relative;') && cssTxt.includes('#stage:has(> #overlay.show) ~ #touchpad'), '');
+    check('márgenes: el cableado calca la capa sobre el rect del escenario y recalcula con ResizeObserver + resize/orientación',
+      gameTxtO.includes('initTouchLayout') && gameTxtO.includes('G.input.touchLayout') && gameTxtO.includes('getBoundingClientRect')
+      && gameTxtO.includes('ResizeObserver') && gameTxtO.includes("addEventListener('orientationchange'") && gameTxtO.includes('G.touchLayoutRefresh'), '');
   }
   // --- Chat: máquina de estados (con la gracia acortada para la prueba) ---
   {
