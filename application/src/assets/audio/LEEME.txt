@@ -27,6 +27,8 @@ estos 5 archivos MP3, con ESTOS nombres exactos:
 
     Quarter_Slot_Swagger.mp3
         - Recolección (los 60 segundos): segmento 0:25–1:26, en loop.
+        - Minijuegos y duelos (de la historia y de práctica): el
+          mismo segmento, en loop, mientras dura el duelo.
 
     Before_The_Strike.mp3
         - Llegada de Ximena y toda escena donde ella sea la amenaza:
@@ -35,8 +37,11 @@ estos 5 archivos MP3, con ESTOS nombres exactos:
           (es el remate que suena en la pantalla del final).
 
     The_Last_Life.mp3
-        - Gestión (toda la noche): pista completa, en rotación con
+        - Gestión: pista completa, en rotación con
           Gold_Plated_Strut.mp3 (una tras otra, en loop de playlist).
+          Ojo: la gestión suena SOLO en la escena de casa mientras se
+          interactúa con el chat, entre duelos; dentro de los
+          minijuegos suena Quarter_Slot_Swagger.mp3 (ver arriba).
 
     Controller_Down.mp3
         - Partida perdida (final «LA RUINA»): pista completa, sin loop.

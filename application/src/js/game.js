@@ -608,6 +608,33 @@
       $('#mexit').onclick = () => res('exit');
     });
   }
+  // ---------- Música de los minijuegos (corrección de Jose, 2026-11-22) ----------
+  // La GESTIÓN (playlist The_Last_Life + Gold_Plated_Strut) suena SOLO
+  // en la escena de gestión/casa: la interacción con el chat entre
+  // duelos. TODOS los minijuegos y duelos sueltos — de la historia y
+  // del menú de práctica — suenan con el cue de la RECOLECCIÓN
+  // (Quarter_Slot_Swagger 0:25–1:26, en loop). Al entrar se recuerda
+  // el cue activo y al salir se repone: en la historia vuelve la
+  // gestión; en práctica vuelve el cue del contexto (menú/título o
+  // gestión). Si el cue anterior ya era 'collect', G.Music.play lo
+  // deja seguir sin reiniciar la pista.
+  // EXCEPCIÓN: las cadenas de finales alternativos (finalj1407b /
+  // finalleyendas → SpaceEndingScene / LegendsEndingScene) NO son
+  // minijuegos sueltos: su música no se toca aquí (devuelven
+  // undefined = «sin gancho»). Y «La Cita» va aparte: date.js intacto.
+  const ENDING_CHAIN_GAMES = ['finalj1407b', 'finalleyendas'];
+  function enterMinigameMusic(gameId) {
+    if (!G.Music || ENDING_CHAIN_GAMES.includes(gameId)) return undefined;
+    const prev = G.Music.current();
+    G.Music.play('collect');
+    return prev; // puede ser null: al salir se detiene la música
+  }
+  function exitMinigameMusic(prev) {
+    if (prev === undefined || !G.Music) return; // cadena de final: no tocar
+    if (prev) G.Music.play(prev);
+    else G.Music.stop();
+  }
+
   async function practiceDuel(id) {
     const ev = G.EVENTS[id], mg = MG[ev.game];
     const who = await pickCharScreen(ev);
@@ -618,9 +645,11 @@
       mg.setup();
       menuHide();
       G.captureKeys = true; $('#phone').classList.add('dim');
+      const prevMusic = enterMinigameMusic(ev.game); // el duelo suena a recolección
       const res = await new Promise((r) => G.setScene(new (mg.Scene())(who, r)));
       G.captureKeys = false; $('#phone').classList.remove('dim');
       G.setScene(G.home);
+      exitMinigameMusic(prevMusic); // vuelve el cue del contexto (menú/gestión)
       const act = await resultScreen(ev, res);
       if (act === 'again') continue;
       if (act === 'exit') { location.href = location.pathname; return; }
@@ -832,13 +861,14 @@
     await ui.modal(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${bossImg}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
       <h2>${evShow.title}</h2>${variant ? '<p class="goal">Sorteo de cactus: esta partida toca la variante «' + (variant === 'cactus2' ? 'Cactus en carrera' : 'Cactus rodantes') + '».</p>' : ''}<p>${evShow.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${evShow.goal}</p>`, '¡EMPEZAR!');
     G.captureKeys = true; $('#phone').classList.add('dim');
+    const prevMusic = enterMinigameMusic(ev.game); // el duelo suena a recolección
     const res = await new Promise((r) => G.setScene(new (mg.Scene())(who, r)));
     G.captureKeys = false; $('#phone').classList.remove('dim');
     G.setScene(G.home);
-    // Al volver a casa tras un duelo de la HISTORIA la música no cambia:
-    // se reafirma la gestión SOLO si ya era el cue activo (en práctica
-    // suelta la música sigue siendo la que venía del menú/gestión).
-    if (G.Music && G.Music.current() === 'gestion') G.Music.play('gestion');
+    // Al volver a casa tras un duelo de la HISTORIA se repone el cue
+    // que sonaba antes del duelo: la gestión (la playlist queda solo
+    // para la escena de casa/chat, entre duelos).
+    exitMinigameMusic(prevMusic);
     S.duels.push({ game: ev.game, boss: ev.boss, win: res.win, ...(variant ? { variant } : {}) });
     ui.raw(`<div class="roll ${res.win === 'win' ? 'good' : res.win === 'tie' ? 'mid' : 'bad'}">${`<img class="res-ico" src="assets/icons/${res.win === 'win' ? 'trofeo' : res.win === 'tie' ? 'empate' : 'derrota'}.png" alt="">`} ${res.win === 'win' ? `VENCISTE A ${boss.name.toUpperCase()}` : res.win === 'tie' ? 'EMPATE' : `GANÓ ${boss.name.toUpperCase()}`}</div>`);
     const actor = G.home.actor(who); if (actor) { actor.expr = res.win === 'win' ? 'happy' : 'surprised'; actor.hop(160); G.after(4, () => (actor.expr = null)); }

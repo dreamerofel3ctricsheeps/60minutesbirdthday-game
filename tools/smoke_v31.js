@@ -2356,6 +2356,26 @@ const tick = () => new Promise((r) => setImmediate(r));
     const iData = htmlQ.indexOf('js/data.js'), iMusic = htmlQ.indexOf('js/music.js'), iGame = htmlQ.indexOf('js/game.js');
     check('música: index.html carga js/music.js DESPUÉS de data.js y ANTES de game.js',
       iData >= 0 && iMusic > iData && iGame > iMusic, `data=${iData} music=${iMusic} game=${iGame}`);
+    // Corrección de Jose (2026-11-22): la gestión suena SOLO en la
+    // escena de casa/chat; los minijuegos/duelos sueltos (historia y
+    // práctica) suenan con el cue de la recolección y al salir se
+    // repone el cue anterior. Las cadenas de finales alternativos
+    // (finalj1407b/finalleyendas) quedan fuera del gancho.
+    const gameQ = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'js', 'game.js'), 'utf8');
+    const iEnter = gameQ.indexOf('function enterMinigameMusic'), iExit = gameQ.indexOf('function exitMinigameMusic');
+    const enterBody = iEnter >= 0 ? gameQ.slice(iEnter, iExit > iEnter ? iExit : iEnter + 600) : '';
+    const exitBody = iExit >= 0 ? gameQ.slice(iExit, iExit + 400) : '';
+    check('música: enterMinigameMusic recuerda el cue activo y dispara collect, salvo en las cadenas de finales alternativos',
+      iEnter >= 0 && enterBody.includes("ENDING_CHAIN_GAMES.includes(gameId)") && enterBody.includes('G.Music.current()')
+      && enterBody.includes("G.Music.play('collect')") && gameQ.includes("const ENDING_CHAIN_GAMES = ['finalj1407b', 'finalleyendas']"), enterBody.slice(0, 140));
+    check('música: exitMinigameMusic repone el cue anterior (o detiene si no sonaba nada) y no toca las cadenas (undefined)',
+      iExit >= 0 && exitBody.includes('prev === undefined') && exitBody.includes('G.Music.play(prev)') && exitBody.includes('G.Music.stop()'), exitBody.slice(0, 140));
+    const countCalls = (needle) => gameQ.split(needle).length - 1;
+    check('música: AMBOS runners de minijuegos (historia y práctica) entran con enterMinigameMusic y salen con exitMinigameMusic',
+      countCalls('enterMinigameMusic(ev.game)') === 2 && countCalls('exitMinigameMusic(prevMusic)') === 2,
+      `enter=${countCalls('enterMinigameMusic(ev.game)')} exit=${countCalls('exitMinigameMusic(prevMusic)')}`);
+    check('música: ya NO queda la vieja reafirmación de gestión al volver de un duelo (la gestión es solo casa/chat)',
+      !gameQ.includes("G.Music.current() === 'gestion'"), '');
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

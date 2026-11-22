@@ -35,12 +35,19 @@
      módulo NO la toca. Al entrar a la cita, game.js llama a
      G.Music.stop() y ningún gancho de fase vuelve a disparar
      cues mientras S.phase === 'date'.
-   - Práctica/minijuegos sueltos: la música NO cambia (sigue la
-     del menú o la de gestión). Los duelos de la historia tampoco
-     cambian de cue: al volver a casa se REAFIRMA 'gestion' solo
-     si ya era el cue activo. Ni siquiera los duelos contra
-     Ximena existen como tales (ella es amenaza en 'arrival' y
-     en la revelación, que sí llevan 'threat').
+   - Gestión SOLO en la escena de casa/chat (corrección de Jose,
+     2026-11-22): la playlist suena entre duelos, mientras se
+     interactúa con el chat. TODOS los minijuegos/duelos sueltos
+     — de la historia y del menú de práctica — cambian al cue
+     'collect' (el audio de la recolección) al entrar, y al salir
+     se repone el cue que sonaba antes (gestión en la historia;
+     menú o gestión en práctica). El cableado vive en game.js
+     (enterMinigameMusic/exitMinigameMusic). EXCEPCIÓN: las
+     cadenas de finales alternativos (SpaceEndingScene /
+     LegendsEndingScene) no son minijuegos sueltos y su música
+     no se toca. Ni siquiera los duelos contra Ximena existen
+     como tales (ella es amenaza en 'arrival' y en la revelación,
+     que sí llevan 'threat').
    ============================================================ */
 (function () {
   'use strict';
