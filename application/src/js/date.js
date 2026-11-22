@@ -105,23 +105,65 @@
     scene: null, plazaScene: null, angelScene: null,
     arrived: false, joseJoined: false,
     clockRunning: false, factor: 1, tap: false,
+    muted: false, // preferencia de silencio del botón #dateMuteBtn (persiste entre escenas y reingresos de la sesión)
   };
 
   // ---------- Audio: la canción (fuera de git) ----------
+  // El archivo de Jose (and-i-love-her.ogg) trae ~4 s de SILENCIO
+  // al inicio antes de que entre la música. AUDIO_SKIP es ese
+  // silencio: al arrancar la canción se salta a esa posición y
+  // el reloj de la cita (dateNow, tabla DATE_SCENES 0..149 s)
+  // cuenta desde ahí, alineado con el contenido musical real.
+  const AUDIO_SKIP = 4;
   let song = null, songOk = false;
   let fbStart = 0, fbElapsed = 0, fbRunning = false;
+  // El salto se aplica SOLO al arrancar (startClock): seekSong()
+  // hace el intento inmediato y, si el navegador lo ignoró porque
+  // el metadata aún no estaba listo, reapplySkip() lo re-aplica
+  // UNA sola vez cuando el audio avise (loadedmetadata/canplay).
+  // La pausa (setPaused) NUNCA vuelve a saltar al reanudar.
+  let skipArmed = false, skipReapplied = false;
+  // Salto efectivo: si el archivo durara MENOS que el silencio
+  // (duration <= AUDIO_SKIP), no hay nada que saltar ni que
+  // descontar del reloj (y el factor queda en 1).
+  function skipOffset() {
+    if (song && isFinite(song.duration) && song.duration > 0 && song.duration <= AUDIO_SKIP) return 0;
+    return AUDIO_SKIP;
+  }
+  function seekSong() {
+    if (!song || !skipOffset()) return;
+    try { song.currentTime = AUDIO_SKIP; } catch (e) { /* sin metadata aún: lo cubre reapplySkip */ }
+  }
+  function reapplySkip() {
+    if (!skipArmed || skipReapplied) return;
+    skipReapplied = true; // una sola vez por arranque, pase lo que pase
+    // Solo se toca la posición si la canción sigue ANTES del
+    // punto de salto (si el seek del arranque sí cuajó, ya va
+    // por delante y no se le mueve nada).
+    if (song && isFinite(song.currentTime) && song.currentTime < AUDIO_SKIP - 0.05) seekSong();
+  }
+  function onSongMetadata() {
+    if (!song) return;
+    if (isFinite(song.duration) && song.duration > 0) {
+      songOk = true;
+      // El reescalado de la tabla se calcula sobre la duración
+      // ÚTIL (sin el silencio inicial): (duration − SKIP) / 149.
+      D.factor = song.duration > AUDIO_SKIP ? (song.duration - AUDIO_SKIP) / 149 : 1;
+    }
+    reapplySkip();
+  }
   function createSong() {
     if (song) return song;
     try {
       song = document.createElement('audio');
       song.preload = 'auto';
+      song.muted = D.muted; // la preferencia de silencio de la sesión manda desde el primer frame
       const s1 = document.createElement('source'); s1.src = 'assets/audio/and-i-love-her.ogg'; s1.type = 'audio/ogg';
       const s2 = document.createElement('source'); s2.src = 'assets/audio/and-i-love-her.mp3'; s2.type = 'audio/mpeg';
       song.appendChild(s1); song.appendChild(s2);
       if (song.addEventListener) {
-        song.addEventListener('loadedmetadata', () => {
-          if (isFinite(song.duration) && song.duration > 0) { songOk = true; D.factor = song.duration / 149; }
-        });
+        song.addEventListener('loadedmetadata', onSongMetadata);
+        song.addEventListener('canplay', reapplySkip);
         song.addEventListener('error', () => { songOk = false; }, true);
       }
     } catch (e) { song = null; }
@@ -130,13 +172,18 @@
   function startClock() {
     D.clockRunning = true;
     fbElapsed = 0; fbRunning = true; fbStart = performance.now();
+    skipArmed = true; skipReapplied = false; // el salto es de ESTE arranque
+    seekSong(); // intento inmediato: la canción parte 4 s adelante
     if (song && typeof song.play === 'function') {
       try { const p = song.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* sin audio: manda el respaldo */ }
     }
   }
   function dateNow() {
     if (!D.clockRunning) return 0;
-    if (songOk && song && isFinite(song.currentTime)) return song.currentTime;
+    // Con audio manda la canción, pero el tiempo devuelto es el
+    // DE LA CITA: se descuenta el silencio saltado para que la
+    // tabla DATE_SCENES siga sincronizada con la música real.
+    if (songOk && song && isFinite(song.currentTime)) return Math.max(0, song.currentTime - skipOffset());
     if (!fbRunning) return fbElapsed;
     return fbElapsed + (performance.now() - fbStart) / 1000;
   }
@@ -155,6 +202,59 @@
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && D.active && G.setPaused && !G.paused) G.setPaused(true);
     });
+  }
+
+  // ---------- Botón de silencio (#dateMuteBtn) ----------
+  // Botón DOM (no canvas) en la esquina superior derecha de la
+  // pantalla de las escenas de caminata, creado por el propio
+  // modo y visible SOLO con body.date-mode (las reglas viven en
+  // css/style.css, junto a las del HUD oculto). El pictograma es
+  // SVG inline (altavoz con ondas / altavoz con aspa): la
+  // guardia de iconografía del proyecto prohíbe emojis en la UI.
+  // Su clic NO alimenta el input del juego: el listener táctil
+  // del modo escucha sobre #cv y el botón vive fuera del canvas,
+  // y además corta la propagación de sus propios eventos.
+  const MUTE_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/>'
+    + '<path class="wv" d="M15.5 8.5a5 5 0 0 1 0 7"/><path class="wv" d="M18.4 6a9.2 9.2 0 0 1 0 12"/>'
+    + '<line class="sl" x1="16" y1="9.5" x2="21.5" y2="15"/><line class="sl" x1="21.5" y1="9.5" x2="16" y2="15"/></svg>';
+  let muteBtn = null;
+  function syncMuteBtn() {
+    if (!muteBtn) return;
+    muteBtn.classList.toggle('muted', D.muted);
+    const lbl = D.muted ? 'Activar sonido' : 'Silenciar';
+    muteBtn.title = lbl;
+    muteBtn.ariaLabel = lbl;
+    if (typeof muteBtn.setAttribute === 'function') muteBtn.setAttribute('aria-label', lbl);
+  }
+  function toggleMute() {
+    D.muted = !D.muted;
+    if (song) song.muted = D.muted;
+    syncMuteBtn();
+  }
+  function ensureMuteBtn() {
+    if (muteBtn) { syncMuteBtn(); return muteBtn; }
+    try {
+      const b = document.createElement('button');
+      b.id = 'dateMuteBtn';
+      b.type = 'button';
+      b.innerHTML = MUTE_SVG;
+      b.onclick = (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        toggleMute();
+        if (b.blur) b.blur(); // que ESPACIO (acción del juego) no lo vuelva a disparar por foco
+      };
+      if (b.addEventListener) {
+        const cut = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
+        b.addEventListener('pointerdown', cut);
+        b.addEventListener('click', cut);
+      }
+      const host = $('#stage') || document.body;
+      if (host && host.appendChild) host.appendChild(b);
+      muteBtn = b;
+      syncMuteBtn();
+    } catch (e) { muteBtn = null; /* sin DOM de botones: el modo sigue, solo sin botón */ }
+    return muteBtn;
   }
 
   // ---------- Entrada táctil: arrastre sobre el canvas ----------
@@ -381,6 +481,14 @@
   // escucha por su cuenta y solo actúa en la fase 'free'.
   try {
     window.addEventListener('keydown', (e) => {
+      // M = silencio de la canción (el mismo gesto que el botón
+      // #dateMuteBtn), solo con el modo cita activo y sin robar
+      // la tecla cuando se escribe en un campo (p. ej. el código).
+      if (e.code === 'KeyM' && D.active) {
+        if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName || '')) return;
+        toggleMute();
+        return;
+      }
       if (e.code === 'Tab' && D.active && D.scene && D.scene.phase === 'free') {
         if (e.preventDefault) e.preventDefault();
         D.scene.switchActive();
@@ -1083,6 +1191,7 @@
   // ---------- API del modo ----------
   function start(onDone) {
     createSong();
+    ensureMuteBtn(); // el botón de silencio vive con el modo (visible solo con body.date-mode)
     D.active = true; D.state = 'depa'; D.arrived = false; D.joseJoined = false; D.clockRunning = false;
     if (G.S) G.S.phase = 'date';
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.add('date-mode');
@@ -1092,6 +1201,7 @@
   }
   function stop() {
     D.active = false; D.state = 'idle'; D.clockRunning = false; fbRunning = false;
+    skipArmed = false; // sin arranque en curso: el metadata tardío ya no debe saltar nada
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('date-mode');
     W.closet.target = 0; W.xDoorOpen = false;
@@ -1106,6 +1216,10 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, candleGlow, travelTo },
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, candleGlow, travelTo,
+      // Ganchos del audio para el humo (sección K): permiten
+      // simular el metadata del <audio> falso y ejercitar el
+      // salto del silencio inicial y el botón de silencio.
+      AUDIO_SKIP, getSong: () => song, onSongMetadata, startClock, toggleMute },
   };
 })();

@@ -33,6 +33,14 @@
       con Chuy camina a la izquierda una sola vez, las velas
       parpadean, la Puerta del árbol devuelve a la plaza, y la
       carpeta sanangel/ queda solo-local (.gitignore + FUENTES).
+   K) Audio (pedidos de Jose): el archivo de la canción trae
+      ~4 s de silencio inicial → AUDIO_SKIP=4: al arrancar se
+      salta a esa posición (con re-aplicación ÚNICA si el
+      metadata llega tarde), dateNow() descuenta el salto y el
+      factor usa la duración útil (duration−4)/149; la pausa NO
+      re-salta al reanudar. Y el botón de silencio #dateMuteBtn:
+      existe con el modo activo, clic y tecla M alternan
+      song.muted/D.muted, y desaparece con body.date-mode.
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -468,6 +476,66 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     fuentes.includes('sanangel/') && fuentes.includes('Libro de la Vida'));
   check('date.js referencia los recortes de San Ángel y los dibuja solo si cargaron (imgOk)',
     ['sanangel/pileta.png', 'sanangel/arbol.png', 'sanangel/manolo.png', 'sanangel/maria.png', 'sanangel/chuy.png', 'sanangel/vela-a.png', 'sanangel/casas-full.png'].every((f) => dateSrc.includes(f)) && dateSrc.includes('imgOk(saPileta)'));
+
+  console.log('\nK) Audio: salto del silencio inicial (AUDIO_SKIP) y botón de silencio');
+  // El <audio> del harness es un FakeEl: play/pause no existen
+  // (el código los guarda con typeof) y sus eventos no se
+  // disparan solos; el metadata se simula con el gancho debug
+  // onSongMetadata(), la MISMA función que escucha el navegador.
+  const songEl = DM.debug.getSong();
+  const cssSrc = fs.readFileSync(path.join(SRC, '..', 'css', 'style.css'), 'utf8');
+  check('AUDIO_SKIP vale 4 (el silencio inicial del archivo de Jose)', DM.debug.AUDIO_SKIP === 4, 'AUDIO_SKIP=' + DM.debug.AUDIO_SKIP);
+  check('el modo creó su elemento de audio', !!songEl);
+  // (b) Metadata simulada con duración 153: el factor se calcula
+  // sobre la duración ÚTIL: (153 − 4)/149 = 1.
+  songEl.duration = 153; songEl.currentTime = 0;
+  DM.debug.onSongMetadata();
+  check('el factor usa la duración útil (duration − AUDIO_SKIP)/149',
+    Math.abs(DM.state.factor - (153 - DM.debug.AUDIO_SKIP) / 149) < 1e-9, 'factor=' + DM.state.factor);
+  // (a) El arranque fija la posición en AUDIO_SKIP…
+  DM.debug.startClock();
+  check('al arrancar la canción, la posición salta a AUDIO_SKIP (4 s)', songEl.currentTime === 4, 'currentTime=' + songEl.currentTime);
+  // …y dateNow() devuelve el tiempo DE LA CITA (sin el silencio).
+  songEl.currentTime = 10;
+  check('dateNow() descuenta el salto: currentTime 10 → cita 6', DM.dateNow() === 6, 'dateNow=' + DM.dateNow());
+  // La re-aplicación ÚNICA: si el navegador ignoró el seek del
+  // arranque (la posición quedó casi en 0), el aviso de metadata
+  // lo re-aplica una vez; un segundo aviso ya no toca la posición.
+  songEl.currentTime = 0.4;
+  DM.debug.onSongMetadata();
+  check('si el salto se perdió al dar play, el metadata lo re-aplica una vez', songEl.currentTime === 4, 'currentTime=' + songEl.currentTime);
+  songEl.currentTime = 30;
+  DM.debug.onSongMetadata();
+  check('la re-aplicación es ÚNICA: un segundo metadata no vuelve a saltar', songEl.currentTime === 30, 'currentTime=' + songEl.currentTime);
+  // (c) La pausa congela y reanuda SIN re-aplicar el salto.
+  DM.setPaused(true); DM.setPaused(false);
+  check('reanudar desde la pausa NO re-aplica el salto', songEl.currentTime === 30, 'currentTime=' + songEl.currentTime);
+  // (d) El botón de silencio: existe con el modo activo, su clic
+  // y la tecla M alternan el silencio en ambos sentidos, y su
+  // visibilidad cuelga de body.date-mode (CSS + clase del body).
+  const muteBtn = documentFake.querySelector('#dateMuteBtn');
+  check('el botón #dateMuteBtn existe en el DOM con el modo activo', !!muteBtn);
+  check('el body lleva date-mode mientras el modo está activo', documentFake.body.classList.contains('date-mode'));
+  check('el botón arranca «con sonido» (sin .muted, title/aria «Silenciar»)',
+    !!muteBtn && !muteBtn.classList.contains('muted') && muteBtn.title === 'Silenciar' && DM.state.muted === false);
+  muteBtn.onclick();
+  check('un clic silencia: song.muted y D.muted en true, clase .muted y aria «Activar sonido»',
+    songEl.muted === true && DM.state.muted === true && muteBtn.classList.contains('muted') && muteBtn.title === 'Activar sonido');
+  muteBtn.onclick();
+  check('otro clic devuelve el sonido (ambos estados se limpian)',
+    songEl.muted === false && DM.state.muted === false && !muteBtn.classList.contains('muted') && muteBtn.title === 'Silenciar');
+  key('KeyM', true); key('KeyM', false);
+  check('la tecla M alterna el silencio igual que el botón', DM.state.muted === true && songEl.muted === true && muteBtn.classList.contains('muted'));
+  key('KeyM', true); key('KeyM', false);
+  check('M otra vez lo desactiva', DM.state.muted === false && songEl.muted === false);
+  check('el CSS lo oculta por defecto y lo muestra solo con body.date-mode (sobre el stage, esquina superior derecha)',
+    /#dateMuteBtn\s*\{[^}]*display:\s*none/.test(cssSrc) && cssSrc.includes('body.date-mode #dateMuteBtn') && cssSrc.includes('#dateMuteBtn.muted'));
+  check('el pictograma del botón es SVG (ondas/aspa), sin emojis en date.js',
+    dateSrc.includes('id = \'dateMuteBtn\'') || dateSrc.includes("b.id = 'dateMuteBtn'"));
+  DM.stop();
+  check('al salir del modo, el body pierde date-mode (el botón desaparece con él)', !documentFake.body.classList.contains('date-mode'));
+  key('KeyM', true); key('KeyM', false);
+  check('con el modo inactivo, la tecla M no hace nada', DM.state.muted === false);
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);
