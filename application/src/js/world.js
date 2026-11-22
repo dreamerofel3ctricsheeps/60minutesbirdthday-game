@@ -22,17 +22,55 @@
   window.addEventListener('keyup', (e) => { const k = MAP[e.code]; if (k) keys[k] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
   // ---------- Controles táctiles ----------
-  // Los botones en pantalla (ver game.js, #touchpad) llaman a touchDown/Up
-  // con las MISMAS 5 teclas lógicas que el teclado (up/down/left/right/
-  // action) y actualizan el mismo estado `keys`/`pressed`: todo el resto
-  // del juego (axis/held/hit, usados en TODOS los duelos y en world.js)
-  // no distingue si el origen fue teclado, mouse o un dedo en la pantalla.
-  // Cada botón táctil lleva su propio `pointerId` activo para soportar
-  // varios dedos a la vez (p. ej. diagonales con dos botones del D-pad)
-  // sin que un dedo "cancele" el botón que está tocando otro.
+  // Los controles en pantalla (ver game.js, #touchpad) alimentan el
+  // MISMO estado que el teclado: el botón de acción llama a
+  // touchDown/Up con la tecla lógica 'action' y el joystick (abajo)
+  // fija el vector analógico y deriva las flechas por umbral, así que
+  // todo el resto del juego (axis/held/hit, usados en TODOS los
+  // duelos y en world.js) no distingue si el origen fue teclado,
+  // mouse o un dedo en la pantalla. Cada control lleva su propio
+  // `pointerId` activo para soportar varios dedos a la vez (joystick
+  // con una mano y botón de acción con la otra) sin que un dedo
+  // "cancele" el control que está tocando otro.
   const touchActive = {}; // k -> Set<pointerId>
+  // ---------- Joystick analógico (pantalla táctil) ----------
+  // Reemplaza al D-pad de flechas (pedido de Jose, 2026-11-21: los
+  // botones «son muy toscos»; quiere «una zona circular» que deje
+  // moverse «a donde yo quiera», no solo en 4/8 direcciones).
+  // joyVector es una función PURA y testeable: dado el desplazamiento
+  // del dedo (dx, dy en px desde el centro de la base) y el radio de
+  // la base, devuelve el vector de entrada {x, y, mag}: dirección
+  // libre (360°) e intensidad 0..1 proporcional al empuje, con ZONA
+  // MUERTA (JOY_DEAD) para que un dedo apoyado casi en el centro no
+  // haga derivar al personaje. Pasada la zona muerta la intensidad
+  // se reescala (0 en su borde, 1 en el borde de la base) para que
+  // el arranque sea suave y el máximo sea la velocidad normal.
+  const JOY_DEAD = 0.18;
+  // Umbral por eje para derivar las teclas discretas (left/right/
+  // up/down) del vector analógico: los consumidores que leen
+  // held()/hit() por dirección (menús, el Patrón, minijuegos de
+  // carril) siguen funcionando empujando el joystick con decisión
+  // hacia un lado, igual que si fuera una flecha.
+  const JOY_AXIS = 0.45;
+  const JOY_PID = 'joy'; // pointerId reservado del joystick en touchActive
+  function joyVector(dx, dy, radius) {
+    if (!(radius > 0)) return { x: 0, y: 0, mag: 0 };
+    const d = Math.hypot(dx, dy);
+    const n = Math.min(1, d / radius); // empuje 0..1, recortado al borde
+    if (d === 0 || n <= JOY_DEAD) return { x: 0, y: 0, mag: 0 };
+    const mag = (n - JOY_DEAD) / (1 - JOY_DEAD);
+    return { x: (dx / d) * mag, y: (dy / d) * mag, mag };
+  }
+  let joyVec = { x: 0, y: 0, mag: 0 };
+  const joyDirs = { left: false, right: false, up: false, down: false };
   G.input = {
     axis() {
+      // Con el joystick activo, el eje ES el vector analógico:
+      // dirección libre y velocidad proporcional a la intensidad
+      // (los consumidores multiplican por su velocidad normal, así
+      // que mag 1 = velocidad normal y mag 0,5 = la mitad). Sin
+      // joystick manda el eje discreto de siempre (teclado/botones).
+      if (joyVec.mag > 0) return { x: joyVec.x, y: joyVec.y };
       let x = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), y = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
       if (x && y) { x *= 0.7071; y *= 0.7071; }
       return { x, y };
@@ -49,7 +87,29 @@
       const s = touchActive[k]; if (s) s.delete(pid);
       if (!s || !s.size) keys[k] = false;
     },
-    touchReset() { for (const k in touchActive) touchActive[k].clear(); for (const k in keys) keys[k] = false; },
+    touchReset() {
+      for (const k in touchActive) touchActive[k].clear();
+      for (const k in keys) keys[k] = false;
+      joyVec = { x: 0, y: 0, mag: 0 };
+      for (const k in joyDirs) joyDirs[k] = false;
+    },
+    // Fija el vector analógico del joystick (lo llama el cableado
+    // del DOM en game.js en cada pointermove) y deriva las teclas
+    // discretas por umbral, con la misma semántica de «recién
+    // presionado» (pressed) que un botón: cruzar el umbral hacia un
+    // lado cuenta como pulsar esa flecha una vez.
+    joySet(x, y) {
+      joyVec = { x, y, mag: Math.min(1, Math.hypot(x, y)) };
+      const der = { left: x < -JOY_AXIS, right: x > JOY_AXIS, up: y < -JOY_AXIS, down: y > JOY_AXIS };
+      for (const k in der) {
+        if (der[k] && !joyDirs[k]) { joyDirs[k] = true; G.input.touchDown(k, JOY_PID); }
+        else if (!der[k] && joyDirs[k]) { joyDirs[k] = false; G.input.touchUp(k, JOY_PID); }
+      }
+    },
+    joyState: () => ({ x: joyVec.x, y: joyVec.y, mag: joyVec.mag }),
+    joyVector,
+    JOY_DEAD,
+    JOY_AXIS,
   };
 
   // ---------- Geometría lógica (x, y≡z) ----------
