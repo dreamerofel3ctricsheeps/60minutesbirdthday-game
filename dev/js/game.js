@@ -76,7 +76,7 @@
   // historia queda detenida para siempre y no puede resucitar a mitad de
   // la práctica ni corromper su estado.
   G.dropTimers = () => { timers.length = 0; };
-  G.setScene = (sc) => { G.scene = sc; G.input.flush(); const f = $('#fade'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
+  G.setScene = (sc) => { G.scene = sc; G.input.flush(); const f = $('#fade'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); if (G.ui && G.ui.cromo) G.ui.cromo.kick(); };
   let last = performance.now();
   function frame(now) {
     // BLINDAJE (bug del "contador 4", 2026-11-21): el siguiente frame
@@ -95,6 +95,7 @@
       if (G.scene) { G.scene.update(dt); G.scene.draw(dt); }
     }
     updatePauseBtn();
+    if (G.ui && G.ui.cromo) G.ui.cromo.frameSync(); // modo inmersivo: con modal/pausa el cromo se retira; al cerrar, vuelve
   }
 
   // ---------- Interfaz ----------
@@ -174,11 +175,13 @@
       $('#m-sleep .val').textContent = S.phase === 'collect' || S.phase === 'title' ? 'De guardia' : G.SLEEP[S.sleep];
       document.querySelectorAll('#m-sleep .seg').forEach((s, i) => s.classList.toggle('on', S.phase !== 'collect' && S.phase !== 'title' && i <= S.sleep));
       $('#m-sleep').dataset.lvl = S.sleep;
+      if (G.ui.cromo) G.ui.cromo.watchHud(S.sus, S.quality); // modo inmersivo: ¿hubo novedad relevante?
     },
     pulse(id) { const e = $('#m-' + id); e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse'); },
     refreshInv() {
       const box = $('#inv'); box.innerHTML = '';
       Object.keys(G.ITEMS).forEach((id) => { const d = el('div', 'slot' + (S.inv[id] ? ' have' : '')); d.title = G.ITEMS[id].name + ' — ' + G.ITEMS[id].hint; d.innerHTML = `<img src="${Sp.itemURL(id)}" alt="${G.ITEMS[id].name}">`; box.appendChild(d); });
+      if (G.ui.cromo) G.ui.cromo.watchInv(); // modo inmersivo: ¿cambió el contenido? (p. ej. al recoger un ítem)
       recalc();
     },
     scroll() { msgs.scrollTop = msgs.scrollHeight; },
@@ -257,6 +260,107 @@
   const phoneClose = phoneEl ? phoneEl.querySelector('#phoneclose') : null;
   if (phoneClose) phoneClose.onclick = () => { if (phone.visible) phone.toggle(); };
   msgs.addEventListener('click', () => (ui.fast = true));
+
+  // ---------- Modo inmersivo: el cromo flota y se retira ----------
+  // Opción A de Jose (2026-11-22): aun adelgazados, el HUD y el
+  // inventario EN FLUJO le robaban ~18% del alto a la escena en el
+  // teléfono horizontal. En el modo horizontal compacto (las
+  // mismas media queries de style.css, espejadas abajo en
+  // immersMQ) el CSS saca #hud e #inv del flujo — la escena ocupa
+  // el 100% del hueco — y esta máquina decide cuándo se ven,
+  // con la misma filosofía que el chat del teléfono:
+  //   · APARECEN al cambiar de escena (G.setScene → kick), cuando
+  //     un valor relevante cambia (refreshHUD → watchHud: sube la
+  //     Sospecha, cambia el sueño o la fase de Ximena, cambia la
+  //     Fiesta; refreshInv → watchInv: cambia el contenido del
+  //     inventario, p. ej. al recoger un ítem) y al tocar el
+  //     borde superior/inferior del escenario (edge, franja de
+  //     IMMERSIVE_EDGE_PX; el listener solo OBSERVA el toque con
+  //     captura: no bloquea ni un píxel de la escena).
+  //   · SE RETIRAN solos tras IMMERSIVE_HIDE_MS sin novedades
+  //     (clase .chrome-off: fundido de opacidad y fuera del
+  //     camino de los toques). Con pausa o un modal abierto el
+  //     cromo se retira al instante (frameSync, desde frame()):
+  //     el modal manda; al cerrarse, vuelve con un kick.
+  //   · Pausa y Teléfono NUNCA se retiran: el CSS de .chrome-off
+  //     solo apaga marca, medidores y Ajustes; los dos botones
+  //     quedan como controles flotantes siempre visibles.
+  // Fuera del modo compacto la máquina está inactiva (active =
+  // false) y no toca ni una clase: retrato y escritorio quedan
+  // exactamente como estaban.
+  const IMMERSIVE_HIDE_MS = 3500; // gracia antes del auto-ocultado del cromo flotante
+  const IMMERSIVE_EDGE_PX = 26;   // franja de toque en los bordes del escenario que trae el cromo de vuelta
+  const immersMQ = (typeof window !== 'undefined' && window.matchMedia)
+    ? window.matchMedia('(orientation: landscape) and (max-height: 700px), (orientation: landscape) and (max-height: 900px) and (pointer: coarse)')
+    : null;
+  const hudEl = $('#hud'), invEl = $('#inv'), wrapEl = $('#stagewrap');
+  const cromo = {
+    active: false, hudVis: true, invVis: true, wasBlocked: false, hudT: null, invT: null, hideMs: IMMERSIVE_HIDE_MS, prev: null, invSig: null,
+    state() { return { active: this.active, hudVis: this.hudVis, invVis: this.invVis }; },
+    paint() {
+      if (hudEl) hudEl.classList.toggle('chrome-off', this.active && !this.hudVis);
+      if (invEl) invEl.classList.toggle('chrome-off', this.active && !this.invVis);
+    },
+    blocked() { return !!(G.paused || overlay.classList.contains('show') || $('#pauseov').classList.contains('show')); },
+    armHud() {
+      clearTimeout(this.hudT);
+      if (!this.active || !this.hudVis) return;
+      this.hudT = setTimeout(() => this.hideHud(), this.hideMs);
+    },
+    armInv() {
+      clearTimeout(this.invT);
+      if (!this.active || !this.invVis) return;
+      this.invT = setTimeout(() => this.hideInv(), this.hideMs);
+    },
+    showHud() { this.hudVis = true; this.paint(); this.armHud(); },
+    hideHud() { this.hudVis = false; clearTimeout(this.hudT); this.paint(); },
+    showInv() { this.invVis = true; this.paint(); this.armInv(); },
+    hideInv() { this.invVis = false; clearTimeout(this.invT); this.paint(); },
+    pokeHud() { if (this.active) this.showHud(); },
+    pokeInv() { if (this.active) this.showInv(); },
+    kick() { if (!this.active) return; this.showHud(); this.showInv(); }, // arranque de escena/partida: todo visible
+    watchHud(sus, quality) { // desde refreshHUD: ¿hubo novedad relevante?
+      const cur = { sus, quality, sleep: S.sleep, phase: S.phase };
+      const p = this.prev; this.prev = cur;
+      if (!this.active || !p) return;
+      if (sus > p.sus || quality !== p.quality || cur.sleep !== p.sleep || cur.phase !== p.phase) this.showHud();
+    },
+    watchInv() { // desde refreshInv: ¿cambió el contenido del inventario?
+      const sig = Object.keys(G.ITEMS).filter((id) => S.inv[id]).join(',');
+      const changed = this.invSig !== null && sig !== this.invSig;
+      this.invSig = sig;
+      if (this.active && changed) this.showInv();
+    },
+    reveal(edge) { if (!this.active) return; if (edge === 'top') this.showHud(); else if (edge === 'bottom') this.showInv(); },
+    edge(e) { // toque observado sobre el escenario: ¿cayó en una franja de borde?
+      if (!this.active || !wrapEl || !wrapEl.getBoundingClientRect || !e || typeof e.clientY !== 'number') return;
+      const r = wrapEl.getBoundingClientRect();
+      if (e.clientY - r.top <= IMMERSIVE_EDGE_PX) this.reveal('top');
+      else if (r.bottom - e.clientY <= IMMERSIVE_EDGE_PX) this.reveal('bottom');
+    },
+    frameSync() { // desde frame(): el modal/pausa manda sobre el cromo
+      if (!this.active) return;
+      const b = this.blocked();
+      if (b && !this.wasBlocked) { this.wasBlocked = true; this.hideHud(); this.hideInv(); }
+      else if (!b && this.wasBlocked) { this.wasBlocked = false; this.kick(); }
+    },
+    sync() { // entra/sale el modo compacto (giro del teléfono, resize…)
+      const on = !!(immersMQ && immersMQ.matches);
+      if (on === this.active) { if (on) this.paint(); return; }
+      this.active = on;
+      clearTimeout(this.hudT); clearTimeout(this.invT);
+      this.hudVis = true; this.invVis = true; this.wasBlocked = false;
+      this.paint(); // fuera del modo, paint() quita las clases: el layout de siempre
+      if (on) { this.armHud(); this.armInv(); }
+    },
+    reset() { clearTimeout(this.hudT); clearTimeout(this.invT); this.hudVis = true; this.invVis = true; this.wasBlocked = false; this.prev = null; this.invSig = null; this.paint(); },
+  };
+  ui.cromo = cromo; // la máquina del cromo inmersivo (también la ejercita el humo)
+  cromo.sync();
+  if (immersMQ) { if (immersMQ.addEventListener) immersMQ.addEventListener('change', () => cromo.sync()); else if (immersMQ.addListener) immersMQ.addListener(() => cromo.sync()); }
+  if (wrapEl && wrapEl.addEventListener) wrapEl.addEventListener('pointerdown', (e) => cromo.edge(e), true);
+  if (hudEl && hudEl.addEventListener) hudEl.addEventListener('pointerdown', () => cromo.pokeHud());
+  if (invEl && invEl.addEventListener) invEl.addEventListener('pointerdown', () => cromo.pokeInv());
 
   // ---------- Pausa ----------
   // La pausa se centraliza en frame() (ver arriba): con G.paused activo no
