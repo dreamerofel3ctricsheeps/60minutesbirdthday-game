@@ -99,7 +99,7 @@
   }
 
   // ---------- Interfaz ----------
-  const msgs = $('#msgs'), actions = $('#actions'), overlay = $('#overlay');
+  const msgs = $('#msgs'), overlay = $('#overlay');
 
   // Media query de RETRATO compartida: espeja el bloque de
   // retrato de style.css y la leen DOS piezas — la máquina del
@@ -248,6 +248,65 @@
     },
     reset() { this.pending = false; this.pinned = false; this.muted = false; this.unread = 0; clearTimeout(this.pingT); this.hide(); },
   };
+
+  // ---------- Decisiones DENTRO del flujo de mensajes ----------
+  // (Propuesta de Jose, 2026-11-22: «¿y si en lugar de que las
+  // opciones o elecciones de personaje en el chat se queden
+  // estáticas y sin movimiento, mejor forman parte de mensajes
+  // del chat y que si deslizo para arriba bajen o si deslizo para
+  // abajo recién aparecen?») ui.choose/ui.assign ya NO
+  // renderizan en una zona fija bajo el área de lectura (el
+  // viejo #actions, retirado del HTML y del CSS): el bloque de
+  // opciones se añade como ÚLTIMO nodo de #msgs, un mensaje
+  // especial más del flujo. Si Jose desliza hacia arriba, el
+  // bloque se va con el historial; si desliza hasta abajo,
+  // aparece. Su llegada NO toca scrollTop en ningún caso (la
+  // regla vigente se mantiene tal cual). Al responder, el bloque
+  // sale del flujo y en el historial queda el eco de siempre
+  // («mine» / «Va X»): nada de bloques congelados acumulándose.
+  // Como el bloque puede quedar bajo el pliegue sin que Jose
+  // sepa que existe, una PASTILLA discreta («Decisión pendiente
+  // ↓», fija al pie del panel) avisa SOLO cuando hay decisión
+  // pendiente y su bloque no asoma en el área visible; la
+  // pastilla no mueve nada por sí sola: al tocarla —y solo al
+  // tocarla— la vista baja hasta el bloque, y desaparece en
+  // cuanto el bloque entra en vista (por el deslizamiento de
+  // Jose o al responderse la decisión). La máquina del teléfono
+  // (pendiente/insignia/modos) no depende de dónde vive el
+  // bloque: su lógica no cambia.
+  let decisionEl = null; // bloque .decision pendiente en el flujo (o null)
+  const dpill = el('button', 'dpill', 'Decisión pendiente ↓');
+  dpill.id = 'dpill'; dpill.style.display = 'none';
+  if (phoneEl) phoneEl.appendChild(dpill);
+  function decisionOutOfView() {
+    if (!decisionEl) return false;
+    // Sin geometría medible (el arnés del humo) no se afirma
+    // nada: la pastilla no aparece.
+    if (typeof decisionEl.getBoundingClientRect !== 'function' || typeof msgs.getBoundingClientRect !== 'function') return false;
+    const r = decisionEl.getBoundingClientRect(), c = msgs.getBoundingClientRect();
+    return r.top >= c.bottom - 2; // el bloque ni siquiera asoma por el borde inferior del área visible
+  }
+  function syncDecisionPill() {
+    const show = !!decisionEl && decisionOutOfView();
+    dpill.style.display = show ? '' : 'none';
+    return show;
+  }
+  function mountDecision(block) { // el bloque entra al final del flujo, SIN tocar scrollTop
+    decisionEl = block; msgs.appendChild(block); syncDecisionPill();
+  }
+  function unmountDecision() { // al responder (o al abandonar la decisión): el bloque sale del flujo
+    if (decisionEl) { decisionEl.remove(); decisionEl = null; }
+    dpill.style.display = 'none';
+  }
+  dpill.onclick = () => { // SOLO el toque de Jose mueve la vista hasta el bloque
+    if (!decisionEl) return;
+    if (typeof decisionEl.getBoundingClientRect === 'function' && typeof msgs.getBoundingClientRect === 'function') {
+      msgs.scrollTop += decisionEl.getBoundingClientRect().top - msgs.getBoundingClientRect().top - 6;
+    } else msgs.scrollTop = msgs.scrollHeight;
+    syncDecisionPill();
+  };
+  msgs.addEventListener('scroll', syncDecisionPill); // al deslizar Jose, la pastilla sigue la pista del bloque
+
   const CHAT_STICK_PX = 48; // «casi al final»: dentro de este margen el chat sigue a los mensajes nuevos (ver ui.scroll)
   const ui = (G.ui = {
     fast: false,
@@ -285,7 +344,10 @@
     // salía de pantalla («no puedo leer los mensajes ni la
     // razón porque tengo que elegir personajes»). Jose lee la
     // razón a su ritmo y baja a elegir cuando quiere; si el
-    // panel está cerrado, la insignia «!» avisa fuera.
+    // panel está cerrado, la insignia «!» avisa fuera; si está
+    // abierto y el bloque (ya dentro del flujo) queda bajo el
+    // pliegue, avisa la pastilla del panel (ver «Decisiones
+    // DENTRO del flujo de mensajes»).
     scroll() { if (msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight <= CHAT_STICK_PX) msgs.scrollTop = msgs.scrollHeight; },
     raw(html) {
       const stick = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight <= CHAT_STICK_PX;
@@ -318,10 +380,10 @@
     choose(options, timer) {
       return new Promise((res) => {
         phone.decision(true); // decisión pendiente: la máquina avisa según el modo (escritorio: muestra el chat y no lo oculta; modo manual: solo la insignia «!»)
-        actions.innerHTML = ''; let tm = null, left = timer;
-        const finish = (i) => { phone.decision(false); if (G.practiceMode) return; if (tm) clearInterval(tm); actions.innerHTML = ''; ui.raw(`<div class="mine">${options[i].label}</div>`); res(i); };
+        const block = el('div', 'decision'); let tm = null, left = timer;
+        const finish = (i) => { phone.decision(false); if (G.practiceMode) return; if (tm) clearInterval(tm); unmountDecision(); ui.raw(`<div class="mine">${options[i].label}</div>`); res(i); };
         if (timer) {
-          const bar = el('div', 'tbar', '<i></i>'); actions.appendChild(bar);
+          const bar = el('div', 'tbar', '<i></i>'); block.appendChild(bar);
           // La cuenta regresiva de la decisión corre con setInterval (reloj
           // de pared): en PAUSA los ticks se saltan (la cuenta se congela y
           // la barra no se mueve) y en modo práctica el intervalo se apaga.
@@ -330,9 +392,9 @@
         options.forEach((o, i) => {
           const miss = o.requires && !S.inv[o.requires];
           const b = el('button', 'opt', `<span>${'ABC'[i]}</span>${o.label}${miss ? ` <em>(falta: ${G.ITEMS[o.requires].name})</em>` : o.requires ? ` <em class="ok">(usa: ${G.ITEMS[o.requires].name})</em>` : ''}`);
-          b.disabled = !!miss; b.onclick = () => finish(i); actions.appendChild(b);
+          b.disabled = !!miss; b.onclick = () => finish(i); block.appendChild(b);
         });
-        // SIN scroll a propósito: la llegada de una decisión nunca mueve la lectura (ver ui.scroll).
+        mountDecision(block); // al final del flujo, SIN tocar scrollTop: el bloque aparece solo cuando Jose desliza hasta abajo (ver ui.scroll)
       });
     },
     // tarjetas de asignación de personaje: SOLO la party (protagonista +
@@ -341,15 +403,17 @@
     assign(prompt, info) {
       return new Promise((res) => {
         phone.decision(true); // asignación pendiente: misma regla de aviso que ui.choose
-        actions.innerHTML = `<div class="ask">${prompt}</div>`;
+        const block = el('div', 'decision');
+        block.innerHTML = `<div class="ask">${prompt}</div>`;
         const wrap = el('div', 'cards');
         (S.party.length ? S.party : G.PLAYABLE).forEach((id) => {
           const c = G.CHARS[id], tired = S.tired === id, inf = info(id);
           const b = el('button', 'card', `<img src="${Sp.portrait(id, tired ? 'tired' : null)}" alt=""><b>${c.name}</b><small>${inf.stats}</small>${inf.odds != null ? `<strong class="${inf.odds >= 0.6 ? 'hi' : inf.odds >= 0.35 ? 'mid' : 'lo'}">${Math.round(inf.odds * 100)}%</strong>` : ''}<small class="note">${tired ? 'Descansando (acaba de actuar)' : inf.note || ''}</small>`);
-          b.disabled = tired; b.onclick = () => { phone.decision(false); actions.innerHTML = ''; ui.raw(`<div class="mine">Va ${c.name}</div>`); res(id); };
+          b.disabled = tired; b.onclick = () => { phone.decision(false); unmountDecision(); ui.raw(`<div class="mine">Va ${c.name}</div>`); res(id); };
           wrap.appendChild(b);
         });
-        actions.appendChild(wrap); // SIN scroll a propósito: la decisión no mueve la lectura (ver ui.scroll).
+        block.appendChild(wrap);
+        mountDecision(block); // al final del flujo, SIN tocar scrollTop: el bloque aparece solo cuando Jose desliza hasta abajo (ver ui.scroll)
       });
     },
     modal(html, btn) {
@@ -361,11 +425,12 @@
     },
   });
   ui.phone = phone; // la máquina de estados del teléfono (también la ejercita el humo)
+  ui.decisionPillSync = syncDecisionPill; // la pastilla de decisión pendiente en el flujo (también la ejercita el humo)
   phone.paint(); // arranca oculto (clase .ph-off) y sin contador
   const phoneBtn = $('#phonebtn');
-  if (phoneBtn) phoneBtn.onclick = () => phone.toggle();
+  if (phoneBtn) phoneBtn.onclick = () => { phone.toggle(); syncDecisionPill(); }; // al abrir el panel, la pastilla se reevalúa contra el pliegue
   const phoneClose = phoneEl ? phoneEl.querySelector('#phoneclose') : null;
-  if (phoneClose) phoneClose.onclick = () => { if (phone.visible) phone.toggle(); };
+  if (phoneClose) phoneClose.onclick = () => { if (phone.visible) { phone.toggle(); syncDecisionPill(); } };
   msgs.addEventListener('click', () => (ui.fast = true));
 
   // ---------- Modo inmersivo: el cromo flota y se retira ----------
@@ -957,7 +1022,7 @@
     }, 620);
   }
   function enterPractice() {
-    if (!G.practiceMode) { G.practiceMode = true; G.dropTimers(); actions.innerHTML = ''; phone.reset(); }
+    if (!G.practiceMode) { G.practiceMode = true; G.dropTimers(); unmountDecision(); phone.reset(); }
     G.paused = false; document.body.classList.remove('paused');
     pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
     S.phase = 'practice';
