@@ -1,0 +1,37 @@
+# Publica el juego («1 Minuto para la Fiesta») en GitHub Pages.
+# El juego es un sitio estático sin build: se sirve tal cual application/src.
+# Cada push a main vuelve a desplegar la versión nueva automáticamente.
+name: Publicar en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Descargar el repo
+        uses: actions/checkout@v4
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+      - name: Subir el juego (application/src)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: application/src
+      - name: Desplegar
+        id: deployment
+        uses: actions/deploy-pages@v4
