@@ -2520,6 +2520,38 @@ const tick = () => new Promise((r) => setImmediate(r));
       !gameQ.includes("G.Music.current() === 'gestion'"), '');
   }
 
+  // --- Sección S: en horizontal la ESCENA manda (corrección 2026-11-22) ---
+  // El encuadre de la sección P hacía caber el escenario, pero el cromo
+  // en flujo (HUD en dos filas + inventario) lo dejaba chico al centro.
+  // Ahora hay un modo horizontal compacto (HUD de una fila, inventario
+  // delgado, teléfono flotante), los modales se topan también por ANCHO
+  // (cqw) con el carrusel midiendo el escenario real, y los controles
+  // táctiles escalan con el alto del escenario (cqh).
+  {
+    console.log('\nS) Horizontal compacto — la escena es la protagonista');
+    const cssS = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const gameTxtS = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const iCompact = cssS.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const compact = iCompact >= 0 ? cssS.slice(iCompact) : '';
+    check('horizontal: existe el modo compacto y cubre también tabletas/foldables (≤900px con puntero grueso)',
+      iCompact >= 0 && cssS.includes('(orientation: landscape) and (max-height: 900px) and (pointer: coarse)'), '');
+    check('horizontal: el HUD se compacta a UNA fila delgada (nowrap, sin segunda fila)',
+      compact.includes('#hud { flex-wrap: nowrap'), '');
+    check('horizontal: el inventario se adelgaza (slots de 32px) y la reserva del escenario baja a 38px',
+      compact.includes('.slot { width: 32px; height: 32px; }') && compact.includes('width: min(100cqw, calc((100cqh - 38px) * 16 / 9))'), '');
+    check('horizontal: el teléfono NO reserva columna en este modo: flota sobre el lateral de main',
+      compact.includes('#phone { position: absolute') && compact.includes('main { position: relative'), '');
+    check('modales: el ancho se topa en cqw (nada asoma por la derecha) en normal y wide',
+      cssS.includes('max-width: min(560px, 92cqw)') && cssS.includes('max-width: min(860px, 95cqw)'), '');
+    check('modales: los títulos escalan también por ANCHO (el menor entre cqh y cqw)',
+      cssS.includes('font-size: clamp(24px, min(9.5cqh, 12cqw), 50px)') && cssS.includes('font-size: clamp(14px, min(5cqh, 4.8cqw), 20px)'), '');
+    check('carrusel: mide el ESCENARIO real (no la ventana) y achica las fichas hasta que entren completas',
+      gameTxtS.includes("const stageEl = $('#stage')") && gameTxtS.includes("b.style.width = CW + 'px'")
+      && !gameTxtS.includes('iw < 2 * CW + GAP + 170'), '');
+    check('táctil: joystick y botón de acción escalan con el alto del escenario (clamp con cqh, topes de siempre)',
+      cssS.includes('#joystick { width: clamp(96px, 34cqh, 148px)') && cssS.includes('.taction { width: clamp(52px, 18cqh, 78px)'), '');
+  }
+
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR FATAL en la prueba:', e); process.exit(2); });

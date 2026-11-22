@@ -106,12 +106,19 @@ main { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 12px; }
    escenario a ~360px de alto, el título baja a ~37px y el texto
    a ~13px y la tarjeta del título entra completa sin scroll;
    el overflow:auto de .modal queda como último recurso para
-   tarjetas de contenido largo (lista de minijuegos, etc.). */
-.modal { background: var(--panel); border: 4px solid #120f1b; border-radius: 14px; padding: 22px 28px; padding: clamp(12px, 5cqh, 22px) clamp(16px, 7cqh, 28px); max-width: 560px; text-align: center; box-shadow: 0 8px 0 #120f1b; max-height: 100%; overflow: auto; }
-.modal.wide { max-width: 860px; }
-.modal h1 { font-size: clamp(28px, 4.2vw, 50px); font-size: clamp(26px, 9.5cqh, 50px); line-height: 1; margin: 6px 0 14px; margin: clamp(4px, 1.5cqh, 6px) 0 clamp(8px, 3.5cqh, 14px); color: #fff; text-shadow: 0 4px 0 #120f1b; letter-spacing: 1px; }
+   tarjetas de contenido largo (lista de minijuegos, etc.).
+   El ANCHO también manda (corrección 2026-11-22): el modal se
+   topa en cqw (92/95cqw) y los títulos h1/h2 toman el MENOR
+   entre su escala por alto (cqh) y su escala por ancho (cqw),
+   para que ninguna tarjeta asome por la derecha en pantallas
+   chicas; el carrusel de personajes, por su parte, mide el
+   escenario real en game.js y achica sus fichas hasta que
+   entren completas. */
+.modal { background: var(--panel); border: 4px solid #120f1b; border-radius: 14px; padding: 22px 28px; padding: clamp(12px, 5cqh, 22px) clamp(16px, 7cqh, 28px); max-width: 560px; max-width: min(560px, 92cqw); text-align: center; box-shadow: 0 8px 0 #120f1b; max-height: 100%; overflow: auto; }
+.modal.wide { max-width: 860px; max-width: min(860px, 95cqw); }
+.modal h1 { font-size: clamp(28px, 4.2vw, 50px); font-size: clamp(26px, 9.5cqh, 50px); font-size: clamp(24px, min(9.5cqh, 12cqw), 50px); line-height: 1; margin: 6px 0 14px; margin: clamp(4px, 1.5cqh, 6px) 0 clamp(8px, 3.5cqh, 14px); color: #fff; text-shadow: 0 4px 0 #120f1b; letter-spacing: 1px; }
 .modal h1 span { color: var(--yellow); font-size: .62em; }
-.modal h2 { margin: 0 0 12px; color: var(--yellow); font-size: 20px; font-size: clamp(16px, 5cqh, 20px); }
+.modal h2 { margin: 0 0 12px; color: var(--yellow); font-size: 20px; font-size: clamp(16px, 5cqh, 20px); font-size: clamp(14px, min(5cqh, 4.8cqw), 20px); }
 .modal p { line-height: 1.5; font-size: 14px; font-size: clamp(12px, 3.3cqh, 14px); margin: 8px 0; }
 .dim { color: var(--dim); font-size: 12px !important; }
 .logo small { font-size: 34px; }
@@ -179,6 +186,21 @@ body.touch-on #touchpad { display: block; }
   .joy-knob { width: 50px; height: 50px; }
   .taction { width: 66px; height: 66px; right: 4%; bottom: 8%; }
 }
+/* Controles táctiles PROPORCIONALES al escenario (corrección
+   2026-11-22): con tamaño fijo (148px) el joystick y el botón de
+   acción se comían un tercio de una escena de ~300px de alto.
+   Ahora escalan con el alto del contenedor (cqh de #stagewrap ≈
+   alto del escenario): ~102px de joystick en un escenario de
+   ~300px, y su tamaño de siempre (148/78px) en escenarios
+   grandes, donde el clamp llega a su tope. Va DESPUÉS del bloque
+   ≤760px a propósito, para ganarle la cascada a sus tamaños
+   fijos justo en las pantallas chicas. El JS no cambia: lee el
+   tamaño real con getBoundingClientRect en cada toque. En
+   retrato (contenedor desactivado) cqh cae al alto del viewport
+   chico y los controles quedan en su tope, como siempre. */
+#joystick { width: clamp(96px, 34cqh, 148px); height: clamp(96px, 34cqh, 148px); }
+.joy-knob { width: clamp(38px, 13.2cqh, 58px); height: clamp(38px, 13.2cqh, 58px); }
+.taction { width: clamp(52px, 18cqh, 78px); height: clamp(52px, 18cqh, 78px); font-size: clamp(20px, 6cqh, 28px); }
 #pausebtn.off { opacity: .35; }
 #settingsbtn.off { opacity: .35; }
 /* ---------- Iconografía PROPIA del juego (regla de Jose, 2026-11-14) ----------
@@ -382,3 +404,65 @@ body.date-mode #dateMuteBtn { display: flex; }
 #dateMuteBtn .sl { display: none; }
 #dateMuteBtn.muted .sl { display: block; }
 #dateMuteBtn.muted .wv { display: none; }
+
+/* ---------- Modo horizontal compacto: LA ESCENA MANDA ----------
+   Corrección de Jose (2026-11-22, dos capturas jugando en la web):
+   en horizontal el encuadre ya hacía CABER el escenario, pero el
+   cromo del layout en flujo (HUD que saltaba a dos filas ~95px +
+   padding de main 24px + inventario 40px) lo dejaba en un
+   rectángulo chico al centro (~57% del alto en un teléfono de
+   ~390px CSS, y menos en su captura). Aquí el cromo se adelgaza
+   para que el escenario se quede con TODO el alto restante:
+   HUD de UNA fila (~35px), main con padding/gap de 6px e
+   inventario de 32px → la escena pasa a ~78% del alto a 390px
+   y ~87% a 650px. Sin overlays sobre el canvas: los chips de
+   las escenas viven en el borde superior del canvas y una barra
+   DOM encima los taparía — por eso se adelgaza el flujo.
+   Cobertura: (a) cualquier horizontal de ≤700px de alto CSS
+   (teléfonos en horizontal, con o sin puntero táctil) y (b)
+   horizontales de ≤900px de alto CSS con puntero grueso
+   (tabletas y foldables táctiles: la captura de Jose es de una
+   pantalla 2048×1152, cuyo viewport CSS en horizontal cae en
+   ~576–768px de alto según su densidad). Un escritorio con
+   ratón y ventana alta no entra; uno con ventana baja sí, y
+   ahí el HUD delgado también le sienta bien. El bloque va al
+   FINAL del archivo para ganarle la cascada a los bloques
+   ≤760px/≤900px cuando coinciden (un teléfono horizontal chico
+   también cumple max-width:760px y caería en columna). */
+@media (orientation: landscape) and (max-height: 700px),
+       (orientation: landscape) and (max-height: 900px) and (pointer: coarse) {
+  main { position: relative; flex-direction: row; padding: 6px; gap: 6px; }
+  /* HUD: una sola fila delgada, sin salto a la segunda */
+  #hud { flex-wrap: nowrap; gap: 6px; padding: 4px 8px; border-bottom-width: 2px; }
+  .brand { font-size: 10px; letter-spacing: 0; }
+  .brandico { display: none; }
+  .meter { grid-template-columns: auto minmax(28px, 40px) auto; gap: 4px; font-size: 10px; min-width: 0; }
+  .meter label { font-size: 9px; letter-spacing: 0; }
+  #m-sleep label { display: none; } /* la etiqueta larga («Sueño de Ximena») no cabe en la fila única; quedan los segmentos y el estado */
+  .meter .val { min-width: 0; font-size: 10px; }
+  #m-sleep .val { font-size: 9px; }
+  .bar { height: 9px; }
+  .segs { gap: 2px; }
+  .seg { width: 8px; height: 8px; }
+  #pausebtn, #settingsbtn, #phonebtn { padding: 3px 7px; font-size: 11px; }
+  .pic { margin-right: 4px; }
+  /* Escenario: contenedor y doble tope como en la regla base,
+     pero la reserva vertical baja a 38px (inventario de 32 +
+     gap de 6) y el respaldo sin-contenedor a 100px de cromo
+     (HUD ~35 + padding de main 12 + inventario/gap 38 + aire). */
+  #stagewrap { flex: 1; width: auto; min-width: 0; min-height: 0; container-type: size; gap: 6px; }
+  #stage { width: min(100%, calc((100vh - 100px) * 16 / 9));
+    width: min(100%, calc((100svh - 100px) * 16 / 9));
+    width: min(100%, calc((100dvh - 100px) * 16 / 9));
+    width: min(100cqw, calc((100cqh - 38px) * 16 / 9)); }
+  /* Inventario adelgazado */
+  #inv { gap: 5px; }
+  .slot { width: 32px; height: 32px; }
+  .slot img { width: 24px; height: 24px; }
+  /* El teléfono ya nace oculto; cuando aparece en este modo NO
+     reserva su columna en el layout (le robaba ~300px de ancho
+     y el escenario caía a ~61% en tabletas): flota sobre el
+     lateral derecho de main, con el alto completo disponible y
+     sus mensajes con scroll interno, como siempre. */
+  #phone { position: absolute; top: 6px; right: 6px; bottom: 6px; width: min(320px, 44%); max-height: none; z-index: 30; }
+}

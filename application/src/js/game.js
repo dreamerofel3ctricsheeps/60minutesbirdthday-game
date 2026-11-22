@@ -575,12 +575,26 @@
   // (←/→, ver charKeys). Las tarjetas conservan su ancho completo, así la
   // ficha (stats/rol/habilidad) se lee entera sin apretujarse.
   function charCarousel(ids, cardHTML, slim, onPick) {
-    const CW = slim ? 150 : 248, GAP = slim ? 10 : 12, iw = window.innerWidth || 9999;
-    const per = iw < 2 * CW + GAP + 170 ? 1 : iw < 3 * CW + 2 * GAP + 170 ? 2 : 3;
+    const GAP = slim ? 10 : 12, FULL = slim ? 150 : 248;
+    // El ancho útil es el del ESCENARIO (donde vive el modal), no el de
+    // la ventana: en horizontal el escenario es más angosto que la
+    // ventana (letterbox por alto) y medir contra window.innerWidth
+    // dejaba el carrusel más ancho que la tarjeta — la segunda ficha
+    // salía cortada por la derecha (captura de Jose, 2026-11-22).
+    // Ahora: se intentan 3 fichas visibles ACHICANDO el ancho (CW)
+    // hasta que entren completas; si ni al mínimo entran 3, se baja
+    // a 2 y luego a 1, como antes. En escritorio CW llega a su tope
+    // (248/150) y el carrusel se ve exactamente como siempre.
+    const stageEl = $('#stage');
+    const avail = Math.max(220, ((stageEl && stageEl.clientWidth) || window.innerWidth || 9999) - 120); // padding del modal + botones ‹ ›
+    let per = 3, CW = Math.floor((avail - (per - 1) * GAP) / per);
+    if (CW < 108) { per = 2; CW = Math.floor((avail - GAP) / 2); }
+    if (CW < 108) { per = 1; CW = Math.min(FULL, avail); }
+    CW = Math.min(CW, FULL);
     const node = el('div', 'car' + (slim ? ' slim' : ''));
     const view = el('div', 'cview'); view.style.width = (per * CW + (per - 1) * GAP) + 'px';
     const track = el('div', 'ctrack');
-    ids.forEach((id) => { const b = el('button', 'pcard', cardHTML(id)); b.dataset.id = id; b.onclick = () => onPick(id); track.appendChild(b); });
+    ids.forEach((id) => { const b = el('button', 'pcard', cardHTML(id)); b.dataset.id = id; b.style.width = CW + 'px'; b.onclick = () => onPick(id); track.appendChild(b); });
     view.appendChild(track); node.appendChild(view);
     const prev = el('button', 'cnav prev', '<i></i>'), next = el('button', 'cnav next', '<i></i>');
     node.appendChild(prev); node.appendChild(next);
