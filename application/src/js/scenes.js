@@ -1818,7 +1818,7 @@
     x.fillStyle = '#3a3230'; x.fillRect(12.2, 6.5, 1.6, 4);                  // mecha
     candleBody = cv; return cv;
   }
-  function flameCv(owner) {
+  function candleFlameCv(owner) {
     if (flameCvs[owner]) return flameCvs[owner];
     const cv = document.createElement('canvas'); cv.width = 16; cv.height = 22; cv._scale = 0.42;
     const x = cv.getContext('2d');
@@ -2016,7 +2016,7 @@
         if (cd.owner) {
           const fl = 1 + Math.sin(t * 11 + cd.i * 1.7) * 0.15;
           R.flat(R.glowTex, cd.x, cd.y + 2, cd.z, 40 * fl, { tint: cd.owner === 'p' ? [1, 0.62, 0.22] : [0.25, 0.95, 0.65], alpha: 0.34 });
-          R.sprite(flameCv(cd.owner), cd.x, cd.y + 13 + Math.sin(t * 9 + cd.i) * 0.8, cd.z, { feet: 0, lit: 0.9 });
+          R.sprite(candleFlameCv(cd.owner), cd.x, cd.y + 13 + Math.sin(t * 9 + cd.i) * 0.8, cd.z, { feet: 0, lit: 0.9 });
         } else if (this.surgeState === 'on') {
           // con la luz de vuelta, las velas AÚN APAGADAS destellan un
           // instante: la pista visual de dónde quedan por prender
@@ -2031,10 +2031,10 @@
         const p = this.p, j = this.jose, bob = Math.sin(t * 9) * 0.7;
         const hx = p.x + (p.dir === 'left' ? -11 : 11), hz = p.y + 3;
         R.sprite(candleBodyCv(), hx, 15, hz, { feet: 0, lit: 0.5, sx: 0.75, sy: 0.75 });
-        R.sprite(flameCv('p'), hx, 15 + 10 + bob, hz, { feet: 0, lit: 0.9, sx: 0.8, sy: 0.8 });
+        R.sprite(candleFlameCv('p'), hx, 15 + 10 + bob, hz, { feet: 0, lit: 0.9, sx: 0.8, sy: 0.8 });
         const jx = j.x + (j.dir === 'left' ? -10 : 10), jz = j.y + 3;
         R.sprite(candleBodyCv(), jx, 14, jz, { feet: 0, lit: 0.75, sx: 0.6, sy: 0.6 });
-        R.sprite(flameCv('j'), jx, 14 + 8 + Math.sin(t * 10 + 2) * 0.6, jz, { feet: 0, lit: 0.85, sx: 0.62, sy: 0.62, alpha: 0.6 });
+        R.sprite(candleFlameCv('j'), jx, 14 + 8 + Math.sin(t * 10 + 2) * 0.6, jz, { feet: 0, lit: 0.85, sx: 0.62, sy: 0.62, alpha: 0.6 });
       }
     }
     ringOver(c, cd, frac, color) {
@@ -2102,7 +2102,7 @@
       if (this.st === 'intro') {
         c.fillStyle = 'rgba(12,10,20,.84)'; c.fillRect(66, 60, 508, 228);
         panel(c, 66, 60, 508, 228, '#221c33');
-        c.drawImage(candleBodyCv(), 88, 76, 15, 22); c.drawImage(flameCv('p'), 92, 66, 9, 13);
+        c.drawImage(candleBodyCv(), 88, 76, 15, 22); c.drawImage(candleFlameCv('p'), 92, 66, 9, 13);
         G.text(c, 'APAGÓN: VELAS CONTRA JOSÉ', 330, 86, { size: 16, color: '#ffd23f' });
         wrap(c, 'Se fue la luz y José apareció con fósforos: jura que SU ambiente a velas salva la fiesta. Corre por TODA la casa y prende más velas que él antes de que vuelva la luz (75 s).', 96, 112, 448, 10, '#fff');
         wrap(c, 'Al empezar, la casa se ve unos segundos: MEMORIZA dónde están las velas (cambian de lugar en cada partida). Después, oscuridad total: llevas una vela prendida en la mano que alumbra a tu alrededor, y cada vela que prendas suma su luz.', 96, 145, 448, 10, '#ffe9a8');
