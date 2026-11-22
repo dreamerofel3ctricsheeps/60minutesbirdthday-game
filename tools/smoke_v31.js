@@ -1397,6 +1397,8 @@ const tick = () => new Promise((r) => setImmediate(r));
     const dCam = new Sc.RingRaceDuel('natalia', () => {});
     check('J1407b cámara: dist 480 / pitch 0,34 — el cohete se ve entero (68 px de 360) y queda pista por delante',
       dCam.cam.dist === 480 && Math.abs(dCam.cam.pitch - 0.34) < 1e-9, JSON.stringify(dCam.cam));
+    check('J1407b cámara composición: cam.y = 108 baja la pista en pantalla (centro del cohete ≈57% del alto, sin tocar dist)',
+      dCam.cam.y === 108 && dCam.cam.dist === 480, JSON.stringify(dCam.cam));
     // --- Bug del "contador 4" (playtest de Jose, 2026-11-21): los
     // cohetes cargados como archivo (assets/img/*.png) son cross-origin
     // desde file:// y texImage2D reventaba en draw(), matando el bucle.

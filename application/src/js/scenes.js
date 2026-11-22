@@ -3021,7 +3021,15 @@
       // (24 px) y el horizonte de la pista queda en y≈8. Con pitch
       // ≥ 0,36 el horizonte SALÍA del cuadro y se veía MENOS pista por
       // delante: por eso 0,34 y no más.
-      this.cam = { x: 0, y: 10, z: 96, dist: 480, pitch: 0.34, fov: 42 };
+      // COMPOSICIÓN (segunda corrección de Jose, 2026-11-21): con
+      // cam.y = 10 la pista quedaba muy ARRIBA y debajo sobraba un
+      // vacío enorme. Sin tocar dist ni el tamaño de los cohetes, el
+      // objetivo sube a cam.y = 108: medido con la misma proyección,
+      // el centro del cohete del jugador pasa del 29,9% al 57,4% del
+      // alto del canvas (objetivo 55–62%), el meteorito a la
+      // distancia de aviso (−620) se sigue leyendo (28,7 px contra
+      // 30,2) y el planeta baja un poco en el cuadro.
+      this.cam = { x: 0, y: 108, z: 96, dist: 480, pitch: 0.34, fov: 42 };
       // Táctil (mismo patrón que el clic de La imagen distinta):
       // mitad izquierda/derecha de la pantalla = cambiar de carril.
       // El listener se guarda y se RETIRA en finish(): antes quedaba
