@@ -474,6 +474,24 @@ const tick = () => new Promise((r) => setImmediate(r));
       sc.candles[0].owner = 'p'; sc.candles[1].owner = 'j'; // una vela prendida por cada uno
       sc.draw(0.016);
       check('draw sin errores: juego con velas prendidas de ambos (llamas ámbar y verdosa)', true);
+      // Regresión (franjas sobre las velas): la llama dibujada debe ser el
+      // canvas propio de la vela (16×22), NUNCA la llama de cohete de los
+      // duelos espaciales (60×84): una colisión de nombre entre dos
+      // «function flameCv» de scenes.js hacía que el duelo recibiera la
+      // pluma del cohete y la pintara como un cono gigante sobre cada vela.
+      const realSpriteFn = G.R.sprite, drawnSprites = [];
+      G.R.sprite = (cv, x, y, z, o) => { drawnSprites.push({ cv, x, y, z }); return realSpriteFn(cv, x, y, z, o); };
+      sc.draw(0.016);
+      G.R.sprite = realSpriteFn;
+      const litNow = sc.candles.filter((c) => c.owner);
+      const flamesAt = litNow.map((cd) => drawnSprites.find((s) => s.x === cd.x && s.z === cd.z && s.y > cd.y + 5));
+      check('la llama de cada vela prendida es su canvas propio de 16×22 (no la llama de cohete de 60×84)',
+        flamesAt.every(Boolean) && flamesAt.every((f) => f.cv.width === 16 && f.cv.height === 22),
+        flamesAt.map((f) => f && (f.cv.width + 'x' + f.cv.height)).join(','));
+      check('las llamas de jugador y José son canvas distintos (ámbar y verdosa)',
+        flamesAt.length === 2 && !!flamesAt[0] && !!flamesAt[1] && flamesAt[0].cv !== flamesAt[1].cv);
+      check('ningún sprite del duelo de velas usa el canvas de la llama de cohete (60×84)',
+        !drawnSprites.some((s) => s.cv.width === 60 && s.cv.height === 84));
       sc.chan = { c: sc.candles[2], kind: 'light', t: 0.3, need: 0.6 };
       sc.draw(0.016);
       check('draw sin errores: canalización con anillo de progreso', true);
