@@ -63,6 +63,25 @@
       de los huidos solo pasa en el espacio, con la tripulación
       correcta (S.fled en historia; todos menos el elegido en
       práctica) y su guiño en burbuja la primera vez.
+   L) Final J1407b (SPACE_RINGS_ENDING): 1A «Anillos de J1407b»
+      se instancia con el copiloto = primer partner, la DUDA se
+      activa al ir contra su sugerencia (y no al seguirla) y la
+      carrera termina con resultado y conteo de choques; 1B
+      «Cinturón de asteroides» sale del origen sin ventaja y
+      adelantado con ella (ventaja cruzada), trae asteroides de
+      fiesta y termina con resultado y aturdimientos; la cadena
+      SpaceEndingScene arranca en el despegue y pasa a los Anillos;
+      y todo queda registrado en práctica (EVENTS/MG); su entrada a
+      la historia se prueba en la sección N (integración).
+   M) Final Leyendas (LEYENDAS_MOVIE_ENDING): ítems claqueta y
+      cámara antigua, habilitación G.legendsReady (casting +
+      decoración real + preparación), los duelos del Alebrije y
+      de Teodora (trazo/hundimiento y soga) y la cadena completa.
+   N) Integración de finales: G.spaceReady (Escalada espacial
+      ganada + Preparación ≥ 80 + Sospecha < 50), la siembra del
+      espacio (foto del cohete ~13:00 y telescopio en la Escalada)
+      y el enrutado del clímax: solo uno → ese final; AMBOS →
+      ELIGE EL JUGADOR (decisión de Jose); ninguno → final normal.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -157,6 +176,11 @@ const load = (file, patch) => {
   vm.runInContext(code, sandbox, { filename: file });
 };
 load('defined-sheets.js');
+load('rocket-sheets.js');
+load('belt-sheets.js');
+load('alebrije-sheets.js');
+load('teodora-sheets.js');
+load('jump-sheets.js');
 load('sprites.js');
 load('data.js');
 load('gl3d.js');
@@ -1273,6 +1297,820 @@ const tick = () => new Promise((r) => setImmediate(r));
     }
     // En práctica NO hay sorteo: la entrada «cactus» juega siempre su variante (runMinigame no sortea con practiceMode)
     check('práctica sin sorteo: cactusVariant solo se invoca desde la historia (guardado por G.practiceMode en runMinigame)', typeof G.cactusVariant === 'function');
+  }
+
+  // ================= L) Final J1407b — SPACE_RINGS_ENDING =================
+  console.log('\nL) Final J1407b — anillos, cinturón y la cadena completa');
+  {
+    S.inv = {}; S.flags = {}; S.partners = ['majo']; S.party = ['natalia', 'majo']; S.tired = null;
+    // --- 1A: se instancia, el copiloto es el primer partner, hay duda ---
+    const dA = new Sc.RingRaceDuel('natalia', () => {});
+    check('J1407b 1A: el copiloto es el primer partner de la party (majo)', dA.copilotId === 'majo', dA.copilotId);
+    dA.sug = { lane: 0, t: 2, mProg: 99999 }; dA.lane = 1;
+    dA.press(1); // contra la sugerencia (el copiloto pedía la izquierda)
+    check('J1407b 1A: ir contra la sugerencia del copiloto activa la DUDA de 0,3 s', dA.doubtT > 0, 'doubtT=' + dA.doubtT);
+    const dA3 = new Sc.RingRaceDuel('natalia', () => {});
+    dA3.sug = { lane: 0, t: 2, mProg: 99999 }; dA3.lane = 1;
+    dA3.press(-1); // a favor de la sugerencia: sin duda
+    check('J1407b 1A: seguir la sugerencia NO activa la duda', dA3.doubtT === 0 && dA3.lane === 0, 'doubtT=' + dA3.doubtT + ' lane=' + dA3.lane);
+    // --- 1A: la carrera corre y termina con resultado válido ---
+    let resA = null;
+    const dA2 = new Sc.RingRaceDuel('natalia', (r) => { resA = r; });
+    let steps = 0;
+    while (!resA && steps++ < 5000) dA2.update(0.05);
+    check('J1407b 1A: la carrera termina y entrega un resultado (win/tie/lose)', !!resA && ['win', 'tie', 'lose'].includes(resA.win), JSON.stringify(resA));
+    check('J1407b 1A: el resultado trae choques de ambos cohetes y el copiloto', !!resA && typeof resA.crashesP === 'number' && typeof resA.crashesB === 'number' && resA.copilot === 'majo', JSON.stringify(resA));
+    check('J1407b 1A: se generaron meteoritos de 1 y de 2 carriles durante la carrera', dA2.meteors !== undefined && dA2.crashesP + dA2.crashesB >= 0 && dA2.elapsed > 20, 'elapsed=' + dA2.elapsed);
+    // --- 1B: ventaja cruzada y terminación ---
+    const dB0 = new Sc.AsteroidBeltDuel('natalia', () => {});
+    check('J1407b 1B: sin ventaja se sale desde el origen del cinturón', dB0.P.x === 0, 'x=' + dB0.P.x);
+    const dB1 = new Sc.AsteroidBeltDuel('natalia', () => {}, { adv: true });
+    check('J1407b 1B: ganar 1A da SALIDA ADELANTADA (empiezas más cerca del aro)', dB1.P.x > dB0.P.x && dB1.adv === true, `adv=${dB1.P.x} base=${dB0.P.x}`);
+    check('J1407b 1B: el cinturón trae asteroides con formas de fiesta (pastel, globo, regalo)',
+      ['pastel', 'globo', 'regalo'].every((k) => dB0.rocks.some((r) => r.kind === k)), [...new Set(dB0.rocks.map((r) => r.kind))].join(','));
+    let resB = null;
+    const dB = new Sc.AsteroidBeltDuel('natalia', (r) => { resB = r; });
+    steps = 0;
+    while (!resB && steps++ < 5000) dB.update(0.05);
+    check('J1407b 1B: el duelo de flotación termina con resultado válido (la IA de José compite)', !!resB && ['win', 'tie', 'lose'].includes(resB.win), JSON.stringify(resB));
+    check('J1407b 1B: el resultado trae los aturdimientos de ambos (para el pastel magullado)', !!resB && typeof resB.hitsP === 'number' && typeof resB.hitsB === 'number', JSON.stringify(resB));
+    // --- La cadena completa: fases en orden ---
+    const chain = new Sc.SpaceEndingScene('natalia', () => {});
+    check('J1407b cadena: arranca en la cinemática de despegue en la azotea', chain.cur instanceof Sc.SpaceLaunchScene);
+    chain.cur.finish(); // saltar la cinemática, como con ESPACIO
+    check('J1407b cadena: tras el despegue entra la carrera de Anillos', chain.cur instanceof Sc.RingRaceDuel && chain.cur.copilotId === 'majo');
+    // --- La cadena completa llega hasta el resultado del final ---
+    let chainRes = null;
+    const chain2 = new Sc.SpaceEndingScene('natalia', (r) => { chainRes = r; });
+    chain2.cur.finish(); // despegue saltado
+    steps = 0;
+    while (chain2.cur instanceof Sc.RingRaceDuel && steps++ < 5000) chain2.update(0.05);
+    check('J1407b cadena: tras los Anillos pasa a la transición de cohetes averiados', chain2.cur instanceof Sc.SpaceTransitionScene);
+    chain2.cur.finish(); // transición saltada
+    check('J1407b cadena: tras la transición entra el Cinturón, con la ventaja que corresponda según 1A',
+      chain2.cur instanceof Sc.AsteroidBeltDuel && chain2.cur.adv === (chain2.results.ring.win === 'win'),
+      `adv=${chain2.cur && chain2.cur.adv} ring=${chain2.results.ring && chain2.results.ring.win}`);
+    steps = 0;
+    while (chain2.cur instanceof Sc.AsteroidBeltDuel && steps++ < 5000) chain2.update(0.05);
+    check('J1407b cadena: tras el Cinturón llega la fiesta sobre el anillo mayor', chain2.cur instanceof Sc.SpacePartyScene);
+    steps = 0;
+    while (!chainRes && steps++ < 3000) chain2.update(0.05);
+    check('J1407b cadena: la fiesta cierra y entrega el resultado SPACE_RINGS_ENDING',
+      !!chainRes && chainRes.spaceEnding === true && ['win', 'tie', 'lose'].includes(chainRes.win) && typeof chainRes.cakeBruised === 'boolean', JSON.stringify(chainRes));
+    // --- Registro en práctica / historia ---
+    check('J1407b: los eventos de práctica existen (anillos, cinturón, final)', ['anillos', 'cinturon', 'finalj1407b'].every((id) => G.EVENTS[id] && G.EVENTS[id].type === 'minigame'));
+    check('J1407b: MG registra las tres entradas con sus escenas', !!(MG.anillos && MG.cinturon && MG.finalj1407b) && MG.anillos.Scene() === Sc.RingRaceDuel && MG.cinturon.Scene() === Sc.AsteroidBeltDuel && MG.finalj1407b.Scene() === Sc.SpaceEndingScene);
+    check('J1407b: G.startSpaceEnding está expuesta para enganchar la historia después', typeof G.startSpaceEnding === 'function');
+    check('J1407b: el final está registrado en G.ENDINGS (FIESTA EN J1407B)', !!(G.ENDINGS.espacio && /J1407B/.test(G.ENDINGS.espacio.title)));
+    check('J1407b: las entradas nuevas NO están en la historia (decisiones A–D pendientes)', !G.STORY.includes('anillos') && !G.STORY.includes('cinturon') && !G.STORY.includes('finalj1407b'));
+    // --- Revisión 2026-11-21: duda en el otro sentido, freno al chocar,
+    // listener táctil que se retira y la regla exacta del pastel ---
+    const dA4 = new Sc.RingRaceDuel('natalia', () => {});
+    dA4.sug = { lane: 2, t: 2, mProg: 99999 }; dA4.lane = 1;
+    dA4.press(-1); // contra la sugerencia (pedía la derecha): duda también en este sentido
+    check('J1407b revisión: la DUDA también se activa yendo contra la sugerencia hacia el otro lado', dA4.doubtT > 0, 'doubtT=' + dA4.doubtT);
+    const dA5 = new Sc.RingRaceDuel('natalia', () => {});
+    dA5.v = 100; dA5.crashP();
+    check('J1407b revisión: chocar en 1A FRENA el cohete (sin eliminar)', dA5.v < 100 && dA5.crashesP === 1 && dA5.crashT > 0, 'v=' + dA5.v);
+    const dA6 = new Sc.RingRaceDuel('natalia', () => {});
+    const tapAntes = typeof dA6.tapH === 'function';
+    dA6.finish('p');
+    check('J1407b revisión: el listener táctil de 1A se retira al terminar la carrera', tapAntes && dA6.tapH === null, 'tapH=' + dA6.tapH);
+    const bruised = (belt) => new Sc.SpacePartyScene('natalia', { belt }, () => {}).bruised;
+    check('J1407b revisión: pastel magullado SOLO si pierdes 1B o chocas 3+ veces (el empate no magulla)',
+      bruised({ win: 'lose', hitsP: 0 }) === true && bruised({ win: 'win', hitsP: 3 }) === true && bruised({ win: 'win', hitsP: 2 }) === false && bruised({ win: 'tie', hitsP: 0 }) === false && bruised({ win: 'tie', hitsP: 3 }) === true);
+    // --- Corrección del playtest de Jose (2026-11-21): cohetes como
+    // IMÁGENES diseñadas, tamaño/hitbox derivados del sprite y pista
+    // con marcas transversales que SÍ muestran el avance ---
+    const imgDir = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+    const rocketFiles = ['cohete-party-back', 'cohete-rival-back', 'cohete-party-side', 'cohete-party-side-averiado', 'cohete-rival-side', 'cohete-rival-side-averiado'];
+    check('J1407b imágenes: los 6 PNG de cohetes existen en application/src/assets/img/',
+      rocketFiles.every((n) => fs.existsSync(path.join(imgDir, n + '.png'))));
+    const scenesTxt2 = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+    check('J1407b imágenes: el código referencia los 6 PNG y ya NO llama a rocketBackCv/rocketSideCv (nada de cohetes por canvas)',
+      rocketFiles.every((n) => scenesTxt2.includes("'" + n + "'")) && !scenesTxt2.includes('rocketBackCv(') && !scenesTxt2.includes('rocketSideCv('));
+    check('J1407b tamaño: el cohete cabe en UN carril (ROCKET_W = 46 < 52) y su alto sale del aspect real del PNG trasero',
+      Sc.RingRaceDuel.ROCKET_W === 46 && Sc.RingRaceDuel.ROCKET_W < 52 && Math.abs(Sc.RingRaceDuel.ROCKET_H - 46 * (371 / 280)) < 0.01,
+      `W=${Sc.RingRaceDuel.ROCKET_W} H=${Sc.RingRaceDuel.ROCKET_H}`);
+    check('J1407b hitbox: el umbral de choque se DERIVA de los sprites (núcleos al 70%): (0,7·46 + 0,7·50)/2 ≈ 33,6',
+      Math.abs(Sc.RingRaceDuel.HIT_W - (46 * 0.7 + 50 * 0.7) / 2) < 0.001 && Sc.RingRaceDuel.METEOR_W === 50, 'HIT_W=' + Sc.RingRaceDuel.HIT_W);
+    check('J1407b pista: hay marcas transversales (banda por segmento, balizas, tonos alternos y marca de distancia cada 500 u)',
+      Sc.RingRaceDuel.TRACK.bandW > 0 && Sc.RingRaceDuel.TRACK.distEvery === 500 && Sc.RingRaceDuel.TRACK.beacons === true && Sc.RingRaceDuel.TRACK.altTones === true && scenesTxt2.includes('TRACK_BAND_W') && scenesTxt2.includes('TRACK_DIST_EVERY'));
+    const dCam = new Sc.RingRaceDuel('natalia', () => {});
+    check('J1407b cámara: dist 480 / pitch 0,34 — el cohete se ve entero (68 px de 360) y queda pista por delante',
+      dCam.cam.dist === 480 && Math.abs(dCam.cam.pitch - 0.34) < 1e-9, JSON.stringify(dCam.cam));
+    check('J1407b cámara composición: cam.y = 108 baja la pista en pantalla (centro del cohete ≈57% del alto, sin tocar dist)',
+      dCam.cam.y === 108 && dCam.cam.dist === 480, JSON.stringify(dCam.cam));
+    // --- Bug del "contador 4" (playtest de Jose, 2026-11-21): los
+    // cohetes cargados como archivo (assets/img/*.png) son cross-origin
+    // desde file:// y texImage2D reventaba en draw(), matando el bucle.
+    // Corrección: data URIs en G.ROCKET_DATA + rAF agendado ANTES de
+    // update/draw en frame() ---
+    check('contador 4: G.ROCKET_DATA existe con las 6 claves y cada valor es una data URI PNG',
+      !!G.ROCKET_DATA && rocketFiles.every((n) => typeof G.ROCKET_DATA[n] === 'string' && G.ROCKET_DATA[n].startsWith('data:image/png;base64,')),
+      G.ROCKET_DATA ? Object.keys(G.ROCKET_DATA).join(',') : 'sin ROCKET_DATA');
+    check('contador 4: scenes.js carga los cohetes desde G.ROCKET_DATA, NO desde la ruta assets/img/',
+      scenesTxt2.includes('G.ROCKET_DATA[name]') && !scenesTxt2.includes("'assets/img/' +"));
+    const htmlTxt2 = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+    check('contador 4: index.html incluye js/rocket-sheets.js ANTES que js/scenes.js',
+      htmlTxt2.includes('js/rocket-sheets.js') && htmlTxt2.indexOf('js/rocket-sheets.js') < htmlTxt2.indexOf('js/scenes.js'));
+    const gameTxt2 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const frameBody = gameTxt2.slice(gameTxt2.indexOf('function frame(now)'), gameTxt2.indexOf('function frame(now)') + 1600);
+    check('contador 4: frame() agenda requestAnimationFrame(frame) ANTES de update/draw (blindaje del bucle)',
+      frameBody.indexOf('requestAnimationFrame(frame)') > -1 && frameBody.indexOf('requestAnimationFrame(frame)') < frameBody.indexOf('G.scene.update(dt)'),
+      'rAF@' + frameBody.indexOf('requestAnimationFrame(frame)') + ' update@' + frameBody.indexOf('G.scene.update(dt)'));
+    // --- Ajustes del playtest de Jose (2026-11-21, segunda ronda):
+    // los meteoritos VUELAN hacia el jugador (velocidad propia con
+    // rampa) y hay una estrella de IMPULSO para recuperarse tras un
+    // choque (solo la recoge el jugador) ---
+    const mkPlay = (d) => { d.st = 'play'; d.meteors = []; d.nextMet = 1e9; d.boosts = []; d.nextBoost = 1e9; return d; };
+    // (a) velocidad propia de los meteoritos y su rampa
+    const dMv = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dMv.spawnMeteor(3000);
+    const mMov = dMv.meteors[0];
+    check('J1407b meteoritos móviles: al nacer vuelan hacia el jugador a 26–40 u/s',
+      dMv.meteorSpeed(mMov) >= Sc.RingRaceDuel.METEOR_V.min && dMv.meteorSpeed(mMov) <= Sc.RingRaceDuel.METEOR_V.max, 'v=' + dMv.meteorSpeed(mMov));
+    const mp0 = mMov.prog;
+    for (let i = 0; i < 20; i++) dMv.update(0.05); // 1 s de carrera
+    check('J1407b meteoritos móviles: su prog baja POR SÍ SOLO (velocidad propia, no espera al jugador)',
+      mMov.prog < mp0 - 20, `de ${mp0} a ${mMov.prog.toFixed(1)}`);
+    // La rampa es por PROGRESO hacia la meta (pedido de Jose, 3ª
+    // ronda): el mismo meteorito vuela ~1,95× más rápido junto al aro
+    // que en la salida, y el techo absoluto es 85 u/s.
+    const vSalida = dMv.meteorSpeed(mMov);
+    dMv.prog = 6200; dMv.rprog = 0; // el líder llega al aro: factor 1,95
+    const vMeta = dMv.meteorSpeed(mMov);
+    check('J1407b meteoritos móviles: la rampa es por PROGRESO — junto a la meta vuela ~el doble que en la salida',
+      Math.abs(vMeta / mMov.mv - (1 + Sc.RingRaceDuel.METEOR_V.prog)) < 0.01 && vMeta > vSalida * 1.8,
+      `salida=${vSalida.toFixed(1)} meta=${vMeta.toFixed(1)} mv=${mMov.mv.toFixed(1)}`);
+    check('J1407b meteoritos móviles: techo absoluto de 85 u/s junto a la meta',
+      dMv.meteorSpeed({ mv: 50 }) === 85 && Sc.RingRaceDuel.METEOR_V.cap === 85, 'v=' + dMv.meteorSpeed({ mv: 50 }));
+    check('J1407b aviso: METEOR_WARN_Z da ≥ ~3 s incluso al cierre máximo junto a la meta (≈199 u/s)',
+      Sc.RingRaceDuel.METEOR_V.warnZ / 199 >= 3, 'warnZ=' + Sc.RingRaceDuel.METEOR_V.warnZ);
+    dMv.prog = 0; dMv.rprog = 0;
+    // (b) el choque con un meteorito en movimiento se detecta UNA sola vez
+    const dHit = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dHit.meteors.push({ prog: dHit.prog + 40, lanes: [1], hitP: false, hitB: false, rDodge: false, rot: 0, seed: 0, mv: 30 });
+    dHit.lane = 1; dHit.laneX = 0;
+    for (let i = 0; i < 100; i++) dHit.update(0.05); // cruza la roca y la deja bien atrás
+    check('J1407b meteoritos móviles: el choque al cruzarse se detecta UNA sola vez (sin duplicados)',
+      dHit.crashesP === 1, 'crashesP=' + dHit.crashesP);
+    // (c) la estrella de impulso: nace, se recoge en su carril, acelera
+    // por encima del cruise y al expirar la velocidad vuelve al cruise
+    const dBo = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dBo.spawnBoost(dBo.prog + 50, 1); dBo.lane = 1; dBo.laneX = 0;
+    check('J1407b impulso: la estrella nace en la pista, en el carril pedido',
+      dBo.boosts.length === 1 && dBo.boosts[0].lane === 1 && Sc.RingRaceDuel.BOOST.dur === 2.8 && Sc.RingRaceDuel.BOOST.mult === 1.5,
+      JSON.stringify(dBo.boosts.map((b) => [b.prog, b.lane])));
+    for (let i = 0; i < 200 && dBo.boostT <= 0; i++) dBo.update(0.05);
+    check('J1407b impulso: al cruzar la estrella en su carril el impulso se ACTIVA', dBo.boostT > 0, 'boostT=' + dBo.boostT);
+    let sawAbove = false;
+    for (let i = 0; i < 30; i++) { dBo.update(0.05); if (dBo.v > dBo.cruise) sawAbove = true; }
+    check('J1407b impulso: durante el impulso la velocidad SUPERA el cruise (objetivo 1,5×)',
+      sawAbove && dBo.v > dBo.cruise, `v=${dBo.v.toFixed(1)} cruise=${dBo.cruise}`);
+    dBo.boostT = 0.01; // casi agotado: expira y la velocidad debe volver
+    for (let i = 0; i < 120; i++) dBo.update(0.05);
+    check('J1407b impulso: al expirar, la velocidad vuelve al cruise (no se queda arriba)',
+      dBo.boostT <= 0 && dBo.v <= dBo.cruise * 1.05, `v=${dBo.v.toFixed(1)} cruise=${dBo.cruise}`);
+    // (d) el caso de Jose: chocar y recoger el impulso = recuperarse
+    const dRec = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dRec.v = dRec.cruise; dRec.crashP();
+    const vPost = dRec.v;
+    dRec.startBoost();
+    for (let i = 0; i < 20; i++) dRec.update(0.05); // 1 s de impulso
+    check('J1407b impulso tras choque: lo perdido se recupera y se supera el cruise en ~1 s',
+      dRec.v > vPost && dRec.v > dRec.cruise, `vPost=${vPost.toFixed(1)} v=${dRec.v.toFixed(1)} cruise=${dRec.cruise}`);
+    const dCut = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dCut.startBoost(); dCut.crashP();
+    check('J1407b impulso: chocar DURANTE el impulso lo corta (sin invulnerabilidad)', dCut.boostT === 0, 'boostT=' + dCut.boostT);
+    // (e) el rival NO recoge la estrella (es solo del jugador) y la
+    // estrella nunca nace pegada a un meteorito (≥140 u en prog)
+    const dRiv = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dRiv.prog = -400; // el jugador va muy por detrás: aún no cruza la estrella
+    dRiv.spawnBoost(dRiv.rprog + 45, 2); dRiv.rlane = 2; dRiv.rlaneX = 52;
+    let gRiv = 0;
+    while (dRiv.rprog < 45 && gRiv++ < 200) dRiv.update(0.05);
+    check('J1407b impulso: el RIVAL cruza la estrella y NO la recoge (solo es del jugador)',
+      dRiv.rprog >= 45 && dRiv.boostT === 0 && dRiv.boosts.length === 1 && !dRiv.boosts[0].done,
+      `rprog=${dRiv.rprog.toFixed(1)} boostT=${dRiv.boostT} boosts=${dRiv.boosts.length}`);
+    const dSep = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dSep.meteors.push({ prog: 1000, lanes: [0], hitP: false, hitB: false, rDodge: false, rot: 0, seed: 0, mv: 30 });
+    dSep.spawnBoost(1000, 1); // pedida EXACTAMENTE sobre la roca
+    check('J1407b impulso: la estrella nunca nace pegada a un meteorito (≥140 u en prog)',
+      dSep.boosts.every((b) => Math.abs(b.prog - 1000) >= Sc.RingRaceDuel.BOOST.sep), JSON.stringify(dSep.boosts.map((b) => b.prog)));
+    // --- Tercera ronda del playtest de Jose (2026-11-21): Pollito
+    // fuera de la pista de 1A y anchos OPACOS medidos como la única
+    // verdad del tamaño/hitbox (la rampa por progreso va arriba) ---
+    const dSinCat = new Sc.RingRaceDuel('natalia', () => {});
+    const ringSrc = scenesTxt2.slice(scenesTxt2.indexOf('class RingRaceDuel'), scenesTxt2.indexOf('class AsteroidBeltDuel'));
+    check('J1407b sin Pollito en pista: la instancia de 1A no tiene Actor Pollito y la clase ni lo crea ni lo renderiza',
+      dSinCat.cat === undefined && !ringSrc.includes('this.cat') && !ringSrc.includes("new Actor('pollito'"),
+      'cat=' + dSinCat.cat);
+    check('J1407b 1B intacto: Pollito SÍ flota libre en el Cinturón (su lógica sigue en 1B; se dibuja con su sprite con traje)',
+      !!dB0.cat && dB0.cat.id === 'pollito', 'cat=' + (dB0.cat && dB0.cat.id));
+    const OPQ = Sc.RingRaceDuel.OPAQUE;
+    check('J1407b anchos opacos: los PNG traseros miden fracción 1,00 (sin relleno: ROCKET_W ya es el ancho opaco)',
+      OPQ.rocketFracW['cohete-party-back'] === 1 && OPQ.rocketFracW['cohete-rival-back'] === 1, JSON.stringify(OPQ.rocketFracW));
+    check('J1407b anchos opacos: la roca compensa su relleno — dibujada a meteorDrawW(seed), su silueta opaca mide METEOR_W = 50',
+      OPQ.rockFracW.every((f, s) => f > 0.6 && f < 0.85 && Math.abs(OPQ.meteorDrawW[s] * f - Sc.RingRaceDuel.METEOR_W) < 0.01),
+      'frac=' + OPQ.rockFracW.map((f) => f.toFixed(3)).join(',') + ' drawW=' + OPQ.meteorDrawW.map((w) => w.toFixed(1)).join(','));
+    // --- Cuarta ronda del playtest de Jose (2026-11-21) sobre 1B:
+    // cámara lejos, hitbox desde lo opaco, impacto corto y sprites
+    // DISEÑADOS con traje (nada de casco dibujado encima) + meta
+    // diseñada, cargados como data URIs (G.BELT_DATA) ---
+    const beltFiles = ['espacio-natalia', 'espacio-saulo', 'espacio-itzel', 'espacio-fatima', 'espacio-samantha', 'espacio-majo', 'espacio-alan', 'espacio-jose', 'espacio-pollito', 'meta-cinturon'];
+    check('J1407b 1B imágenes: los 9 sprites con traje y la meta existen en application/src/assets/img/',
+      beltFiles.every((n) => fs.existsSync(path.join(imgDir, n + '.png'))));
+    check('J1407b 1B imágenes: G.BELT_DATA trae las 10 claves como data URIs PNG',
+      !!G.BELT_DATA && beltFiles.every((n) => typeof G.BELT_DATA[n] === 'string' && G.BELT_DATA[n].startsWith('data:image/png;base64,')),
+      G.BELT_DATA ? Object.keys(G.BELT_DATA).join(',') : 'sin BELT_DATA');
+    check('J1407b 1B imágenes: index.html incluye js/belt-sheets.js ANTES que js/scenes.js',
+      htmlTxt2.includes('js/belt-sheets.js') && htmlTxt2.indexOf('js/belt-sheets.js') < htmlTxt2.indexOf('js/scenes.js'));
+    const beltSrc = scenesTxt2.slice(scenesTxt2.indexOf('class AsteroidBeltDuel'), scenesTxt2.indexOf('class SpaceLaunchScene'));
+    check('J1407b 1B sin casco por código: la clase ya no llama a drawHelmet ni al aro por código, y dibuja la meta diseñada',
+      !beltSrc.includes('drawHelmet(') && !beltSrc.includes("ringGoalCv('cuadros')") && beltSrc.includes("beltImg('meta-cinturon')") && beltSrc.includes("beltImg('espacio-' + this.who)"),
+      '');
+    check('J1407b 1B cámara lejos: dist 640 (el jugador se proyecta a ≈89 px de 360)',
+      dB0.cam.dist === 640 && Sc.AsteroidBeltDuel.CAM.dist === 640 && Math.abs(dB0.cam.pitch - 0.3) < 1e-9, JSON.stringify(dB0.cam));
+    check('J1407b 1B impacto corto: aturdimiento 0,85 s, empuje 105 y cooldown 0,9 (el hint ya no cita 1,5)',
+      Sc.AsteroidBeltDuel.STUN === 0.85 && Sc.AsteroidBeltDuel.PUSH === 105 && Sc.AsteroidBeltDuel.CD === 0.9 && dB0.hint.includes('0,85') && !dB0.hint.includes('1,5'),
+      `STUN=${Sc.AsteroidBeltDuel.STUN} hint=${dB0.hint}`);
+    check('J1407b 1B radios opacos medidos: rock 0,76 · pastel 0,64 · globo 0,65 · regalo 0,62 (× r)',
+      Math.abs(Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'rock' }) - 28 * 0.76) < 0.01 && Math.abs(Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'pastel' }) - 28 * 0.64) < 0.01 && Math.abs(Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'globo' }) - 28 * 0.65) < 0.01 && Math.abs(Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'regalo' }) - 28 * 0.62) < 0.01,
+      JSON.stringify(Sc.AsteroidBeltDuel.ROCK_OPAQUE));
+    {
+      // Comportamiento: sin contacto visual NO hay golpe; tocando la
+      // silueta opaca (contra el núcleo del personaje) SÍ lo hay.
+      const dCol = new Sc.AsteroidBeltDuel('natalia', () => {});
+      dCol.st = 'play';
+      const cyC = dCol.P.y + Sc.AsteroidBeltDuel.CHAR_H / 2, rrC = Sc.AsteroidBeltDuel.rockR({ r: 28, kind: 'rock' }) + Sc.AsteroidBeltDuel.CORE_R;
+      const mkRock = (x) => ({ x, y: cyC, r: 28, vx: 0, vy: 0, rot: 0, vr: 0, kind: 'rock', seed: 0, cdP: 0, cdB: 0 });
+      dCol.rocks = [mkRock(dCol.P.x + rrC + 30)]; // la silueta queda a 30 u del núcleo: sin contacto
+      dCol.collide(dCol.P, dCol.p, 'cdP');
+      check('J1407b 1B hitbox: un asteroide cuya silueta NO toca al personaje no lo golpea',
+        dCol.P.stun === 0 && dCol.P.hits === 0, `stun=${dCol.P.stun} hits=${dCol.P.hits}`);
+      dCol.rocks = [mkRock(dCol.P.x + rrC - 6)]; // la silueta ya invade el núcleo: contacto
+      dCol.collide(dCol.P, dCol.p, 'cdP');
+      check('J1407b 1B hitbox: tocando la silueta SÍ golpea, y el aturdimiento aplicado es 0,85 s',
+        dCol.P.hits === 1 && Math.abs(dCol.P.stun - 0.85) < 1e-9, `stun=${dCol.P.stun} hits=${dCol.P.hits}`);
+    }
+  }
+
+  // ================= M) Final LEYENDAS (LEYENDAS_MOVIE_ENDING) =============
+  console.log('\nM) Final Leyendas — ítems, habilitación, duelos de boss y cadena');
+  {
+    // Ítems de la siembra: existen, tienen slot/peso y spawnean en la recolección
+    check('ítems de Leyendas existen (claqueta y cámara antigua)', !!G.ITEMS.claqueta && !!G.ITEMS.camara && G.ITEMS.claqueta.slots === 1 && G.ITEMS.camara.slots === 1);
+    check('los 12 spawns del mundo alcanzan para los 12 ítems', W.SPAWNS.length >= Object.keys(G.ITEMS).length, `spawns=${W.SPAWNS.length} ítems=${Object.keys(G.ITEMS).length}`);
+    const col = new Sc.CollectScene('natalia', () => {});
+    const spawned = col.items.map((i) => i.id);
+    check('la recolección spawnea claqueta y cámara como cualquier ítem', spawned.includes('claqueta') && spawned.includes('camara') && new Set(spawned).size === Object.keys(G.ITEMS).length, spawned.join(','));
+    // Registro de especiales y pantallas
+    check('G.SPECIALS registra a Alebrije y Teodora (fuera de G.CHARS)', !!G.SPECIALS.alebrije && !!G.SPECIALS.teodora && !G.CHARS.alebrije && !G.CHARS.teodora);
+    check('retratos por código de los especiales (specialURL)', G.specialURL('alebrije').startsWith('data:image') && G.specialURL('teodora').startsWith('data:image'));
+    check('ENDINGS.leyendas = «ESTRELLA DE CINE»', !!G.ENDINGS.leyendas && G.ENDINGS.leyendas.title === 'ESTRELLA DE CINE');
+    check('las entradas de Leyendas NO están en la historia (G.STORY)', !G.STORY.includes('patron') && !G.STORY.includes('trazo') && !G.STORY.includes('soga') && !G.STORY.includes('finalleyendas'));
+    check('MG registra los 3 minijuegos y la cadena de Leyendas', !!(MG.patron && MG.trazo && MG.soga && MG.finalleyendas));
+    // Habilitación: función pura con las 3 condiciones del guion
+    const decoReal = (nReal, nImprov) => [...Array.from({ length: nReal }, () => ({ placed: true, improv: false })), ...Array.from({ length: nImprov }, () => ({ placed: true, improv: true }))];
+    const base = { flags: { casting: true }, deco: decoReal(4, 2), quality: 70 };
+    check('habilitación: casting + 4 zonas reales + calidad 70 → LISTO', G.legendsReady(base) === true);
+    check('habilitación: sin casting → no', G.legendsReady({ ...base, flags: {} }) === false);
+    check('habilitación: solo 3 zonas reales → no', G.legendsReady({ ...base, deco: decoReal(3, 3) }) === false);
+    check('habilitación: zonas improvisadas NO cuentan como reales', G.legendsDecoCount({ deco: decoReal(2, 4) }) === 2 && G.legendsReady({ ...base, deco: decoReal(2, 4) }) === false);
+    check('habilitación: calidad 69 → no; 70 → sí', G.legendsReady({ ...base, quality: 69 }) === false && G.legendsReady({ ...base, quality: 70 }) === true);
+
+    S.party = ['natalia']; S.flags = {};
+    const driveDuel = (duel, driver, maxTicks) => { let res = null; duel._testDone = (r) => { res = r; }; const origDone = duel.done; duel.done = (r) => { res = r; }; for (let i = 0; i < (maxTicks || 6000) && !res; i++) { driver(duel, i); duel.update(0.05); } return res; };
+
+    // Casting: completable (5 rondas de 3→7 pasos) y perdible (2 fallos)
+    {
+      const lens = [];
+      const d = new Sc.PatronDuel('natalia', () => {});
+      d.tOn = 0.01; d.tOff = 0.01;
+      const res = driveDuel(d, (dd) => { if (dd.phase === 'show') lens[dd.r] = dd.seq.length; if (dd.phase === 'input') { let guard = 0; while (dd.phase === 'input' && guard++ < 12) dd.pickZone(dd.seq[dd.prog]); } });
+      check('casting completable: 5 rondas ganadas → win', !!res && res.win === 'win', JSON.stringify(res));
+      check('casting: las secuencias crecen 3→7 pasos', lens.join(',') === '3,4,5,6,7', lens.join(','));
+      const d2 = new Sc.PatronDuel('natalia', () => {});
+      d2.tOn = 0.01; d2.tOff = 0.01;
+      const res2 = driveDuel(d2, (dd) => { if (dd.phase === 'input') dd.pickZone((dd.seq[dd.prog] + 1) % 6); });
+      check('casting perdible: dos rondas falladas → lose', !!res2 && res2.win === 'lose', JSON.stringify(res2));
+    }
+    // --- Corrección de Jose (2026-11-21): el Alebrije del patrón es
+    // su sprite REAL (billboard), el resplandor son variantes por
+    // zona derivadas del master, y la luz del duelo es NEUTRA ---
+    {
+      const albFiles = ['alebrije-frente', 'alebrije-zona-cabeza', 'alebrije-zona-crines', 'alebrije-zona-antenas', 'alebrije-zona-aleta', 'alebrije-zona-panza', 'alebrije-zona-cola'];
+      const imgDirM = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+      check('patrón: la base y las 6 variantes de zona existen en application/src/assets/img/',
+        albFiles.every((n) => fs.existsSync(path.join(imgDirM, n + '.png'))));
+      check('patrón: G.ALEBRIJE_DATA trae base + 6 zonas como data URIs PNG',
+        !!G.ALEBRIJE_DATA && albFiles.every((n) => typeof G.ALEBRIJE_DATA[n] === 'string' && G.ALEBRIJE_DATA[n].startsWith('data:image/png;base64,')),
+        G.ALEBRIJE_DATA ? Object.keys(G.ALEBRIJE_DATA).join(',') : 'sin ALEBRIJE_DATA');
+      const htmlTxtM = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+      check('patrón: index.html incluye js/alebrije-sheets.js ANTES que js/scenes.js',
+        htmlTxtM.includes('js/alebrije-sheets.js') && htmlTxtM.indexOf('js/alebrije-sheets.js') < htmlTxtM.indexOf('js/scenes.js'));
+      const scenesTxtM = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const patronSrc = scenesTxtM.slice(scenesTxtM.indexOf('class PatronDuel'), scenesTxtM.indexOf('class TrazoDuel'));
+      check('patrón: el duelo ya no pinta al Alebrije por código (sin albCv() en la clase) y sí usa su imagen real',
+        !patronSrc.includes('albCv(') && patronSrc.includes("albImg('alebrije-frente')") && patronSrc.includes("albImg('alebrije-zona-'"),
+        '');
+      check('patrón: la figura por código del Alebrije sigue definida (respaldo de cara del HUD en albFaceCv)',
+        scenesTxtM.includes('function drawAlbFigure'), '');
+      // --- Corrección de Jose (2026-11-21, tarea adicional): la
+      // cinemática del final de Leyendas también deja el dibujo por
+      // código y la luz de fiesta ---
+      const finaleSrc = scenesTxtM.slice(scenesTxtM.indexOf('class LegendsRevealScene'), scenesTxtM.indexOf('class LegendsEndingScene'));
+      check('final Leyendas: ni la presentación ni el cierre llaman a las figuras por código de ninguno de los dos',
+        !finaleSrc.includes('albCv(') && !finaleSrc.includes('teoCv(') && !finaleSrc.includes('drawAlbFigure') && !finaleSrc.includes('drawTeoFigure'), '');
+      check('final Leyendas: las escenas usan los sprites reales (director/feliz del Alebrije; altiva/presentadora/selfie/idle de Teodora)',
+        finaleSrc.includes("albImg('alebrije-director')") && finaleSrc.includes("albImg('alebrije-feliz')")
+        && finaleSrc.includes("teoImg('teodora-altiva')") && finaleSrc.includes("'teodora-presentadora'") && finaleSrc.includes("'teodora-selfie'") && finaleSrc.includes("'teodora-idle'"), '');
+      const finaleLight = Sc.LegendsRevealScene && Sc.LegendsRevealScene.LIGHT;
+      check('final Leyendas: fuera la luz de fiesta — FINALE_LIGHT neutra y compartida por ambas escenas (el apagón inicial se conserva)',
+        !finaleSrc.includes('W.LIGHT.fiesta') && finaleSrc.includes('W.LIGHT.oscuro')
+        && !!finaleLight && finaleLight === Sc.LegendsFinaleScene.LIGHT
+        && finaleLight.amb[0] === finaleLight.amb[1] && finaleLight.amb[1] === finaleLight.amb[2]
+        && finaleLight.sun[0] === finaleLight.sun[1] && finaleLight.sun[1] === finaleLight.sun[2]
+        && finaleLight.points.length === 0, JSON.stringify(finaleLight));
+      check('final Leyendas: las poses del Alebrije (director/feliz) existen como PNG y data URI',
+        ['alebrije-director', 'alebrije-feliz'].every((n) => fs.existsSync(path.join(imgDirM, n + '.png'))
+          && typeof G.ALEBRIJE_DATA[n] === 'string' && G.ALEBRIJE_DATA[n].startsWith('data:image/png;base64,')),
+        G.ALEBRIJE_DATA ? Object.keys(G.ALEBRIJE_DATA).join(',') : 'sin ALEBRIJE_DATA');
+      check('final Leyendas: las poses de Teodora del final (altiva/presentadora) existen como PNG y data URI',
+        ['teodora-altiva', 'teodora-presentadora'].every((n) => fs.existsSync(path.join(imgDirM, n + '.png'))
+          && typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
+        G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
+      check('patrón: luz NEUTRA del duelo (amb y sun en blanco equilibrado, sin puntos de color, sin LIGHT.fiesta)',
+        !!Sc.PatronDuel.LIGHT && Sc.PatronDuel.LIGHT.amb[0] === Sc.PatronDuel.LIGHT.amb[1] && Sc.PatronDuel.LIGHT.amb[1] === Sc.PatronDuel.LIGHT.amb[2]
+        && Sc.PatronDuel.LIGHT.sun[0] === Sc.PatronDuel.LIGHT.sun[1] && Sc.PatronDuel.LIGHT.sun[1] === Sc.PatronDuel.LIGHT.sun[2]
+        && Sc.PatronDuel.LIGHT.points.length === 0 && patronSrc.includes('light: PATRON_LIGHT') && !patronSrc.includes('W.LIGHT.fiesta'),
+        JSON.stringify(Sc.PatronDuel.LIGHT));
+      check('patrón: el sprite ocupa el mismo alto que la figura por código (ALB_H = 130) y el ancho sale del aspect del master',
+        Sc.PatronDuel.ALB.h === 130 && Sc.PatronDuel.ALB.w === 96 && Sc.PatronDuel.ALB.files.length === 9, JSON.stringify(Sc.PatronDuel.ALB));
+      // --- Corrección de Jose (2026-11-21, 2ª ronda): el retrato VS
+      // salía como un zoom roto de la figura por código; el resplandor
+      // blanco-dorado no se distinguía; el sprite estaba tieso ---
+      check('patrón: el retrato VS/chat del Alebrije sale de su sprite real (specialURL → ALEBRIJE_DATA)',
+        typeof G.specialURL === 'function' && G.specialURL('alebrije') === G.ALEBRIJE_DATA['alebrije-frente'],
+        typeof G.specialURL === 'function' ? String(G.specialURL('alebrije')).slice(0, 40) : 'sin specialURL');
+      check('patrón: cada zona tiene su COLOR VIVO (la paleta del duelo es la de mkalebrije.py)',
+        !!Sc.PatronDuel.ZONE_COLORS && Sc.PatronDuel.ZONE_COLORS.cabeza === '#ff4fd8' && Sc.PatronDuel.ZONE_COLORS.crines === '#22d3ee'
+        && Sc.PatronDuel.ZONE_COLORS.antenas === '#ff5252' && Sc.PatronDuel.ZONE_COLORS.aleta === '#4f8dff'
+        && Sc.PatronDuel.ZONE_COLORS.panza === '#7dff57' && Sc.PatronDuel.ZONE_COLORS.cola === '#ffb020'
+        && fs.readFileSync(path.join(__dirname, 'mkalebrije.py'), 'utf8').includes('0xFF, 0x4F, 0xD8'),
+        JSON.stringify(Sc.PatronDuel.ZONE_COLORS));
+      check('patrón: el resplandor de la muestra va a plena fuerza (pulso 0,85–1, sin el pulso tenue 0,2–1 anterior)',
+        patronSrc.includes('alpha: 0.925 + 0.075 * Math.sin') && !patronSrc.includes('0.6 + 0.4 * Math.sin'), '');
+      check('patrón: el nombre de la zona alumbrada se anuncia en pantalla, en su color vivo',
+        patronSrc.includes('label.toUpperCase()') && patronSrc.includes('ALB_ZONE_COLORS[z.id]'), '');
+      check('patrón: ritmo de muestra legible (0,6 s encendido / 0,25 s de pausa; antes 0,55/0,30)',
+        !!Sc.PatronDuel.TIMING && Sc.PatronDuel.TIMING.on === 0.6 && Sc.PatronDuel.TIMING.off === 0.25,
+        JSON.stringify(Sc.PatronDuel.TIMING));
+      check('patrón: el billboard tiene vida (idle con bob/roll, pop al alumbrar, saltito, sacudida y brinco)',
+        patronSrc.includes('this.popT') && patronSrc.includes('this.hopT') && patronSrc.includes('this.shakeT') && patronSrc.includes('this.celeT')
+        && patronSrc.includes('this.albDraw') && patronSrc.includes('Math.sin(t * 1.7)'), '');
+      // --- Corrección de Jose (2026-11-21, 3ª ronda): la caja de
+      // estado del patrón lleva SOLO el estado actual (sin la imagen
+      // del Alebrije y sin el nombre del minijuego) y los chips de
+      // zona van sin el número inicial ---
+      check('patrón: su caja de estado es SOLO estado (legendsHud con { solo: true }; el helper dibuja la línea sin retrato ni título)',
+        patronSrc.includes("legendsHud(this, c, 'EL PATRÓN DEL ALEBRIJE'") && patronSrc.includes('{ solo: true }')
+        && scenesTxtM.includes('function legendsHud(d, c, title, lines, opts)') && scenesTxtM.includes('opts.solo'), '');
+      check('leyendas: las cajas SOLO-estado son Patrón y Trazo (2 llamadas a legendsHud, ambas con { solo: true }; la Soga ya NO llama al helper: fuera su caja y el retrato del boss)',
+        (scenesTxtM.match(/legendsHud\(this, c,/g) || []).length === 2 && (scenesTxtM.match(/\{ solo: true \}/g) || []).length === 2
+        && !scenesTxtM.slice(scenesTxtM.indexOf('class SogaDuel'), scenesTxtM.indexOf('class LegendsRevealScene')).includes('legendsHud('), '');
+      check('patrón: los chips de zona dicen solo el nombre, sin el número inicial',
+        patronSrc.includes('G.text(c, z.label, x + w / 2, y + 14') && !patronSrc.includes('${i + 1} ${z.label}'), '');
+    }
+    // 2A Trazo: siguiendo la línea y corriendo al seguro se gana; quieto en una esquina se pierde
+    const driveTrazo = (win) => {
+      const d = new Sc.TrazoDuel('natalia', () => {});
+      d.tTrazo = 1.2; d.tAviso = 0.1; d.tCorre = 0.6; d.tCae = 0.2;
+      return driveDuel(d, (dd) => {
+        if (!win) { dd.p.x = 268; dd.p.y = 222; return; }
+        if (dd.phase === 'trazo') { const idx = Math.min(dd.pts.length - 1, 2 * Math.round((dd.pt / dd.tTrazo) * (dd.pts.length - 1) / 2)); dd.p.x = dd.pts[idx].x; dd.p.y = dd.pts[idx].y; }
+        else if (dd.phase === 'corre' || dd.phase === 'cae') { const h = dd.hexes.find((hh) => hh.safe); if (h) { dd.p.x = h.x; dd.p.y = h.y; } }
+      }, 5000);
+    };
+    {
+      const res = driveTrazo(true);
+      check('2A trazo: precisión alta y sin caídas → win contra Teodora', !!res && res.win === 'win', JSON.stringify(res));
+      const res2 = driveTrazo(false);
+      check('2A trazo: sin trazar y cayendo dos veces → lose', !!res2 && res2.win === 'lose', JSON.stringify(res2));
+    }
+    // --- Corrección de Jose (2026-11-21): Teodora diseñada, luz
+    // neutra, cámara que encuadra la arena, caminata sin deslizar y
+    // hundimiento en fases ---
+    {
+      const teoFiles = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada', 'teodora-idle2', 'teodora-side', 'teodora-side-izq'];
+      const imgDirT = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+      check('trazo: las 9 poses de Teodora existen en application/src/assets/img/',
+        teoFiles.every((n) => fs.existsSync(path.join(imgDirT, n + '.png'))));
+      check('trazo: G.TEODORA_DATA trae las 9 poses como data URIs PNG',
+        !!G.TEODORA_DATA && teoFiles.every((n) => typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
+        G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
+      const htmlTxtT = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+      check('trazo: index.html incluye js/teodora-sheets.js ANTES que js/scenes.js',
+        htmlTxtT.includes('js/teodora-sheets.js') && htmlTxtT.indexOf('js/teodora-sheets.js') < htmlTxtT.indexOf('js/scenes.js'));
+      const scenesTxtT = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const trazoSrc = scenesTxtT.slice(scenesTxtT.indexOf('class TrazoDuel'), scenesTxtT.indexOf('class SogaDuel'));
+      check('trazo: la clase ya no dibuja a Teodora por código (sin teoCv) y sí usa sus sprites diseñados',
+        !trazoSrc.includes('teoCv(') && trazoSrc.includes("teoImg('teodora-' + teoPoseName)") && trazoSrc.includes('teoPreload()'), '');
+      check('trazo: la figura por código de Teodora ya no se usa en NINGÚN duelo ni escena (teoCv retirado; drawTeoFigure queda solo de respaldo de cara)',
+        !scenesTxtT.includes('function teoCv(') && !scenesTxtT.includes('teoCv(') && scenesTxtT.includes('function drawTeoFigure'), '');
+      // --- Corrección de Jose (2026-11-21, 3ª tarea): «La soga de
+      // fuego» — cámara, luz neutra, Teodora diseñada, saltos
+      // generados para todos y calaveritas diseñadas ---
+      const sogaSrc = scenesTxtT.slice(scenesTxtT.indexOf('class SogaDuel'), scenesTxtT.indexOf('SogaDuel.CAM = SOGA_CAM'));
+      const imgDirS = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+      check('soga: la clase no dibuja a Teodora ni las calaveritas por código (sin teoCv/calCv) y usa sus sprites (calaveritas DE PERFIL desde la ronda de la Soga)',
+        !sogaSrc.includes('teoCv(') && !sogaSrc.includes('calCv(') && sogaSrc.includes("teoImg(teoName)") && sogaSrc.includes("jumpImg('calaverita-clasica-perfil-a')") && sogaSrc.includes("jumpImg('calaverita-morada-perfil-a')"), '');
+      check('soga: Teodora suma salto (de su hoja de boss) y quemada (de la de faltantes) como PNG y data URI',
+        ['teodora-salto', 'teodora-quemada'].every((n) => fs.existsSync(path.join(imgDirS, n + '.png'))
+          && typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
+        G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
+      check('soga: cámara verificada con la proyección real (dist 520, pitch 0,36, objetivo y=26; la anterior cortaba el arco y pegaba los postes a los bordes)',
+        !!Sc.SogaDuel.CAM && Sc.SogaDuel.CAM.dist === 520 && Sc.SogaDuel.CAM.pitch === 0.36 && Sc.SogaDuel.CAM.y === 26 && Sc.SogaDuel.CAM.z === 6,
+        JSON.stringify(Sc.SogaDuel.CAM));
+      check('soga: luz neutra propia (noche equilibrada, sin puntos de color, sin W.LIGHT.noche heredada)',
+        !!Sc.SogaDuel.LIGHT && Sc.SogaDuel.LIGHT.amb[0] === Sc.SogaDuel.LIGHT.amb[1] && Sc.SogaDuel.LIGHT.sun[0] === Sc.SogaDuel.LIGHT.sun[1]
+        && Sc.SogaDuel.LIGHT.points.length === 0 && sogaSrc.includes('light: SOGA_LIGHT') && !sogaSrc.includes('W.LIGHT.noche'),
+        JSON.stringify(Sc.SogaDuel.LIGHT));
+      check('soga: la sombra de Teodora usa la firma vigente de R.flat (la antigua de 7 args ignoraba las opciones)',
+        sogaSrc.includes('R.flat(R.glowTex, J.t.x, 0.8, 0, 21, { ry: 0.67') && !sogaSrc.includes('42, 28, { color:'), '');
+      check('soga: G.JUMP_DATA trae los 7 saltos, las calaveritas (frontales + perfiles ×2 frames) y las esperas ×2 de los 7 roomies como data URIs PNG y sus PNG existen',
+        !!G.JUMP_DATA && Sc.SogaDuel.JUMP.files.length === 27 && Sc.SogaDuel.JUMP.files.every((n) => typeof G.JUMP_DATA[n] === 'string' && G.JUMP_DATA[n].startsWith('data:image/png;base64,') && fs.existsSync(path.join(imgDirS, n + '.png'))),
+        G.JUMP_DATA ? Object.keys(G.JUMP_DATA).join(',') : 'sin JUMP_DATA');
+      check('soga: index.html incluye js/jump-sheets.js ANTES que js/scenes.js',
+        htmlTxtT.includes('js/jump-sheets.js') && htmlTxtT.indexOf('js/jump-sheets.js') < htmlTxtT.indexOf('js/scenes.js'));
+      check('soga: el salto sustituye al Actor solo en el aire (hidden + billboard) y las figuras por código completas quedaron retiradas',
+        sogaSrc.includes('a.hidden = on') && sogaSrc.includes("jumpImg('salto-' + a.id)")
+        && !scenesTxtT.includes('function albCv(') && !scenesTxtT.includes('function calCv(')
+        && scenesTxtT.includes('function drawAlbFigure') && scenesTxtT.includes('function drawTeoFigure'), '');
+      check('trazo: luz NEUTRA propia (amb/sun blancos equilibrados, sin puntos de color, sin W.LIGHT.fiesta)',
+        !!Sc.TrazoDuel.LIGHT && Sc.TrazoDuel.LIGHT.amb[0] === Sc.TrazoDuel.LIGHT.amb[1] && Sc.TrazoDuel.LIGHT.amb[1] === Sc.TrazoDuel.LIGHT.amb[2]
+        && Sc.TrazoDuel.LIGHT.sun[0] === Sc.TrazoDuel.LIGHT.sun[1] && Sc.TrazoDuel.LIGHT.sun[1] === Sc.TrazoDuel.LIGHT.sun[2]
+        && Sc.TrazoDuel.LIGHT.points.length === 0 && trazoSrc.includes('light: TRAZO_LIGHT') && !trazoSrc.includes('W.LIGHT.fiesta'),
+        JSON.stringify(Sc.TrazoDuel.LIGHT));
+      check('trazo: cámara del set reescalado (dist 550, pitch 0,56, objetivo centrado en la arena)',
+        !!Sc.TrazoDuel.CAM && Sc.TrazoDuel.CAM.dist === 550 && Sc.TrazoDuel.CAM.pitch === 0.56 && Sc.TrazoDuel.CAM.x === 18 && Sc.TrazoDuel.CAM.z === 70 && Sc.TrazoDuel.SCALE === 0.72,
+        JSON.stringify(Sc.TrazoDuel.CAM));
+      check('trazo: hundimiento en fases (aviso 0,5 s + caída 0,9 s) con hueco, velo de aviso y polvo',
+        !!Sc.TrazoDuel.SINK && Sc.TrazoDuel.SINK.warn === 0.5 && Sc.TrazoDuel.SINK.fall === 0.9
+        && trazoSrc.includes('hexHoleCv()') && trazoSrc.includes('hexWarnCv()') && trazoSrc.includes('h.puffed'), '');
+      check('trazo: el tránsito activa la caminata de verdad (moveActor y partners fijan vx/vy, no solo la posición)',
+        trazoSrc.includes('a.vx = ax.x * sp') && trazoSrc.includes('a.vx = ((a.tx.x - a.x) / d) * 126') && trazoSrc.includes('a.moving = a.spd > 12'), '');
+      // Comportamiento: con el eje forzado a la derecha, la fase de
+      // zancada del jugador AVANZA al moverse (antes, sin vx/vy,
+      // quedaba congelada en 0 y el personaje se deslizaba).
+      const dw = new Sc.TrazoDuel('natalia', () => {});
+      G.input.touchDown('right', 99);
+      const step0 = dw.p.step;
+      for (let i = 0; i < 10; i++) { dw.moveActor(dw.p, 0.05, 157); dw.p.update(0.05); }
+      G.input.touchUp('right', 99);
+      check('trazo: al moverse con velocidad real, la fase de zancada AVANZA (no desliza)',
+        dw.p.step > step0 + 3 && dw.p.spd > 100, `step ${step0}→${dw.p.step.toFixed(1)}, spd ${dw.p.spd}`);
+    }
+    // --- Corrección de Jose (2026-11-21), 2ª ronda del Trazo: caja
+    // solo-estado también aquí, retrato diseñado de Teodora, cuenta
+    // 3·2·1 sin la presentación larga y vuelo de Teodora por estados ---
+    {
+      const scenesTxtU = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const trazoSrcU = scenesTxtU.slice(scenesTxtU.indexOf('class TrazoDuel'), scenesTxtU.indexOf('class SogaDuel'));
+      check('trazo: su caja de estado también es SOLO estado (legendsHud con { solo: true })',
+        trazoSrcU.includes("legendsHud(this, c, 'EL SET SE HUNDE / TRAZA LA LEYENDA'") && trazoSrcU.includes('{ solo: true }'), '');
+      check('trazo: el retrato VS/chat de Teodora sale de su sprite diseñado (specialURL → TEODORA_DATA idle); el del Alebrije no se rompe',
+        typeof G.specialURL === 'function' && G.specialURL('teodora') === G.TEODORA_DATA['teodora-idle']
+        && G.specialURL('alebrije') === G.ALEBRIJE_DATA['alebrije-frente'], '');
+      check('trazo: la cara del HUD de Teodora se recorta de su sprite real (teoFaceCv usa teoImg, con respaldo por código)',
+        scenesTxtU.includes("teoImg('teodora-idle')") && scenesTxtU.includes('function teoFaceCv()'), '');
+      check('trazo: cuenta regresiva PROPIA de 5 s (palabra de Jose, 3ª ronda; stT pisado en el constructor)',
+        Sc.TrazoDuel.COUNT === 5 && trazoSrcU.includes('this.stT = TRAZO_COUNT_T'), '');
+      check('trazo: la presentación del set dura lo que suman sus beats con tiempo de lectura (~13,4 s; ya no los 3,4 s ilegibles) y sigue saltable desde 0,4 s',
+        !!Sc.LegendsRevealScene && Sc.LegendsRevealScene.DUR > 13 && Sc.LegendsRevealScene.DUR < 14
+        && scenesTxtU.includes('REVEAL_DUR - 0.05') && !scenesTxtU.includes('const REVEAL_DUR = 3.4') && !scenesTxtU.includes('this.t >= 8.4'),
+        `DUR=${Sc.LegendsRevealScene && Sc.LegendsRevealScene.DUR}`);
+      // --- Corrección de Jose (2026-11-21, 4ª ronda): la
+      // cinemática del final de Leyendas iba tan rápida que no se
+      // entendía — entradas con tiempo de registro y textos con
+      // tiempo de LECTURA en la presentación y en el cierre ---
+      const RD = Sc.LegendsRevealScene.READ, RL = Sc.LegendsRevealScene.LINES, RB = Sc.LegendsRevealScene.BEATS;
+      check('leyendas: regla de lectura nombrada (mínimo 2,4 s + 0,045 s/carácter, pausa 0,5 s entre líneas)',
+        !!RD && RD.min === 2.4 && RD.perChar === 0.045 && RD.gap === 0.5
+        && Math.abs(RD.time('x'.repeat(100)) - 4.5) < 1e-9 && RD.time('corta') === 2.4,
+        JSON.stringify(RD && { min: RD.min, perChar: RD.perChar, gap: RD.gap }));
+      check('leyendas: cada línea de la presentación dura ≥ su tiempo de lectura calculado (con su pausa)',
+        !!RL && RL.length === 3
+        && Math.abs((RB.line2 - RB.line1) - (RD.time(RL[1]) + RD.gap)) < 1e-9
+        && Math.abs((Sc.LegendsRevealScene.DUR - RB.line2) - (RD.time(RL[2]) + 0.6)) < 1e-9
+        && RB.line1 >= RD.time(RL[0]) + RD.gap, JSON.stringify(RB));
+      check('leyendas: entradas escalonadas con tiempo de registro (Alebrije 1,9 s con easing y su pausa; Teodora desciende 2,0 s y aterriza al empezar su línea)',
+        RB.albDur === 1.9 && RB.teoDur === 2 && Math.abs(RB.teoIn + RB.teoDur - RB.line2) < 1e-9
+        && RB.line1 >= RB.albIn + RB.albDur + 0.5 - 1e-9, JSON.stringify(RB));
+      const TL0 = Sc.LegendsFinaleScene.TIMELINE(0), TL1 = Sc.LegendsFinaleScene.TIMELINE(1), TL2 = Sc.LegendsFinaleScene.TIMELINE(2);
+      check('leyendas: el cierre aplica la misma regla de lectura y el flash/selfie se desplaza con los créditos (1/2: flash 12,6 → ~15,2)',
+        Math.abs(TL1.bT - (4.5 + RD.time('XIMENA: «¿Me hicieron una fiesta… en una película?»'))) < 1e-9
+        && TL1.flashT > 12.6 && Math.abs(TL1.flashT - (TL1.creditsT + 4.6)) < 1e-9
+        && TL2.dur >= TL2.creditsT + 7 * 0.62 + RD.min - 1e-9 && TL0.dur > 5,
+        JSON.stringify({ t0: TL0, t1: TL1, t2: TL2 }));
+      const dc = new Sc.TrazoDuel('natalia', () => {});
+      check('trazo: un duelo recién creado arranca con la cuenta en 5 (stT = 5)', dc.st === 'count' && dc.stT === 5, `stT=${dc.stT}`);
+      // Vuelo por estados: la pose depende de la dirección y la velocidad.
+      const dv = new Sc.TrazoDuel('natalia', () => {});
+      dv.phase = 'corre'; dv.teoMoving = true; dv.teoSpeed = 119;
+      dv.teoVx = -100; const poseIzq = dv.teoPose();
+      dv.teoVx = 100; const poseDash = dv.teoPose();
+      dv.teoVx = 30; const poseSide = dv.teoPose();
+      dv.teoVx = 0; const poseFrontal = dv.teoPose();
+      check('trazo: Teodora vuela con pose por dirección (izq → perfil izquierdo, der lanzada → dash, der diagonal → perfil, vertical → frontal)',
+        poseIzq === 'side-izq' && poseDash === 'dash' && poseSide === 'side' && poseFrontal === 'idle',
+        `${poseIzq}/${poseDash}/${poseSide}/${poseFrontal}`);
+      check('trazo: el vuelo deja estela, anticipa y se asienta (teoTrail/teoAnticip/teoSettleT en la clase; quieta alterna idle2)',
+        trazoSrcU.includes('this.teoTrail.push') && trazoSrcU.includes('teoAnticip') && trazoSrcU.includes('teoSettleT') && trazoSrcU.includes("teoPoseName = 'idle2'"), '');
+      // Comportamiento: en «corre», antes de despegar hay anticipación
+      // y al volar hacia el seguro emite estela de chispas.
+      const df = new Sc.TrazoDuel('natalia', () => {});
+      df.st = 'play'; df.phase = 'corre'; df.pt = 0.8;
+      df.update(0.016);
+      const anticip = df.teoAnticip;
+      df.pt = 1.0; df.teo.x = -169; df.teo.y = 30;
+      df.update(0.05); df.update(0.05); df.update(0.05);
+      check('trazo: anticipación antes del despegue y estela de chispas al volar',
+        anticip > 0 && df.teoTrail.length > 0 && df.teoSpeed > 40, `anticip=${anticip.toFixed(2)} trail=${df.teoTrail.length} spd=${df.teoSpeed.toFixed(0)}`);
+    }
+    // --- Corrección de Jose (2026-11-21), 3ª ronda del Trazo: el
+    // sprite de Teodora salía CORTADO por la izquierda (la celda de
+    // extracción de mkteodora.py era más estrecha que la figura:
+    // trazo ocupa x 1961–2681 en su hoja y la celda nacía en 2010),
+    // seguía deslizándose, la cuenta pasa a 5 s con pausa de 2 s
+    // antes del anuncio del color, y las losetas pastel translúcidas
+    // se prestaban a confusión ---
+    {
+      const scenesTxtV = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const trazoSrcV = scenesTxtV.slice(scenesTxtV.indexOf('class TrazoDuel'), scenesTxtV.indexOf('class SogaDuel'));
+      const mkTxt = fs.readFileSync(path.join(__dirname, 'mkteodora.py'), 'utf8');
+      check('trazo: la extracción ya no cercena a Teodora (celdas medidas sobre la figura real + margen PAD en mkteodora.py)',
+        mkTxt.includes('("trazo", "teodora-poses-boss-v1.webp", (1920, 0, 2736, 912), False)')
+        && mkTxt.includes('("dash", "teodora-sprites-faltantes-v1.webp", (900, 0, 1560, 992), False)')
+        && mkTxt.includes('PAD = 14') && mkTxt.includes('canvas.paste(img, (PAD, PAD))'), '');
+      // Los PNG del duelo llevan el margen: alto del lienzo = figura
+      // (440, o 405/406 en idle/idle2 tras seccionar la sombra) + 28.
+      const ihdrH = (n) => { const b = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'assets', 'img', n + '.png')); return b.readUInt32BE(20); };
+      check('trazo: los PNG de Teodora del duelo llevan su margen (IHDR: 468 de alto; idle 433 e idle2 434 por la sombra seccionada)',
+        ihdrH('teodora-trazo') === 468 && ihdrH('teodora-side') === 468 && ihdrH('teodora-side-izq') === 468
+        && ihdrH('teodora-sorprendida') === 468 && ihdrH('teodora-derrotada') === 468 && ihdrH('teodora-selfie') === 468 && ihdrH('teodora-dash') === 468
+        && ihdrH('teodora-idle') === 433 && ihdrH('teodora-idle2') === 434, '');
+      check('trazo: los altos de billboard compensan el margen (TEO_H 85 en el Trazo; la Soga y las escenas del final ajustadas)',
+        Sc.TrazoDuel.TEO.h === 85 && scenesTxtV.includes('const SOGA_TEO_H = 81'), '');
+      // Pausa de 2 s antes del anuncio: constante, fase y flujo.
+      check('trazo: la pausa previa al anuncio es la constante TRAZO_COLOR_DELAY = 2 y el flujo pasa por la fase «pre»',
+        Sc.TrazoDuel.COLOR_DELAY === 2 && trazoSrcV.includes("this.phase = 'pre'; this.pt = 0;")
+        && trazoSrcV.includes("this.phase === 'pre'") && trazoSrcV.includes('¡Prepárense…!'), '');
+      const dp = new Sc.TrazoDuel('natalia', () => {});
+      dp.st = 'play'; dp.phase = 'trazo'; dp.tTrazo = 0.1; dp.pt = 0;
+      dp.update(0.2); // fin del trazo → «pre», todavía SIN anuncio
+      const enPre = dp.phase;
+      dp.update(0.5); dp.update(0.5); dp.update(0.5); // 1,5 s de pausa
+      const siguePre = dp.phase;
+      const sinCaida = dp.hexes.every((h) => h.warn === 0 && h.sink === 0);
+      dp.update(0.6); // 2,1 s → se anuncia y pasa a «aviso»
+      check('trazo: tras el trazo hay 2 s de «pre» sin anuncio ni caída, y luego «aviso»',
+        enPre === 'pre' && siguePre === 'pre' && sinCaida && dp.phase === 'aviso', `${enPre}/${siguePre}/${dp.phase}`);
+      // Paleta cerrada y cara plana opaca con su RGB exacto.
+      check('trazo: paleta cerrada saturada (ROJO/AZUL/AMARILLO con RGB exactos) en TrazoDuel.HEX',
+        JSON.stringify(Sc.TrazoDuel.HEX.colors) === JSON.stringify(['#e63229', '#2060ff', '#ffc400'])
+        && JSON.stringify(Sc.TrazoDuel.HEX.names) === JSON.stringify(['ROJO', 'AZUL', 'AMARILLO']), '');
+      check('trazo: la cara de la loseta es plana y opaca (sin brillo central, alfa 1) y el anuncio lleva swatch del RGB exacto',
+        !trazoSrcV.includes('shadeHex(col, 1.22)') && trazoSrcV.includes('(1 - 0.38 * e), alpha: 1')
+        && trazoSrcV.includes('c.fillStyle = HEX_COLORS[this.safeColor]; c.fillRect(206, 74, 18, 18)'), '');
+      check('trazo: el aviso de hundimiento ya no tiñe de rojo la loseta (velo oscuro + filo rojo, solo en la condenada)',
+        scenesTxtV.includes("rgba(38,4,4,0.62)") && !scenesTxtV.includes("hexPath(x, 48, 48, 44); x.fillStyle = '#ff3b30'; x.fill();"), '');
+      // Teodora nunca estatua: espera = celular tecleando; vuelo = frames alternos.
+      const dw2 = new Sc.TrazoDuel('natalia', () => {});
+      dw2.phase = 'aviso'; dw2.teoMoving = false;
+      const poseEspera = dw2.teoPose();
+      dw2.phase = 'corre'; dw2.teoMoving = true; dw2.teoVx = -100; dw2.teoAnimT = 0;
+      const frameA = dw2.teoPose();
+      dw2.teoAnimT = 0.2; // ~7 fps: el segundo frame del vuelo
+      const frameB = dw2.teoPose();
+      check('trazo: en espera Teodora está con el celular (selfie) y en vuelo la pose es CONSTANTE por trayecto, alternando solo su frame HERMANO (side-izq ↔ side-izq2; 4ª ronda: fuera el frontal idle2 que se leía como brinco)',
+        poseEspera === 'selfie' && frameA === 'side-izq' && frameB === 'side-izq2', `${poseEspera}/${frameA}/${frameB}`);
+      check('trazo: el tecleo tiene su micro-animación (bob ~2 Hz de 1,6 u y balanceo) en draw',
+        trazoSrcV.includes('Math.sin(t * 12.6) * 1.6') && trazoSrcV.includes('Math.sin(t * 6.3) * 0.03') && trazoSrcV.includes('this.teoAnimT += dt'), '');
+    }
+    // 2A-bis (4ª ronda — 2026-11-21): el vuelo de Teodora ya no
+    // «salta»: pose constante por trayecto (solo frames hermanos de
+    // la misma pose de perfil) y trayectoria con arco + bob continuo
+    // de baja frecuencia. Y la Soga: calaveritas de perfil animadas
+    // al ritmo del ángulo, espera del jugador con sprites, soga con
+    // onda de nodos exactos y patio ambientado.
+    {
+      const srcAll4 = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const imgDir4 = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+      const t04 = srcAll4.indexOf('class TrazoDuel'), t14 = srcAll4.indexOf('class SogaDuel');
+      const trazoSrc4 = srcAll4.slice(t04, t14), sogaSrc4 = srcAll4.slice(t14, srcAll4.indexOf('SogaDuel.CAM = SOGA_CAM', t14));
+      // Vuelo: en ningún tiempo de su reloj aparece un frontal.
+      const dv4 = new Sc.TrazoDuel('natalia', () => {});
+      dv4.st = 'play'; dv4.phase = 'corre'; dv4.teoMoving = true; dv4.teoVx = -100; dv4.teoVy = 0;
+      const posesVuelo = [0, 0.2, 0.4, 0.6, 0.8].map((tt) => { dv4.teoAnimT = tt; return dv4.teoPose(); });
+      check('trazo (4ª ronda): durante todo el trayecto la pose de vuelo es de la familia de perfil (nunca un frontal): ' + posesVuelo.join('/'),
+        posesVuelo.every((pp) => pp === 'side-izq' || pp === 'side-izq2'), posesVuelo.join(','));
+      check('trazo (4ª ronda): la elevación del vuelo sale del ARCO del trayecto (teoTrip/teoArc) con bob continuo de ~1,5 Hz (fuente)',
+        trazoSrc4.includes('this.teoTrip') && trazoSrc4.includes('this.teoArc = Math.sin(Math.PI') && trazoSrc4.includes('(this.teoArc || 0) * 11 + Math.sin(t * 9.42) * 3.5'), '');
+      check('trazo (4ª ronda): teodora-side2 y teodora-side-izq2 (frames hermanos generados) existen como PNG y data URI',
+        fs.existsSync(path.join(imgDir4, 'teodora-side2.png')) && fs.existsSync(path.join(imgDir4, 'teodora-side-izq2.png'))
+        && G.TEODORA_DATA['teodora-side2'].startsWith('data:image/png;base64,') && G.TEODORA_DATA['teodora-side-izq2'].startsWith('data:image/png;base64,'), '');
+      // Arco en vivo: con un único hexágono seguro lejano, a mitad
+      // de camino el arco es positivo y el trayecto está registrado.
+      const dw4 = new Sc.TrazoDuel('natalia', () => {});
+      dw4.st = 'play'; dw4.phase = 'corre'; dw4.pt = 1.0;
+      dw4.hexes.forEach((h) => { h.safe = false; }); dw4.hexes[dw4.hexes.length - 1].safe = true;
+      dw4.teo.x = -169; dw4.teo.y = 30;
+      for (let i = 0; i < 3; i++) dw4.update(0.05);
+      check('trazo (4ª ronda): en pleno vuelo el trayecto está registrado y el arco es positivo (sube al despegar)',
+        !!dw4.teoTrip && dw4.teoArc > 0, `trip=${!!dw4.teoTrip} arc=${dw4.teoArc.toFixed(3)}`);
+      check('soga (4ª ronda): las calaveritas de perfil se animan con la FASE del ángulo real de la soga y van delante de su poste (z=16, sobre la tarima)',
+        sogaSrc4.includes('Math.floor(this.a / Math.PI)') && sogaSrc4.includes('R.sprite(calL, -185, 52, 16') && sogaSrc4.includes('R.sprite(calR, 185, 52, 16'), '');
+      check('soga (4ª ronda): la espera del jugador usa los sprites espera-/espera2- (swap en el suelo, no al cargar ni en el aire)',
+        sogaSrc4.includes("jumpImg('espera-' + a.id)") && sogaSrc4.includes("jumpImg('espera2-' + a.id)") && sogaSrc4.includes('const drawWait'), '');
+      check('soga (4ª ronda): la soga lleva la ONDA que viaja con nodos exactos (sin(2πu): cero en u=0, 0,5 y 1) sobre la trayectoria de siempre y nace de las manivelas',
+        sogaSrc4.includes('Math.sin(2 * Math.PI * u)') && sogaSrc4.includes('Math.cos(2 * this.a - 4 * u)') && sogaSrc4.includes('R.project(-177, 74, 16)') && sogaSrc4.includes('R.project(0, 62 - Math.sin(this.a) * 60, 0)'), '');
+      check('soga (4ª ronda): el patio está ambientado (piso extendido, alfombra, fachada con arcos, torres de focos, faroles y guirnalda detrás del arco)',
+        sogaSrc4.includes('mb.box(0, -5, 20, 980, 10, 360') && sogaSrc4.includes("'#ffd98a', { emit: true }") && sogaSrc4.includes('Guirnalda de luces') && sogaSrc4.includes('z=-30'), '');
+      check('soga (4ª ronda): chispas desprendidas con W.puff a ritmo de la velocidad angular (fuente)',
+        sogaSrc4.includes('dt * this.omega() * 0.4') && sogaSrc4.includes('W.puff(rnd(-170, 170), 0, 1, true)'), '');
+    }
+    // 2B Soga (mecánica de MOMENTO, corrección de Jose 2026-11-21):
+    // sin pulsar a tiempo te tropiezas, y a los 3 tropiezos pierdes;
+    // saltando a tiempo, Teodora cae en su selfie (~vuelta 10). El
+    // driver de victoria llama a jumpP() como haría la pulsación
+    // dentro de la ventana del indicador.
+    {
+      const d = new Sc.SogaDuel('natalia', () => {});
+      const res = driveDuel(d, () => {}, 900);
+      check('2B soga: jugador inmóvil → 3 tropiezos → pierde (lose)', !!res && res.win === 'lose' && res.trips === 3, JSON.stringify(res));
+      const d2 = new Sc.SogaDuel('natalia', () => {});
+      const res2 = driveDuel(d2, (dd) => { if (dd.J.p.h <= 0 && dd.timeToBottom() < 0.34) dd.jumpP(); }, 4000);
+      check('2B soga: saltando a tiempo, Teodora se quema en su selfie → win', !!res2 && res2.win === 'win' && res2.passes >= 9, JSON.stringify(res2));
+    }
+    // 2B-bis (ronda del indicador): sin caja, salto por ventana de
+    // tiempo y 3 intentos — fuente, constantes y comportamiento.
+    {
+      const srcS5 = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const sogaSrc5 = srcS5.slice(srcS5.indexOf('class SogaDuel'), srcS5.indexOf('SogaDuel.CAM = SOGA_CAM'));
+      check('soga (ronda indicador): la clase NO llama al helper de cajas ni dibuja barra de fuerza (sin legendsHud, sin .charge) y su estado va en texto plano con Intentos',
+        !sogaSrc5.includes('legendsHud(') && !sogaSrc5.includes('.charge') && sogaSrc5.includes('Intentos: ${SOGA_TRIES - this.trips}'), '');
+      check('soga (ronda indicador): el salto sale de la acción con la ventana de tipState y el indicador «¡ESPACIO!» se pinta sobre la cabeza (head)',
+        sogaSrc5.includes("G.input.hit('action')") && sogaSrc5.includes('tipState()') && sogaSrc5.includes("'¡ESPACIO!'") && sogaSrc5.includes('this.p.head(36)'), '');
+      check('soga (ronda indicador): constantes — 3 intentos y ventana por TIEMPO (lead 0,6 s > min 0,09 s; arco fijo v=560)',
+        Sc.SogaDuel.TRIES === 3 && Sc.SogaDuel.TIP.lead === 0.6 && Sc.SogaDuel.TIP.min === 0.09 && Sc.SogaDuel.TIP.v === 560,
+        JSON.stringify(Sc.SogaDuel.TIP));
+      check('soga (ronda indicador): la pantalla previa describe la mecánica de momento, no la de carga',
+        G.EVENTS.soga.intro.includes('¡ESPACIO!') && G.EVENTS.soga.intro.includes('tienes 3') && !G.EVENTS.soga.intro.includes('cargar el salto'), '');
+      // Comportamiento: con la soga lejos no hay indicador; cuando
+      // el indicador sale (frac casi llena), pulsar SALTA y el paso
+      // se esquiva sin tropiezo.
+      const dA = new Sc.SogaDuel('natalia', () => {});
+      dA.st = 'play';
+      const lejos = !dA.tipState().on;
+      let tipOn = null;
+      for (let i = 0; i < 40 && !tipOn; i++) { dA.update(0.05); const ts = dA.tipState(); if (ts.on) tipOn = ts; }
+      let salto = false, sinTropiezo = false;
+      if (tipOn) {
+        G.input.touchDown('action', 77); dA.update(0.05); G.input.touchUp('action', 77);
+        salto = dA.J.p.h > 0;
+        const p0 = dA.passes;
+        for (let i = 0; i < 60 && dA.passes === p0; i++) dA.update(0.05);
+        sinTropiezo = dA.trips === 0 && dA.J.p.roces === 0 && dA.passes === p0 + 1;
+      }
+      check('soga (ronda indicador): lejos no hay indicador; al salir (frac>0,85) pulsar en ventana salta y esquiva el paso sin tropiezo',
+        lejos && !!tipOn && tipOn.frac > 0.85 && salto && sinTropiezo, `lejos=${lejos} frac=${tipOn && tipOn.frac.toFixed(2)} salto=${salto} limpio=${sinTropiezo}`);
+      // Comportamiento: pulsar FUERA de ventana no salta; sin
+      // pulsar, el 1er y 2º tropiezo NO terminan el duelo y el 3º
+      // sí (derrota, con los 3 tropiezos en el resultado).
+      let resB = null; const dB = new Sc.SogaDuel('natalia', (r) => { resB = r; });
+      dB.st = 'play';
+      G.input.touchDown('action', 78); dB.update(0.05); G.input.touchUp('action', 78);
+      const noSalto = dB.J.p.h === 0 && dB.trips === 0;
+      let vio1 = false, vio2 = false;
+      for (let i = 0; i < 900 && !resB; i++) { dB.update(0.05); if (dB.trips === 1 && dB.st === 'play') vio1 = true; if (dB.trips === 2 && dB.st === 'play') vio2 = true; }
+      check('soga (ronda indicador): pulsar fuera de ventana NO salta; tropiezos 1 y 2 no acaban el duelo; el 3º es la derrota',
+        noSalto && vio1 && vio2 && !!resB && resB.win === 'lose' && resB.trips === 3, `noSalto=${noSalto} vio1=${vio1} vio2=${vio2} res=${JSON.stringify(resB)}`);
+    }
+    // Cadena completa y regla de boss: 2/2 = plena, 1/2 = película, 0/2 = sin película
+    const driveChain = (trazoWin, sogaWin) => {
+      let out = null;
+      const chain = new Sc.LegendsEndingScene('natalia', (o) => { out = o; });
+      for (let i = 0; i < 9000 && !out; i++) {
+        const cur = chain.cur;
+        if (cur instanceof Sc.TrazoDuel) {
+          cur.tTrazo = 1.2; cur.tAviso = 0.1; cur.tCorre = 0.6; cur.tCae = 0.2;
+          if (!trazoWin) { cur.p.x = 268; cur.p.y = 222; }
+          else if (cur.phase === 'trazo') { const idx = Math.min(cur.pts.length - 1, 2 * Math.round((cur.pt / cur.tTrazo) * (cur.pts.length - 1) / 2)); cur.p.x = cur.pts[idx].x; cur.p.y = cur.pts[idx].y; }
+          else if (cur.phase === 'corre' || cur.phase === 'cae') { const h = cur.hexes.find((hh) => hh.safe); if (h) { cur.p.x = h.x; cur.p.y = h.y; } }
+        } else if (cur instanceof Sc.SogaDuel && sogaWin) { if (cur.J.p.h <= 0 && cur.timeToBottom() < 0.34) cur.jumpP(); }
+        chain.update(0.05);
+      }
+      return out;
+    };
+    {
+      const full = driveChain(true, true);
+      check('cadena Leyendas 2/2: llega a LEYENDAS_MOVIE_ENDING en versión plena', !!full && full.movie === true && full.full === true && full.win === 'win', JSON.stringify(full && { movie: full.movie, full: full.full, wins: full.wins }));
+      const one = driveChain(true, false);
+      check('regla de boss: ganar solo 1 de 2 → película con Teodora invitada (tie)', !!one && one.movie === true && one.full === false && one.win === 'tie', JSON.stringify(one && { movie: one.movie, full: one.full, wins: one.wins }));
+      const none = driveChain(false, false);
+      check('regla de boss: perder los 2 → NO hay final de película', !!none && none.movie === false && none.win === 'lose', JSON.stringify(none && { movie: none.movie, wins: none.wins }));
+      check('G.startLegendsEnding existe (equivalente a startSpaceEnding)', typeof G.startLegendsEnding === 'function');
+    }
+  }
+
+  // ================= N) Integración de finales =====================
+  console.log('\nN) Integración — J1407b en la historia y elección del jugador');
+  {
+    // --- G.spaceReady: las 3 condiciones del guion con stats reales ---
+    const okSt = { flags: { escaladaEspacio: true }, quality: 80, sus: 49 };
+    check('spaceReady: Escalada espacial ganada + Preparación 80 + Sospecha 49 → LISTO', G.spaceReady(okSt) === true);
+    check('spaceReady: sin la marca de la Escalada espacial → no', G.spaceReady({ ...okSt, flags: {} }) === false);
+    check('spaceReady: Preparación 79 → no (el corte es 80)', G.spaceReady({ ...okSt, quality: 79 }) === false);
+    check('spaceReady: Sospecha («Despertar» real = S.sus) 50 → no; 49 → sí', G.spaceReady({ ...okSt, sus: 50 }) === false && G.spaceReady({ ...okSt, sus: 49 }) === true);
+    check('spaceReady: objeto vacío → no, sin explotar', G.spaceReady({}) === false);
+
+    // --- Enrutado del clímax: G.altFinalsRoute ---
+    const decoReal = (n) => Array.from({ length: n }, () => ({ placed: true, improv: false }));
+    const stSpace = { flags: { escaladaEspacio: true }, quality: 90, sus: 10, deco: decoReal(0) };
+    const stLeg = { flags: { casting: true }, quality: 75, sus: 10, deco: decoReal(4) };
+    const stBoth = { flags: { escaladaEspacio: true, casting: true }, quality: 90, sus: 10, deco: decoReal(4) };
+    const stNone = { flags: {}, quality: 10, sus: 90, deco: decoReal(0) };
+    check('clímax: solo espacio listo → ruta «espacio»', G.altFinalsRoute(stSpace) === 'espacio');
+    check('clímax: solo Leyendas listo → ruta «leyendas»', G.altFinalsRoute(stLeg) === 'leyendas');
+    check('clímax: AMBOS listos → ruta «ambos» (elige el jugador, sin prioridad fija)', G.altFinalsRoute(stBoth) === 'ambos');
+    check('clímax: ninguno listo → ruta null (final normal intacto)', G.altFinalsRoute(stNone) === null);
+    check('ENDINGS.espacio = «FIESTA EN J1407B» (el cierre del clímax espacial)', !!G.ENDINGS.espacio && G.ENDINGS.espacio.title === 'FIESTA EN J1407B');
+    {
+      // El cableado real en game.js: la elección se ofrece con
+      // ui.choose y las etiquetas de Jose, SIN temporizador (sin
+      // presión ni default por timeout).
+      const gameTxt = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+      const i = gameTxt.indexOf('Viaje a J1407b — la fiesta sobre los anillos');
+      const call = i >= 0 ? gameTxt.slice(Math.max(0, i - 60), i + 340) : '';
+      check('clímax: main() ofrece la elección con ui.choose y las dos opciones (J1407b / Leyendas)',
+        call.includes('ui.choose([') && call.includes('La película de Las Leyendas — la casa era un set'), call.slice(0, 120));
+      check('clímax: la elección NO lleva temporizador ni opción de timeout', /\]\);/.test(call) && !/timeout/.test(call), call.slice(-80));
+    }
+
+    // --- La marca de la Escalada: extra().space + resolve en historia ---
+    {
+      const d = new Sc.ClimbDuel('natalia', () => {});
+      d.pMax = Math.ceil(5000 / Sc.ClimbDuel.SHELF_H); // altura máxima ≥ ESPACIO_E (5000 u)
+      const exSpace = d.extra();
+      d.pMax = 10;
+      const exLow = d.extra();
+      check('Escalada: extra().space = true solo si la altura máxima alcanzó la zona ESPACIO', exSpace.space === true && exLow.space === false, `alto=${exSpace.space} bajo=${exLow.space}`);
+      S.flags = {}; G.practiceMode = false;
+      MG.repisas.resolve({ win: 'win', space: true });
+      const marcada = S.flags.escaladaEspacio === true;
+      S.flags = {};
+      MG.repisas.resolve({ win: 'win', space: false });
+      MG.repisas.resolve({ win: 'lose', space: true });
+      check('Escalada en historia: ganar llegando al espacio pone S.flags.escaladaEspacio; sin espacio o perdiendo, no', marcada && S.flags.escaladaEspacio !== true);
+    }
+
+    // --- Telescopio: prop por código en la Escalada, solo en el espacio ---
+    check('telescopio: su elevación está DENTRO de la zona espacio (≥ 5000 u)', Sc.ClimbDuel.TELESCOPE_E >= 5000, 'TELESCOPE_E=' + Sc.ClimbDuel.TELESCOPE_E);
+    check('telescopio: no entra en banda a ras de suelo y sí con la cámara a su altura', Sc.ClimbDuel.telescopeAt(0) === false && Sc.ClimbDuel.telescopeAt(Sc.ClimbDuel.TELESCOPE_E) === true);
+    {
+      // conteo exacto por color: el tubo del telescopio es de latón
+      // (#c9a44a), color que solo usa ese prop en drawWorld
+      const countBrass = (cy) => {
+        const d = new Sc.ClimbDuel('natalia', () => {});
+        const mb = new G.R.MB(); let n = 0;
+        const orig = mb.box.bind(mb);
+        mb.box = (...a) => { if (a[6] === '#c9a44a') n++; return orig(...a); };
+        d.cam.y = cy; d.drawWorld(mb);
+        return n;
+      };
+      let brassHigh = -1, brassLow = -1, drawErr = '';
+      try { brassHigh = countBrass(Sc.ClimbDuel.TELESCOPE_E); brassLow = countBrass(0); } catch (e) { drawErr = e.message; }
+      check('telescopio: a su altura drawWorld dibuja sus 3 piezas de latón; abajo, ninguna', brassHigh === 3 && brassLow === 0, `alto=${brassHigh} bajo=${brassLow} ${drawErr}`);
+    }
+
+    // --- Siembra WhatsApp ~13:00: la foto del cohete tras el apagón ---
+    {
+      S.party = ['natalia', 'majo', 'alan']; S.player = 'natalia'; S.flags = {};
+      const msgsEl = documentFake.querySelector('#msgs');
+      const dump = () => { let s = ''; (function walk(e) { s += e._html || ''; (e.children || []).forEach(walk); })(msgsEl); return s; };
+      const before = dump();
+      await G.spaceBeats('imagen'); // otro evento: no siembra
+      const noPost = S.flags.espacioFoto !== true && dump() === before;
+      await G.spaceBeats('apagon');
+      const after = dump();
+      check('siembra espacial: tras el apagón (~13:00) se postea la foto del cohete («no se fueron, están ORBITANDO»)',
+        noPost && S.flags.espacioFoto === true && after.includes('ORBITANDO') && after.includes('telescopio'));
+      const once = dump();
+      await G.spaceBeats('apagon');
+      check('siembra espacial: se postea una sola vez en la noche', dump() === once);
+    }
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

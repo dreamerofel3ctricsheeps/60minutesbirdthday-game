@@ -72,6 +72,14 @@
   G.setScene = (sc) => { G.scene = sc; G.input.flush(); const f = $('#fade'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
   let last = performance.now();
   function frame(now) {
+    // BLINDAJE (bug del "contador 4", 2026-11-21): el siguiente frame
+    // se agenda ANTES de update/draw. Antes se agendaba al final, y una
+    // excepción dentro de draw() (esa vez: texImage2D con una imagen
+    // file:// cross-origin al subir los cohetes de «Anillos de
+    // J1407b» a WebGL) impedía agendarlo: el bucle moría y el juego
+    // quedaba congelado en el último frame bueno, con la cuenta en 4.
+    // Agendando primero, un error en un frame ya no mata el bucle.
+    requestAnimationFrame(frame);
     // `last` avanza SIEMPRE, también en pausa: al reanudar, el dt es el de
     // un frame normal y el juego continúa exactamente donde estaba.
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -80,7 +88,6 @@
       if (G.scene) { G.scene.update(dt); G.scene.draw(dt); }
     }
     updatePauseBtn();
-    requestAnimationFrame(frame);
   }
 
   // ---------- Interfaz ----------
@@ -114,11 +121,15 @@
       // los menciona es como ausentes). Ximena, José y Pollito no son
       // roomies reclutables y siempre pueden hablar.
       if (S.party.length && G.PLAYABLE.includes(m.who) && !S.party.includes(m.who)) return;
-      const ch = G.CHARS[m.who];
+      // Personajes especiales (Alebrije/Teodora): no están en G.CHARS
+      // ni tienen hoja definida; su nombre/color salen de G.SPECIALS y
+      // su avatar es su sprite diseñado vía G.specialURL.
+      const ch = G.CHARS[m.who] || (G.SPECIALS && G.SPECIALS[m.who]);
+      if (!ch) return;
       const typing = ui.raw(`<div class="typing">${ch.name} está escribiendo…</div>`);
       await G.wait(ui.fast ? 0.05 : clamp(0.45 + m.text.length * 0.013, 0.5, 1.4));
       typing.remove();
-      ui.raw(`<div class="msg ${m.direct ? 'direct' : ''}"><img class="av" src="${Sp.portrait(m.who, m.mood)}" alt=""><div class="bubble"><b style="color:${ch.color}">${ch.name}${m.direct ? ' <i>· chat directo</i>' : ''}</b>${m.text}</div></div>`);
+      ui.raw(`<div class="msg ${m.direct ? 'direct' : ''}"><img class="av" src="${G.CHARS[m.who] ? Sp.portrait(m.who, m.mood) : G.specialURL(m.who)}" alt=""><div class="bubble"><b style="color:${ch.color}">${ch.name}${m.direct ? ' <i>· chat directo</i>' : ''}</b>${m.text}</div></div>`);
       G.sfx('msg');
       await G.wait(ui.fast ? 0.05 : 0.35);
     },
@@ -199,6 +210,7 @@
       <div class="pbtns">
         <button class="big" id="presume"><span class="pic pic-play"></span>Seguir jugando</button>
         <button class="big alt" id="pmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos</button>
+        <button class="big alt" id="psettings"><span class="pic pic-gear"><i></i></span>Ajustes</button>
         <button class="big alt" id="pexit"><span class="pic pic-door"></span>Salir al título</button>
       </div>
       <p class="dim">${G.practiceMode ? 'Estás en modo práctica: los duelos no afectan a ninguna partida.' : 'Ojo: lanzar un duelo de práctica abandona la partida actual, y salir al título también la pierde.'}</p></div>`;
@@ -210,10 +222,71 @@
       await showMinigames('pause');
       if (G.paused) showPauseMenu(); // solo miró la lista y volvió: la pausa sigue puesta
     };
+    $('#psettings').onclick = async () => {
+      pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
+      await settingsScreen();
+      if (G.paused) showPauseMenu();
+    };
   }
   pauseBtn.onclick = () => { if (G.paused) G.setPaused(false); else G.setPaused(true); };
   let lastCan = null;
-  function updatePauseBtn() { const c = !!(G.canPause() || G.paused); if (c !== lastCan) { lastCan = c; pauseBtn.classList.toggle('off', !c); } }
+  function updatePauseBtn() { const c = !!(G.canPause() || G.paused); if (c !== lastCan) { lastCan = c; pauseBtn.classList.toggle('off', !c); settingsBtn.classList.toggle('off', !c); } }
+
+  // ---------- Ajustes (controles táctiles y otras preferencias) ----------
+  // Persistente en localStorage; el valor por defecto se adivina según si
+  // el dispositivo reporta puntero "coarse" (dedo) o soporta touch, para
+  // que en un celular/tablet los controles aparezcan solos la primera vez,
+  // y en escritorio queden apagados salvo que el jugador los active a mano.
+  const SETTINGS_KEY = '1mtp.settings';
+  function detectTouch() { return !!((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)); }
+  let savedSettings = {};
+  try { savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { savedSettings = {}; }
+  G.settings = Object.assign({ touch: detectTouch() }, savedSettings);
+  function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(G.settings)); } catch (e) { /* almacenamiento no disponible */ } }
+  function applySettings() { document.body.classList.toggle('touch-on', !!G.settings.touch); }
+  applySettings();
+  function settingsScreen() {
+    return new Promise((res) => {
+      menuShow(`<h2><span class="pic pic-gear"><i></i></span>Ajustes</h2>
+        <div class="optrow"><div><b>Controles táctiles</b><small>D-pad y botón de acción en pantalla, para jugar con el dedo en celular o tablet. El teclado sigue funcionando igual, estén activos o no.</small></div>
+          <label class="switch"><input type="checkbox" id="stouch" ${G.settings.touch ? 'checked' : ''}><span class="track"></span></label></div>
+        <button class="big alt" id="sback">← Volver</button>`);
+      $('#stouch').onchange = (e) => {
+        G.settings.touch = e.target.checked; saveSettings(); applySettings();
+        if (!G.settings.touch) G.input.touchReset(); // suelta cualquier botón táctil "pegado" al desactivar
+      };
+      $('#sback').onclick = () => { G.sfx('pick'); menuHide(); res(); };
+    });
+  }
+  const settingsBtn = $('#settingsbtn');
+  settingsBtn.onclick = async () => {
+    if (!G.canPause() && !G.paused) return; // mismo criterio que el botón de Pausa: sin partida activa no hace nada (el título tiene su propio botón de Ajustes)
+    const wasPaused = G.paused;
+    if (!wasPaused) G.setPaused(true);
+    pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
+    await settingsScreen();
+    if (G.paused) showPauseMenu();
+  };
+
+  // ---------- Wiring del D-pad y botón de acción táctiles ----------
+  // Pointer events (no touchstart/touchend): funcionan igual con un dedo,
+  // un mouse o un lápiz, y cada botón suelta su tecla lógica aunque el
+  // dedo se levante fuera del botón (pointercancel/pointerleave) para que
+  // nunca quede una dirección "trabada" si el dedo se resbala.
+  (function initTouchpad() {
+    const pad = $('#touchpad'); if (!pad) return;
+    pad.querySelectorAll('.tbtn').forEach((btn) => {
+      const k = btn.dataset.k;
+      const down = (e) => { e.preventDefault(); btn.classList.add('on'); G.input.touchDown(k, e.pointerId); };
+      const up = (e) => { e.preventDefault(); btn.classList.remove('on'); G.input.touchUp(k, e.pointerId); };
+      btn.addEventListener('pointerdown', down);
+      btn.addEventListener('pointerup', up);
+      btn.addEventListener('pointercancel', up);
+      btn.addEventListener('pointerleave', up);
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+    });
+  })();
+  window.addEventListener('blur', () => G.input.touchReset());
   window.addEventListener('keydown', (e) => {
     if (e.repeat || G.menuOpen) return;
     if (e.key === 'Escape' || ((e.key === 'p' || e.key === 'P') && !G.captureKeys)) G.setPaused(!G.paused);
@@ -227,7 +300,7 @@
   // partida, la partida se ABANDONA (enterPractice descarta los
   // temporizadores de la historia): al terminar se va a la lista o al
   // título, nunca de vuelta a la run.
-  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'apagon', 'pizza', 'sonambula', 'memoria', 'imagen', 'cactus', 'cactus2', 'repisas', 'pisoton', 'globos', 'azotea'];
+  const DUEL_IDS = ['decoracion', 'pollito', 'mensajes', 'apagon', 'pizza', 'sonambula', 'memoria', 'imagen', 'cactus', 'cactus2', 'repisas', 'pisoton', 'globos', 'azotea', 'anillos', 'cinturon', 'finalj1407b', 'patron', 'trazo', 'soga', 'finalleyendas'];
   const DUEL_DESC = {
     decoracion: 'Cuelga la decoración en su zona antes de que Pollito la tire.',
     pollito: 'Persigue al gato por la sala y recupera lo que robó.',
@@ -243,7 +316,19 @@
     pisoton: 'Cambia de cojín y esquiva los pisotones de Pollito.',
     globos: 'Pollito dirige con banderas (¡y hace fintas!): espera el ¡YA! y levanta el globo indicado. Quien elige mal, sale volando.',
     azotea: 'Esquiva las pasadas del dron sobre la azotea.',
+    anillos: 'Carrera 2 vs 2 en cohete sobre un anillo de J1407b: 3 carriles, meteoritos que ocupan 1 o 2, y un copiloto que sugiere carriles (si vas al contrario, el cohete duda).',
+    cinturon: 'Duelo 1 vs 1 flotando con inercia entre asteroides contra José: chocar aturde 1,5 s. Pollito flota libre empujando rocas.',
+    finalj1407b: 'El final alternativo COMPLETO: despegue de la azotea, carrera de anillos, cinturón de asteroides y fiesta en gravedad baja sobre J1407b.',
+    patron: 'Final Leyendas · casting: repite el patrón de resplandores del Alebrije (memoria, 5 rondas).',
+    trazo: 'Final Leyendas · boss 2A: traza la leyenda con precisión y corre a los hexágonos seguros contra Teodora.',
+    soga: 'Final Leyendas · boss 2B: salta la soga de fuego sin quemarte; Teodora flota, pero se distrae con selfies.',
+    finalleyendas: 'Final Leyendas completo: revelación del set, las dos pruebas de Teodora y los créditos de la película.',
   };
+  // Jefes especiales (Alebrije/Teodora): NO están en G.CHARS (no tienen
+  // hoja definida y check_defined la exigiría); sus datos salen de
+  // G.SPECIALS y su imagen, de su sprite diseñado (ver G.specialURL).
+  function bossChar(ev) { return G.CHARS[ev.boss] || (G.SPECIALS && G.SPECIALS[ev.boss]) || { name: ev.boss, color: '#fff' }; }
+  function bossImgOf(ev) { return G.CHARS[ev.boss] ? Sp.full(ev.boss) : G.specialURL(ev.boss); }
   function menuShow(html) { G.menuOpen = true; overlay.innerHTML = `<div class="modal wide">${html}</div>`; overlay.classList.add('show'); }
   function menuHide() { G.menuOpen = false; overlay.classList.remove('show'); overlay.innerHTML = ''; }
   function enterPractice() {
@@ -256,7 +341,7 @@
   }
   function duelListScreen(from) {
     return new Promise((res) => {
-      const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = G.CHARS[ev.boss]; return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${ev.bossLabel || boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
+      const cards = DUEL_IDS.map((id) => { const ev = G.EVENTS[id], boss = bossChar(ev); return `<button class="duel" data-id="${id}"><b>${ev.title}</b><span style="color:${boss.color}">Jefe: ${ev.bossLabel || boss.name}</span><small>${DUEL_DESC[id]}</small></button>`; }).join('');
       menuShow(`<h2><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos — práctica</h2><p class="dim">Los duelos contra los jefes, directos y sin historia: ni premios ni castigos.${from === 'pause' && !G.practiceMode ? ' Si lanzas uno, la partida actual se abandona.' : ''}</p><div class="duels">${cards}</div><button class="big alt" id="mback">← Volver</button>`);
       overlay.querySelectorAll('.duel').forEach((b) => (b.onclick = () => { G.sfx('pick'); res(b.dataset.id); }));
       $('#mback').onclick = () => { G.sfx('pick'); res('back'); };
@@ -309,7 +394,7 @@
       const un = charKeys(car, off);
       const modal = el('div', 'modal wide noscroll');
       modal.appendChild(el('h2', '', ev.title));
-      modal.appendChild(el('p', 'dim', `¿Quién se enfrenta a ${G.CHARS[ev.boss].name}?`));
+      modal.appendChild(el('p', 'dim', `¿Quién se enfrenta a ${bossChar(ev).name}?`));
       modal.appendChild(car.node); modal.appendChild(car.dots);
       const back = el('button', 'big alt', '← Lista de minijuegos');
       back.onclick = () => finish(null);
@@ -320,8 +405,8 @@
   }
   function vsScreen(ev, who) {
     return new Promise((res) => {
-      const c = G.CHARS[who], boss = G.CHARS[ev.boss];
-      menuShow(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${Sp.full(ev.boss)}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
+      const c = G.CHARS[who], boss = bossChar(ev);
+      menuShow(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${bossImgOf(ev)}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
         <h2>${ev.title}</h2><p>${ev.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${ev.goal}</p>
         <p class="dim">${!G.practiceMode && S.phase !== 'title' ? 'Modo práctica: al empezar, la partida actual se abandona.' : 'Modo práctica: sin consecuencias en la historia.'}</p>
         <div class="pbtns"><button class="big" id="mstart">¡EMPEZAR!</button><button class="big alt" id="mback">← Volver</button></div>`);
@@ -331,7 +416,7 @@
   }
   function resultScreen(ev, r) {
     return new Promise((res) => {
-      const boss = G.CHARS[ev.boss];
+      const boss = bossChar(ev);
       const ico = r.win === 'win' ? 'trofeo' : r.win === 'tie' ? 'empate' : 'derrota'; // ícono PROPIO del resultado
       const txt = r.win === 'win' ? `¡VENCISTE A ${boss.name.toUpperCase()}!` : r.win === 'tie' ? 'EMPATE' : `GANÓ ${boss.name.toUpperCase()}`;
       menuShow(`<h2>${ev.title}</h2><div class="roll ${r.win === 'win' ? 'good' : r.win === 'tie' ? 'mid' : 'bad'}"><img class="res-ico" src="assets/icons/${ico}.png" alt="">${txt}</div>
@@ -377,7 +462,7 @@
         overlay.innerHTML = `<div class="modal"><div class="logo"><img class="logoico" src="assets/icons/pastel.png" alt=""><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
           <p>Siete roomies. Una fiesta sorpresa. Y Ximena, que vuelve de 36 horas de guardia, está por llegar.</p>
           <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa, vence en duelo a <b>Pollito</b> y a <b>José</b> y, sobre todo, <b>no la despiertes</b>.</p>
-          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button></div></div>`;
+          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button><button class="big alt" id="tsettings"><span class="pic pic-gear"><i></i></span>AJUSTES</button></div></div>`;
         overlay.classList.add('show');
         $('#tplay').onclick = () => {
           overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok');
@@ -387,6 +472,7 @@
           res();
         };
         $('#tmg').onclick = async () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('pick'); await showMinigames('title'); show(); };
+        $('#tsettings').onclick = async () => { overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('pick'); await settingsScreen(); show(); };
       };
       show();
     });
@@ -491,7 +577,16 @@
     imagen: { stats: ['logica', 'velocidad'], Scene: () => Sc.ImageDuel, note: () => 'Más lógica = José tarda más en verla', setup() {} },
     cactus: { stats: ['velocidad'], Scene: () => Sc.SpikeDuel, note: () => 'Velocidad para esquivar', setup() {} },
     cactus2: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.CactusRaceDuel, note: () => 'Mismo carril que Pollito: salta con ESPACIO o ↑', setup() {} },
-    repisas: { stats: ['velocidad'], Scene: () => Sc.ClimbDuel, note: () => 'La altura máxima manda: ← y →', setup() {} },
+    repisas: { stats: ['velocidad'], Scene: () => Sc.ClimbDuel, note: () => 'La altura máxima manda: ← y →', setup() {},
+      resolve(res) {
+        // FINAL J1407b, condición (1): llegar a la zona ESPACIO y GANAR
+        // la Escalada EN LA HISTORIA deja la marca que G.spaceReady
+        // evalúa a las 23:00. ClimbDuel.extra() reporta `space` (la
+        // altura máxima del jugador alcanzó ESPACIO_E). En práctica el
+        // resolve ni se invoca (practiceDuel no lo llama); el guard
+        // cubre el bucle de depuración ?duelo=.
+        if (!G.practiceMode && res.win === 'win' && res.space) S.flags.escaladaEspacio = true;
+      } },
     pisoton: { stats: ['velocidad'], Scene: () => Sc.StompDuel, note: () => 'Velocidad para cambiar de cojín', setup() {} },
     azotea: { stats: ['velocidad'], Scene: () => Sc.DroneDuel, note: () => 'Velocidad lateral', setup() {} },
     apagon: {
@@ -517,6 +612,15 @@
     pizza: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.PizzaRace, note: () => 'Sigilo = mejor equilibrio', setup() {} },
     sonambula: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.SleepwalkDuel, note: () => 'Sigilo = más margen al frenar', setup() {} },
     globos: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.BalloonDuel, note: () => 'Pollito dirige: no caigas en sus fintas', setup() {} },
+    // ----- Final J1407b (práctica y cadena del clímax) -----
+    anillos: { stats: ['velocidad'], Scene: () => Sc.RingRaceDuel, note: () => 'Tu copiloto es tu primer partner: hazle caso al cambiar de carril', setup() {} },
+    cinturon: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.AsteroidBeltDuel, note: () => 'Inercia pura: impulsa en contra para frenar', setup() {} },
+    finalj1407b: { stats: ['velocidad'], Scene: () => Sc.SpaceEndingScene, note: () => 'La cadena completa del final alternativo J1407b', setup() {} },
+    // ----- Final LEYENDAS (práctica y cadena del clímax) -----
+    patron: { stats: ['logica', 'carisma'], Scene: () => Sc.PatronDuel, note: () => 'Casting del Alebrije: memoria de secuencias', setup() {} },
+    trazo: { stats: ['velocidad', 'logica'], Scene: () => Sc.TrazoDuel, note: () => 'Boss Teodora: precisión de trazo y hexágonos seguros', setup() {} },
+    soga: { stats: ['velocidad', 'sigilo'], Scene: () => Sc.SogaDuel, note: () => 'Boss Teodora: mantén y suelta para saltar la soga', setup() {} },
+    finalleyendas: { stats: ['velocidad', 'carisma'], Scene: () => Sc.LegendsEndingScene, note: () => 'La cadena completa del clímax de Leyendas (sin condiciones)', setup() {} },
   };
 
   // SORTEO DEL EVENTO CACTUS (decisión de Jose, 2026-11-14): en la
@@ -538,11 +642,11 @@
       S.flags.cactusVariant = variant;
       if (variant === 'cactus2') { mg = MG.cactus2; evShow = G.EVENTS.cactus2; }
     }
-    const boss = G.CHARS[ev.boss];
+    const boss = bossChar(ev);
     const who = await ui.assign(`¿Quién se enfrenta a ${boss.name}?`, (c) => ({ stats: statLine(c, mg.stats), note: mg.note ? mg.note(c) : '' }));
     mg.setup();
     const c = G.CHARS[who];
-    const bossImg = Sp.full(ev.boss);
+    const bossImg = bossImgOf(ev);
     await ui.modal(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${bossImg}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
       <h2>${evShow.title}</h2>${variant ? '<p class="goal">Sorteo de cactus: esta partida toca la variante «' + (variant === 'cactus2' ? 'Cactus en carrera' : 'Cactus rodantes') + '».</p>' : ''}<p>${evShow.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${evShow.goal}</p>`, '¡EMPEZAR!');
     G.captureKeys = true; $('#phone').classList.add('dim');
@@ -704,15 +808,110 @@
     await G.wait(3.4);
   }
 
+  // =========================================================
+  // FINAL LEYENDAS en la HISTORIA (pedido de Jose, 2026-11-21)
+  // =========================================================
+  // Habilitación (las 3 condiciones del guion, evaluadas al llegar
+  // el clímax de las 00:00, ANTES del final estándar):
+  //  1. Casting ganado al Alebrije (S.flags.casting): aparece UNA
+  //     sola vez ~18:00 en la sala (beat tras el evento «cactus»),
+  //     solo si la decoración ya va bien encaminada (≥2 zonas reales
+  //     colocadas); si se pierde el casting, no reaparece.
+  //  2. Decoración: ≥4 de las 6 zonas de la sala colocadas con
+  //     ítems REALES recolectados (S.deco: placed && !improv) — el
+  //     sistema real de Decoración Express; nada de un solo ítem.
+  //  3. Preparación (S.quality, el stat real del HUD) ≥ 70 a las 23:00.
+  // Si se cumplen las 3, corre la cadena del set (revelación →
+  // pruebas de Teodora → resolución por regla de boss: ganar ≥1 =
+  // final de película; 0/2 = se cae al final normal sin derrota).
+  // PRIORIDAD: los finales alternativos se evalúan ANTES que el
+  // final estándar. Entre ellos NO hay prioridad fija: si J1407b y
+  // Leyendas se habilitan en la misma partida, ELIGE EL JUGADOR
+  // (decisión de Jose, 2026-11-21 — ver altFinalsRoute y el clímax
+  // de main()).
+  function legendsDecoCount(st) { return (st.deco || []).filter((d) => d.placed && !d.improv).length; }
+  function legendsReady(st) { return !!(st.flags && st.flags.casting) && legendsDecoCount(st) >= 4 && st.quality >= 70; }
+  G.legendsDecoCount = legendsDecoCount; G.legendsReady = legendsReady; // expuestas para la prueba de humo
+
+  // ---------- Habilitación del final J1407b (guion §1) ----------
+  // Condiciones del guion con los stats REALES de la partida:
+  //  1. Haber llegado a la zona ESPACIO y haber GANADO la Escalada
+  //     (Repisas) en modo historia: marca S.flags.escaladaEspacio,
+  //     la pone el resolve de MG.repisas con el campo `space` que
+  //     ClimbDuel.extra() reporta. (No existía flag de historia para
+  //     esto: se creó ahí.)
+  //  2. Preparación ≥ 80 a las 23:00: el stat real es S.quality, el
+  //     mismo que usa legendsReady (Leyendas pide ≥ 70).
+  //  3. «Despertar» < 50 a las 23:00: en el código NO existe S.wake;
+  //     el medidor real de riesgo de despertar es la SOSPECHA
+  //     (S.sus, 0–100 %: a 100 Ximena despierta y hay ruina), así
+  //     que la condición se evalúa como S.sus < 50.
+  function spaceReady(st) {
+    return !!(st.flags && st.flags.escaladaEspacio) && st.quality >= 80 && st.sus < 50;
+  }
+  G.spaceReady = spaceReady; // expuesta para la prueba de humo
+  // Enrutado del clímax con AMBOS finales alternativos: 'ambos' |
+  // 'espacio' | 'leyendas' | null (ninguno → final normal, sin
+  // cambios). Función pura, expuesta para la prueba de humo.
+  function altFinalsRoute(st) {
+    const sp = spaceReady(st), lg = legendsReady(st);
+    return sp && lg ? 'ambos' : sp ? 'espacio' : lg ? 'leyendas' : null;
+  }
+  G.altFinalsRoute = altFinalsRoute;
+  G.startLegendsEnding = (done) => { // equivalente a G.startSpaceEnding de J1407b: cadena sin exigir condiciones
+    const sc = new Sc.LegendsEndingScene(S.protagonist || S.player || 'natalia', done);
+    G.setScene(sc);
+    return sc;
+  };
+  async function legendsBeats(id) {
+    // Siembra ~15:00 (tras «La imagen distinta»): el rumor del barrio
+    if (id === 'imagen' && !S.flags.leyendasRumor) {
+      S.flags.leyendasRumor = true;
+      await ui.postAll([{ who: 'itzel', text: 'Oigan… dicen que están grabando una película de leyendas por el barrio 👀' }, { who: 'alan', text: '¿Con el Alebrije y todo? Ese ni existe.' }, { who: 'pollito', text: '😼' }]);
+    }
+    // Aparición del Alebrije ~18:00 (tras «Cactus en carrera»): una
+    // sola vez y solo si la decoración va bien encaminada
+    if (id === 'cactus' && !S.flags.alebrijeSeen && !S.flags.casting && legendsDecoCount(S) >= 2) {
+      S.flags.alebrijeSeen = true;
+      G.home.setView('sala');
+      await runEvent('patron');
+      const d = S.duels[S.duels.length - 1];
+      if (d && d.game === 'patron' && d.win === 'win') S.flags.casting = true;
+      else { S.flags.alebrijeGone = true; await ui.postAll([{ who: 'sistema', text: 'El Alebrije se escondió de nuevo entre la decoración. No va a volver.' }]); }
+    }
+  }
+
+  // ---------- Siembra del final J1407b (guion §1) ----------
+  // ~13:00 (tras el evento del APAGÓN, el de esa franja en G.STORY;
+  // mismo mecanismo que el rumor de Leyendas tras «imagen» ~15:00):
+  // llega al grupo la FOTO del cohete de los roomies NO reclutados,
+  // los que huyeron al llegar Ximena: «no se fueron, están
+  // orbitando». Es ambiente y pista del final espacial: no toca
+  // ningún stat. La otra mitad de la siembra es el TELESCOPIO,
+  // prop por código en la Escalada (ver ClimbDuel en scenes.js).
+  async function spaceBeats(id) {
+    if (id !== 'apagon' || S.flags.espacioFoto) return;
+    S.flags.espacioFoto = true;
+    await ui.postAll([
+      { who: 'sistema', text: '📸 Alan comparte una foto en el grupo: el cohete de juguete de los que se fueron… con la Tierra de fondo.' },
+      { who: 'alan', text: 'Me la mandaron los que «se fueron» a las 7. Miren el fondo. MIREN EL FONDO.' },
+      { who: 'majo', text: 'No se fueron. Están ORBITANDO. 🛰️' },
+      { who: 'sistema', text: 'Dicen que con un telescopio, desde bien alto, se les ve pasar. 🔭' },
+    ]);
+  }
+  G.spaceBeats = spaceBeats; // expuesta para la prueba de humo
+
   async function actNight() {
     ui.raw('<div class="group">🎂 OPERACIÓN: NO LA DESPIERTEN</div>');
     const n = Object.keys(S.inv).length;
-    await ui.postAll([{ who: 'majo', text: `Inventario: ${n} de 10 cosas. ${n >= 7 ? 'Mejor de lo que esperaba.' : n >= 4 ? 'Vamos a tener que improvisar.' : 'Esto va a ser un desastre hermoso.'}` }]);
+    await ui.postAll([{ who: 'majo', text: `Inventario: ${n} de ${Object.keys(G.ITEMS).length} cosas. ${n >= 9 ? 'Mejor de lo que esperaba.' : n >= 5 ? 'Vamos a tener que improvisar.' : 'Esto va a ser un desastre hermoso.'}` }]);
     for (const id of G.STORY) {
       if (await reactive()) return true;
       const ev = G.EVENTS[id];
       if (ev.when && !ev.when(S)) continue;
       await runEvent(id);
+      await legendsBeats(id);
+      await spaceBeats(id);
       if (await tick()) return true;
       await G.wait(0.6);
     }
@@ -765,8 +964,70 @@
     if (S.flags.regalo === 'cupones') extras.push('Ximena guardó los cupones de Saulo en su billetera.');
     ui.header('Final', e.title);
     await ui.modal(`<div class="ending ${e.tone}"><small>FINAL</small><h1>${e.title}</h1><p>${text}</p>${extras.length && key !== 'ruina' ? `<p class="dim">${extras.join(' ')}</p>` : ''}
-      <div class="stats"><div><b>${'★'.repeat(lvl)}${'☆'.repeat(4 - lvl)}</b><span>Calidad de la fiesta (${S.quality})</span></div><div><b>${S.sus}%</b><span>Sospecha</span></div><div><b>${Object.keys(S.inv).length}/10</b><span>Objetos</span></div><div><b>${S.duels.filter((d) => d.win === 'win').length}/${S.duels.length}</b><span>Duelos ganados</span></div></div></div>`, 'JUGAR OTRA VEZ');
+      <div class="stats"><div><b>${'★'.repeat(lvl)}${'☆'.repeat(4 - lvl)}</b><span>Calidad de la fiesta (${S.quality})</span></div><div><b>${S.sus}%</b><span>Sospecha</span></div><div><b>${Object.keys(S.inv).length}/${Object.keys(G.ITEMS).length}</b><span>Objetos</span></div><div><b>${S.duels.filter((d) => d.win === 'win').length}/${S.duels.length}</b><span>Duelos ganados</span></div></div></div>`, 'JUGAR OTRA VEZ');
     location.reload();
+  }
+
+  // ---------- Final alternativo J1407b (SPACE_RINGS_ENDING) ----------
+  // INTEGRADO A LA HISTORIA (rama feat/finales-integrados): la noche
+  // evalúa G.spaceReady en el clímax de main() — Escalada espacial
+  // ganada (S.flags.escaladaEspacio) + Preparación S.quality ≥ 80 +
+  // Sospecha S.sus < 50 a las 23:00 — con la siembra del telescopio
+  // en la Escalada (prop por código en ClimbDuel, scenes.js) y la
+  // foto del cohete en el WhatsApp ~13:00 (spaceBeats). Si se cumple,
+  // la cadena corre con esta misma función y cierra con
+  // showEnding('espacio') — el final está registrado en G.ENDINGS.
+  // DECISIÓN A RESUELTA por Jose (2026-11-21): si en una partida se
+  // habilitan AMBOS finales alternativos (este y Leyendas), ELIGE EL
+  // JUGADOR cuál jugar — sin prioridad fija ni azar (ver el clímax
+  // de main() y G.altFinalsRoute).
+  // DECISIÓN D RESUELTA por Jose (2026-11-21): los finales
+  // alternativos pueden habilitarse DESDE CUALQUIER MOMENTO — desde
+  // la primera partida, sin NG+ ni desbloqueo previo; por eso ni
+  // G.spaceReady ni G.legendsReady miran historial de partidas.
+  // Sigue pendiente de Jose, SOLO como nota de guion SIN efecto en
+  // el código por ahora: (B) si J1407b es viaje real o sueño. (La
+  // (C), desbloqueos a práctica/galería,
+  // ya está cubierta de hecho: ambos finales viven en el menú de
+  // práctica desde sus ramas.)
+  // El final también se juega desde el menú de práctica («Final
+  // J1407b», «Anillos de J1407b», «Cinturón de asteroides») o a mano
+  // con esta función, que corre la cadena sin exigir condiciones.
+  G.startSpaceEnding = function (done) {
+    const who = S.player || 'natalia';
+    G.captureKeys = true; $('#phone').classList.add('dim');
+    new Promise((r) => G.setScene(new Sc.SpaceEndingScene(who, r))).then((res) => {
+      G.captureKeys = false; $('#phone').classList.remove('dim');
+      if (G.home) G.setScene(G.home);
+      if (done) done(res);
+    });
+  };
+
+  // ---------- Clímax: finales alternativos ----------
+  // Cadena de Leyendas (comportamiento histórico, sin cambios):
+  // devuelve true si hubo final de película; si Teodora gana las
+  // dos pruebas (movie=false), se cae al final normal.
+  async function runLegendsClimax() {
+    ui.header('Final', 'La casa era un set');
+    G.captureKeys = true;
+    const out = await new Promise((r) => G.startLegendsEnding(r));
+    G.captureKeys = false;
+    G.setScene(G.home);
+    if (out && out.movie) { await showEnding('leyendas'); return true; }
+    await ui.postAll([{ who: 'sistema', text: 'El set se desmonta en silencio. La fiesta sigue… como fiesta.' }]);
+    return false;
+  }
+  // Cadena de J1407b, espejo de la de Leyendas: G.startSpaceEnding
+  // pone y quita captureKeys/dim y restaura la escena al terminar.
+  // Perder el Cinturón NO cancela este final (solo magulla el
+  // pastel): una vez lanzada la cadena, siempre cierra con
+  // showEnding('espacio').
+  async function runSpaceClimax() {
+    ui.header('Final', 'El viaje a J1407b');
+    await new Promise((r) => G.startSpaceEnding(r));
+    G.setScene(G.home);
+    await showEnding('espacio');
+    return true;
   }
 
   async function main() {
@@ -794,6 +1055,29 @@
     S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
     await actArrival(res);
     const ruina = await actNight();
+    // CLÍMAX DE FINALES ALTERNATIVOS: se evalúan AMBOS antes de la
+    // revelación estándar (G.altFinalsRoute). Solo uno listo → corre
+    // ese final. AMBOS listos → ELIGE EL JUGADOR (decisión de Jose,
+    // 2026-11-21): la elección se presenta en el chat con ui.choose
+    // SIN temporizador — no hay presión de tiempo ni default oculto;
+    // la partida espera el clic. Ninguno → final normal, intacto.
+    if (!ruina) {
+      const route = altFinalsRoute(S);
+      if (route === 'ambos') {
+        ui.header('Final', 'Dos finales posibles');
+        await ui.postAll([
+          { who: 'sistema', text: '✨ Esta noche se abrieron DOS caminos a la vez: el cohete de los huidos espera en el techo… y el equipo de la película, en la puerta.' },
+          { who: 'majo', text: 'No se puede estar en dos finales a la vez. Elijan UNO.' },
+        ]);
+        const pick = await ui.choose([
+          { label: 'Viaje a J1407b — la fiesta sobre los anillos' },
+          { label: 'La película de Las Leyendas — la casa era un set' },
+        ]);
+        if (pick === 0) { await runSpaceClimax(); return; }
+        if (await runLegendsClimax()) return;
+      } else if (route === 'espacio') { await runSpaceClimax(); return; }
+      else if (route === 'leyendas') { if (await runLegendsClimax()) return; }
+    }
     const key = await actReveal(ruina);
     await showEnding(key);
   }
