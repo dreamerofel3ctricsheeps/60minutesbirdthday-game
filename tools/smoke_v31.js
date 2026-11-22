@@ -293,11 +293,14 @@ load('scenes.js');
 // del respaldo en memoria del candado (mgSession), para poder simular
 // una sesión sin desbloqueo tras haberlo abierto. La sección T suma
 // saveSettings/applySoundSettings (los controles de sonido). La
-// sección V suma cromo (la máquina del modo inmersivo).
+// sección V suma cromo (la máquina del modo inmersivo). La sección AC
+// suma titleScreen y las piezas del autoguardado (saveCheckpoint,
+// readSave, applySave, clearSave) para el viaje de ida y vuelta del
+// guardado y los botones del título.
 load('game.js', (code) => {
   const from = 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect };';
   if (!code.includes(from)) throw new Error('no se encontró G.debug en game.js');
-  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings, settingsScreen, cromo };');
+  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; }, saveSettings, applySoundSettings, settingsScreen, cromo, titleScreen, saveCheckpoint, readSave, applySave, clearSave };');
 });
 
 const G = sandbox.G, Sc = G.Scenes, W = G.World;
@@ -3633,6 +3636,92 @@ const tick = () => new Promise((r) => setImmediate(r));
     } catch (e) {
       check('etiquetas: draw sin errores (excepción: ' + e.message + ')', false, e.stack && e.stack.split('\n')[1]);
     } finally { W.render = realRender; G.R.project = realProject; }
+  }
+
+  // --- Sección AC: autoguardado local (pedido de Jose, 2026-11-22:
+  // «¿qué pasa si refresco la pantalla? ¿Pierdo todo mi avance?»).
+  // Ranura única '1mtp.save' en localStorage, con versión y lectura
+  // defensiva; puntos de control SOLO en estados de reposo (collect,
+  // arrival, cada «hora» de la noche y el clímax); el título ofrece
+  // «Continuar partida» y la nueva sobrescribe en dos pasos;
+  // showEnding borra el guardado. Aquí se prueba el viaje completo:
+  // checkpoint → JSON → «refresco» (estado revuelto) → applySave.
+  {
+    console.log('\nAC) Autoguardado local — continuar la partida tras un refresco');
+    const gameAC = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const D = G.debug, lsAC = fakeLocalStorage;
+    lsAC.removeItem('1mtp.save');
+    // Fuente
+    check('autoguardado: ranura única con clave de la familia y versión, validada al leer (v, protagonista, reposo)',
+      gameAC.includes("const SAVE_KEY = '1mtp.save'") && gameAC.includes('const SAVE_V = 1') && gameAC.includes('sv.v === SAVE_V') && gameAC.includes('SAVE_V, at, state'), '');
+    check('autoguardado: puntos de control en los estados de reposo (collect, arrival, night por «hora», climax)',
+      gameAC.includes("saveCheckpoint('collect')") && gameAC.includes("saveCheckpoint('arrival'") && gameAC.includes("saveCheckpoint('night'") && gameAC.includes("saveCheckpoint('climax'"), '');
+    const iEndAC = gameAC.indexOf('async function showEnding');
+    const endBodyAC = iEndAC >= 0 ? gameAC.slice(iEndAC, gameAC.indexOf('location.reload', iEndAC)) : '';
+    const iPracAC = gameAC.indexOf('function enterPractice');
+    const pracBodyAC = iPracAC >= 0 ? gameAC.slice(iPracAC, gameAC.indexOf('function duelListScreen', iPracAC)) : '';
+    check('autoguardado: showEnding borra el guardado (cualquier final), abandonar a práctica también, y pagehide/visibilitychange re-persisten el último punto',
+      endBodyAC.includes('clearSave()') && pracBodyAC.includes('clearSave()') && gameAC.includes("'pagehide'") && gameAC.includes("'visibilitychange'") && gameAC.includes('repersistSave'), '');
+    // Comportamiento: el viaje de ida y vuelta del guardado
+    const msgsAC = documentFake.querySelector('#msgs');
+    S.player = 'saulo'; S.phase = 'act2'; S.sus = 33; S.sleep = 2; S.noise = 21; S.qBonus = 5;
+    S.inv = { pastel: true, globos: true }; S.partners = ['majo', 'alan']; S.party = ['saulo', 'majo', 'alan'];
+    S.fled = G.PLAYABLE.filter((id) => !S.party.includes(id));
+    S.flags = { casting: true }; S.done = { cajas: true }; S.duels = [{ game: 'deco', boss: 'pollito', win: 'win' }];
+    S.tired = 'majo'; S.deco = [{ i: 0, improv: false, placed: true }]; S.log = { fallos: 1, despertares: 0 };
+    const uriAC = 'data:image/png;base64,QUJDREVGRw==';
+    msgsAC.innerHTML = `<div class="row"><div class="msg"><img class="av" src="${uriAC}"><div class="bubble">Hola de prueba</div></div></div><div class="row"><div class="msg"><img class="av" src="${uriAC}"><div class="bubble">Otro mensaje</div></div></div>`;
+    D.saveCheckpoint('night', { storyIdx: 5 });
+    let svAC = null; try { svAC = JSON.parse(lsAC.getItem('1mtp.save') || 'null'); } catch (e) { svAC = null; }
+    check('autoguardado: el punto de control escribe el JSON con versión, reposo e índice de la noche',
+      !!svAC && svAC.v === 1 && svAC.at === 'night' && svAC.storyIdx === 5 && svAC.state.player === 'saulo' && svAC.state.sus === 33, '');
+    check('autoguardado: el chat viaja empaquetado (ninguna data URI en línea; la repetida vive UNA vez en el diccionario)',
+      !!svAC && !svAC.chat.includes('data:image') && Array.isArray(svAC.dict) && svAC.dict.length === 1 && svAC.dict[0] === uriAC, '');
+    // «Refresco»: el estado y el chat se revuelven, y se reconstruye desde el JSON
+    S.player = 'natalia'; S.phase = 'title'; S.sus = 0; S.sleep = 1; S.noise = 0; S.qBonus = 0;
+    S.inv = {}; S.partners = []; S.party = []; S.fled = []; S.flags = {}; S.done = {}; S.duels = []; S.tired = null; S.deco = [];
+    msgsAC.innerHTML = '';
+    const backAC = D.readSave();
+    check('autoguardado: readSave devuelve el guardado válido tal cual (reposo e índice incluidos)',
+      !!backAC && backAC.at === 'night' && backAC.storyIdx === 5, '');
+    D.applySave(backAC);
+    check('autoguardado: tras el «refresco» se recuperan protagonista, estadísticas e inventario',
+      S.player === 'saulo' && S.phase === 'act2' && S.sus === 33 && S.sleep === 2 && S.noise === 21 && S.inv.pastel === true && S.inv.globos === true, '');
+    check('autoguardado: se recuperan party, banderas, duelos, progreso y descanso',
+      JSON.stringify(S.party) === JSON.stringify(['saulo', 'majo', 'alan']) && JSON.stringify(S.partners) === JSON.stringify(['majo', 'alan'])
+      && S.flags.casting === true && S.duels.length === 1 && S.duels[0].win === 'win' && S.done.cajas === true && S.tired === 'majo'
+      && Array.isArray(S.deco) && S.deco[0].placed === true && S.log.fallos === 1, '');
+    check('autoguardado: el historial del chat se reconstruye con sus avatares rehidratados',
+      msgsAC.innerHTML.includes('Hola de prueba') && msgsAC.innerHTML.includes('Otro mensaje') && msgsAC.innerHTML.includes(uriAC), '');
+    // Lectura defensiva
+    lsAC.setItem('1mtp.save', '{json roto');
+    check('autoguardado: un guardado corrupto se ignora y se borra (el arranque no se rompe)',
+      D.readSave() === null && lsAC.getItem('1mtp.save') === null, '');
+    lsAC.setItem('1mtp.save', JSON.stringify({ v: 99, at: 'night', storyIdx: 0, state: { player: 'saulo' } }));
+    check('autoguardado: un guardado de otra versión se ignora y se borra',
+      D.readSave() === null && lsAC.getItem('1mtp.save') === null, '');
+    // Título: sin guardado no hay Continuar; con guardado, sí (y con contexto)
+    const overlayAC = documentFake.querySelector('#overlay');
+    D.titleScreen(); // sin guardado: el título de siempre (la promesa queda pendiente, no se toca)
+    check('autoguardado: sin guardado el título NO ofrece Continuar (JUGAR, como siempre)',
+      overlayAC.innerHTML.includes('JUGAR') && !overlayAC.innerHTML.includes('CONTINUAR PARTIDA'), '');
+    D.saveCheckpoint('night', { storyIdx: 2 });
+    const pContAC = D.titleScreen();
+    const evNextAC = G.EVENTS[G.STORY[2]];
+    check('autoguardado: con guardado el título ofrece CONTINUAR con su contexto (protagonista y siguiente beat)',
+      overlayAC.innerHTML.includes('CONTINUAR PARTIDA') && overlayAC.innerHTML.includes('Saulo') && overlayAC.innerHTML.includes(evNextAC.title), '');
+    documentFake.querySelector('#tcontinue').onclick();
+    check('autoguardado: «Continuar» resuelve continue y NO borra el guardado (lo lee tryResume)',
+      (await pContAC) === 'continue' && !!lsAC.getItem('1mtp.save'), '');
+    // Nueva partida en dos pasos
+    const pNewAC = D.titleScreen();
+    const playBtnAC = documentFake.querySelector('#tplay');
+    playBtnAC.onclick(); // primer toque: solo arma
+    check('autoguardado: «Nueva partida» no sobrescribe sin confirmar (primer toque: arma y el guardado sigue)',
+      !!lsAC.getItem('1mtp.save') && String(playBtnAC.textContent || '').includes('¿Seguro?'), '');
+    playBtnAC.onclick(); // segundo toque: borra y arranca
+    check('autoguardado: el segundo toque borra el guardado y resuelve new',
+      (await pNewAC) === 'new' && lsAC.getItem('1mtp.save') === null, '');
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
