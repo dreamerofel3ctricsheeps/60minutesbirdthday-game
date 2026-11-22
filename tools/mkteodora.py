@@ -15,6 +15,16 @@ Dos etapas:
      teodora-dash       ← teo_dash        (sprites faltantes v1)
      teodora-sorprendida← teo_sorprendida (sprites faltantes v1)
      teodora-derrotada  ← teo_derrotada   (sprites faltantes v1)
+     teodora-idle2      ← teo_float_idle, 2º punto del bob (flotación v1)
+     teodora-side       ← teo_float_side: perfil flotando a la DERECHA
+                          (expresiones-flotación v1)
+     teodora-side-izq   ← perfil flotando a la IZQUIERDA: GENERADA con
+                          la herramienta de imágenes desde teo_float_side
+                          (las hojas no traen perfil izquierdo y a
+                          Teodora NO se la espeja jamás: su moño manda).
+                          Fuente: teodora-float-izquierda-generada-v1.png
+                          en la carpeta de diseño; se procesa con la
+                          MISMA extracción (fondo uniforme → alfa).
 
    Las hojas vienen sobre fondo crema uniforme: se inunda el fondo
    desde los bordes (flood-fill por tolerancia de color), se conserva
@@ -64,6 +74,18 @@ CUTS = [
     ("dash", "teodora-sprites-faltantes-v1.webp", (998, 0, 1482, 992), False),
     ("sorprendida", "teodora-sprites-faltantes-v1.webp", (1990, 0, 2474, 992), False),
     ("derrotada", "teodora-sprites-faltantes-v1.webp", (6, 0, 490, 992), False),
+    # Segunda ronda (2026-11-21): poses de MOVIMIENTO para que el vuelo
+    # se lea como vuelo. La hoja de flotación es una rejilla 4×2 de
+    # celdas 480×640: idle2 = 2ª celda de la fila superior (el otro
+    # punto del bob de teo_float_idle) y side = 3ª celda (teo_float_
+    # side, perfil a la derecha). idle2 lleva la misma elipse de
+    # sombra pegada a las botas que idle → se secciona igual.
+    ("idle2", "teodora-expresiones-flotacion-v1.webp", (484, 4, 956, 636), True),
+    ("side", "teodora-expresiones-flotacion-v1.webp", (964, 4, 1436, 636), False),
+    # Perfil izquierdo GENERADO (ver cabecera): la imagen generada
+    # viene a cuadro completo sobre fondo crema uniforme; la celda es
+    # la imagen entera y la extracción es la misma de siempre.
+    ("side-izq", "teodora-float-izquierda-generada-v1.png", (0, 0, 1216, 1728), False),
 ]
 NAMES = [f"teodora-{pose}" for pose, _sheet, _cell, _sh in CUTS]
 TARGET_H = 440
@@ -153,7 +175,8 @@ def main() -> None:
         "   Teodora en «El set se hunde / Traza la leyenda» (final\n"
         "   Leyendas) como data URIs (G.TEODORA_DATA): sus sprites\n"
         "   diseñados (idle flotando, trazo, selfie, dash, sorprendida,\n"
-        "   derrotada) recortados de las hojas aprobadas del personaje.\n"
+        "   derrotada, idle2, perfil derecho y perfil izquierdo\n"
+        "   generado) recortados de las hojas aprobadas del personaje.\n"
         "   Fuente de diseño: application/src/assets/img/teodora-*.png\n"
         "   (regenerar con: python3 tools/mkteodora.py).\n"
         "   Data URIs a propósito: una imagen cargada desde file:// es\n"
