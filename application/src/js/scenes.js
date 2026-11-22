@@ -4666,16 +4666,24 @@
   // fuera de este patio y no aportan). Esta es noche equilibrada —
   // canales casi iguales, sin puntos de color — con el patrón de
   // PATRON_LIGHT/TRAZO_LIGHT/FINALE_LIGHT, solo para este duelo.
-  const SOGA_LIGHT = { amb: [0.52, 0.52, 0.56], sun: [0.26, 0.26, 0.3], sky: '#14101f', points: [] };
+  const SOGA_LIGHT = { amb: [0.58, 0.58, 0.62], sun: [0.3, 0.3, 0.34], sky: '#14101f', points: [] };
   const SOGA_TEO_H = 81; // alto de mundo de Teodora (≈87 px en pantalla con SOGA_CAM; compensa el margen de su lienzo, 76 × 468/440)
   const JUMP_H = 84; // alto de mundo del sprite de salto (el del Actor definido)
+  const ESPERA_H = 84; // alto de mundo del sprite de ESPERA (misma escala que el de salto: el personaje no cambia de tamaño entre poses)
+  const CAL_H = 49; // alto de mundo de las calaveritas utileras (el que ocupaba la figura por código)
   // Sprites GENERADOS para este duelo (a pedido expreso de Jose,
   // 2026-11-21): el salto de soga de cada roomie desde su idle
   // definido (tools/mkjumps.py → G.JUMP_DATA) y las dos calaveritas
   // utileras de los postes. Como todo el arte WebGL del proyecto,
   // data URIs: desde file:// una imagen de archivo es cross-origin
   // y texImage2D revienta (bug del contador 4).
-  const JUMP_FILES = ['salto-natalia', 'salto-saulo', 'salto-itzel', 'salto-fatima', 'salto-samantha', 'salto-majo', 'salto-alan', 'calaverita-clasica', 'calaverita-morada'];
+  const JUMP_FILES = ['salto-natalia', 'salto-saulo', 'salto-itzel', 'salto-fatima', 'salto-samantha', 'salto-majo', 'salto-alan', 'calaverita-clasica', 'calaverita-morada',
+    // Ronda de la Soga (2026-11-21): calaveritas DE PERFIL animadas
+    // (manivela arriba/abajo) y la espera «en guardia» de los 7
+    // roomies con su frame hermano (ver tools/mkjumps.py).
+    'calaverita-clasica-perfil-a', 'calaverita-clasica-perfil-b', 'calaverita-morada-perfil-a', 'calaverita-morada-perfil-b',
+    'espera-natalia', 'espera-saulo', 'espera-itzel', 'espera-fatima', 'espera-samantha', 'espera-majo', 'espera-alan',
+    'espera2-natalia', 'espera2-saulo', 'espera2-itzel', 'espera2-fatima', 'espera2-samantha', 'espera2-majo', 'espera2-alan'];
   const jumpImgs = {};
   function jumpImg(name) {
     if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
@@ -4728,6 +4736,11 @@
         if (J.p.out) { G.sfx('bad'); this.say('¡Quemado cómico!', '#ff6b7a', 1.2); }
         if (J.t.out) { G.sfx('ok'); this.say('¡Teodora se quemó!', '#7dff8a', 1.2); }
       }
+      // Chispas que se desprenden de la soga de fuego (el sistema
+      // de partículas del mundo, W.puff con estrella): nacen en el
+      // plano de la soga (z=0) a un ritmo ligado a su velocidad
+      // angular — a llama naranja, que gira más rápido, saltan más.
+      if (Math.random() < dt * this.omega() * 0.4) W.puff(rnd(-170, 170), 0, 1, true);
       // jugador: mantener carga, soltar salta (tecla o toque vía 'action')
       if (!J.p.out) {
         if (G.input.held('action') && J.p.h <= 0) { J.p.charge = Math.min(0.5, J.p.charge + dt); if (J.p.charge >= 0.5) { this.jumpP(0.5); J.p.charge = 0; } }
@@ -4751,35 +4764,78 @@
     }
     draw(dt) {
       const t = performance.now() / 1000, J = this.J;
-      // Intercambio de salto: en el suelo manda el Actor con su arte
-      // definido; al despegar (j.h > 0) el Actor se oculta y lo
-      // sustituye el billboard con su sprite de salto generado, a la
-      // altura física del salto. La anticipación se lee en el Actor
-      // (squash mientras carga) y el aterrizaje en su squash de
-      // siempre (stepJumper ya lo fija al tocar el suelo). Si el
-      // sprite aún no cargó, el Actor NO se oculta (salta como
-      // siempre, con su jy).
-      const airSwap = (a, j) => { const im = jumpImg('salto-' + a.id); const on = !j.out && j.h > 0 && rocketReady(im); a.hidden = on; return on; };
-      const pAir = airSwap(this.p, J.p), nAir = this.partners.map((a, i) => airSwap(a, J.n[i]));
+      // Intercambios de sprite del saltador (ronda de la Soga,
+      // 2026-11-21): el Actor definido manda SOLO mientras carga el
+      // salto (su squash ES la anticipación) o si algún sprite no
+      // cargó. En el AIRE lo sustituye su sprite de salto generado
+      // a la altura física; en el SUELO, esperando, su animación de
+      // ESPERA generada (perfil «en guardia», dos frames hermanos a
+      // ~4,5 fps + squash respiratorio): quieto de perfil ya no es
+      // un frame fijo. Al aterrizar vuelve el squash de stepJumper.
+      const swapJumper = (a, j, isPlayer) => {
+        const air = !j.out && j.h > 0 && rocketReady(jumpImg('salto-' + a.id));
+        const wait = !j.out && !air && j.h <= 0 && !(isPlayer && j.charge > 0) && rocketReady(jumpImg('espera-' + a.id));
+        const on = air || wait;
+        a.hidden = on;
+        return { air, wait };
+      };
+      const pSw = swapJumper(this.p, J.p, true), nSw = this.partners.map((a, i) => swapJumper(a, J.n[i], false));
       if (J.p.charge > 0 && !J.p.out) this.p.squash = Math.max(this.p.squash, 0.12 * (J.p.charge / 0.5)); // se agacha al cargar
       W.render({
         cam: this.cam, dt, light: SOGA_LIGHT, noApartment: true, actors: [this.p, ...this.partners], focusZ: 0,
         boxes: (mb) => {
-          mb.box(0, -5, 0, 560, 10, 130, '#4a3049'); // piso del patio nocturno
-          mb.box(0, 60, -78, 620, 140, 10, '#2c2138'); mb.box(0, 128, -78, 620, 14, 12, '#1d1626'); // pared de la casona
+          // AMBIENTACIÓN del patio nocturno (ronda de la Soga): la
+          // versión anterior era una losa morada flotando en el
+          // vacío oscuro. Ahora el piso se extiende hasta salir del
+          // encuadre por los cuatro lados, el área de juego va
+          // marcada con su alfombra de set, la fachada cruza todo el
+          // fondo con cornisa, arcos y pilastras, hay torres de
+          // focos en las esquinas traseras (patrón del Trazo),
+          // faroles en las esquinas delanteras y cada poste lleva
+          // su tarima para la calaverita operadora.
+          mb.box(0, -5, 20, 980, 10, 360, '#46333f'); // piso del patio, extendido (su borde no se ve: asienta la escena)
+          mb.box(0, -0.4, 0, 470, 0.8, 120, '#5d4257'); // alfombra del área de juego (su cara queda a ras, y=0)
+          mb.box(0, 60, -84, 980, 140, 10, '#2e2338'); mb.box(0, 128, -84, 980, 14, 14, '#201829'); // fachada con cornisa
+          [-300, -100, 100, 300].forEach((ax) => mb.box(ax, 55, -78, 70, 95, 2, '#241a2e')); // arcos oscuros
+          [-400, -200, 0, 200, 400].forEach((ax) => mb.box(ax, 55, -77, 12, 110, 3, '#3a2c48')); // pilastras
+          [-330, 330].forEach((ax) => { mb.box(ax, 45, -40, 7, 90, 7, '#2c2733'); mb.box(ax, 96, -40, 26, 15, 12, '#ffd98a', { emit: true }); }); // torres de focos
+          [-252, 252].forEach((ax) => { mb.box(ax, 10, 52, 8, 20, 8, '#2c2733'); mb.box(ax, 23, 52, 12, 7, 12, '#ffca7a', { emit: true }); }); // faroles delanteros
           mb.box(-185, 26, 0, 12, 52, 12, '#6b4a2f'); mb.box(185, 26, 0, 12, 52, 12, '#6b4a2f'); // postes de la soga
+          mb.box(-185, 50, 10, 34, 4, 30, '#6b4a2f'); mb.box(185, 50, 10, 34, 4, 30, '#6b4a2f'); // tarimas de las calaveritas (sobre el poste, hacia cámara)
         },
         sprites: () => {
-          // Las calaveritas utileras que coronan los postes dejan
-          // de dibujarse por código (calCv): son dos sprites
-          // diseñados y generados en el estilo del juego (calavera
-          // de azúcar decorada con su cuerpito y brazos en alto
-          // sobre su base, borde sticker) — la clásica a la
-          // izquierda y la morada a la derecha, al tamaño que
-          // ocupaba la figura por código (49 u de alto).
-          const calA = jumpImg('calaverita-clasica'), calB = jumpImg('calaverita-morada');
-          if (rocketReady(calA)) R.sprite(calA, -185, 40, 0, { w: 49 * (calA.naturalWidth / calA.naturalHeight), h: 49, feet: 0, lit: 0.3, nostretch: true });
-          if (rocketReady(calB)) R.sprite(calB, 185, 40, 0, { w: 49 * (calB.naturalWidth / calB.naturalHeight), h: 49, feet: 0, lit: 0.3, nostretch: true });
+          // Charcos de luz de focos y faroles sobre el piso.
+          R.flat(R.glowTex, -330, 0.5, -24, 95, { tint: [1, 0.85, 0.55], alpha: 0.10 });
+          R.flat(R.glowTex, 330, 0.5, -24, 95, { tint: [1, 0.85, 0.55], alpha: 0.10 });
+          R.flat(R.glowTex, -252, 0.5, 40, 55, { tint: [1, 0.8, 0.5], alpha: 0.12 });
+          R.flat(R.glowTex, 252, 0.5, 40, 55, { tint: [1, 0.8, 0.5], alpha: 0.12 });
+          // Guirnalda de luces entre los postes, DETRÁS del juego
+          // (z=-30) y por encima del arco de la soga (su catenaria
+          // cuelga a y≈117 en el centro; la cima del arco llega a
+          // ~87): puntos cálidos que respiran, sin tapar a nadie.
+          for (let i = 0; i <= 16; i++) { const u = i / 16, gx = -185 + 370 * u, gy = (1 - u) * (1 - u) * 138 + 2 * (1 - u) * u * 100 + u * u * 138 + Math.sin(t * 1.7 + u * 9) * 1.2; R.sprite(R.glowTex, gx, gy, -30, { w: 9, h: 9, lit: 0, alpha: 0.45 + 0.2 * Math.sin(t * 3 + u * 12) }); }
+          // Las CALAVERITAS operadoras (ronda de la Soga): dejan el
+          // frontal fijo que las tapaba el poste. Ahora son sprites
+          // DE PERFIL mirando hacia ADENTRO (la clásica, a la
+          // izquierda, mira a la derecha; la morada, a la
+          // izquierda), de pie sobre la tarima de su poste y POR
+          // DELANTE de él (z=16 > cara frontal del poste, z=6: por
+          // profundidad ningún rectángulo del poste puede taparlas
+          // jamás), y se ANIMAN girando la manivela de la soga: el
+          // frame (manivela arriba/abajo) sale de la FASE del
+          // ángulo real de la soga, floor(this.a / π) — como this.a
+          // avanza con omega(), a llama naranja giran más rápido,
+          // sincronizadas con lo que mueven. El ancho se fija con
+          // el aspecto del frame A para que no haya saltos de
+          // escala al alternar. La soga (en over) nace de sus
+          // manivelas: sus extremos se proyectan desde (±177, 74,
+          // 16), la altura de sus manos sobre la tarima.
+          const calFrame = Math.floor(this.a / Math.PI) % 2 === 0 ? 'a' : 'b';
+          const calLA = jumpImg('calaverita-clasica-perfil-a'), calLB = jumpImg('calaverita-clasica-perfil-b');
+          const calRA = jumpImg('calaverita-morada-perfil-a'), calRB = jumpImg('calaverita-morada-perfil-b');
+          const calL = calFrame === 'a' ? calLA : calLB, calR = calFrame === 'a' ? calRA : calRB;
+          if (rocketReady(calLA) && rocketReady(calL)) R.sprite(calL, -185, 52, 16, { w: CAL_H * (calLA.naturalWidth / calLA.naturalHeight), h: CAL_H, feet: 0, lit: 0.3, nostretch: true });
+          if (rocketReady(calRA) && rocketReady(calR)) R.sprite(calR, 185, 52, 16, { w: CAL_H * (calRA.naturalWidth / calRA.naturalHeight), h: CAL_H, feet: 0, lit: 0.3, nostretch: true });
           // Sombra de Teodora con la firma VIGENTE de R.flat
           // (canvas, x, y, z, r, opciones): la llamada anterior era
           // la antigua de 7 argumentos — el 28 caía como «opciones»
@@ -4798,18 +4854,64 @@
           if (rocketReady(tim)) R.sprite(tim, J.t.x, 10 + J.t.h + Math.sin(t * 2.2) * 2.5, 0, { w: SOGA_TEO_H * (tim.naturalWidth / tim.naturalHeight), h: SOGA_TEO_H, feet: 0, lit: 0.25, nostretch: true, alpha: J.t.out ? 0.9 : 1 });
           // Los saltos en el aire, con su sombra en el suelo.
           const drawJump = (a, j) => { const im = jumpImg('salto-' + a.id); if (!rocketReady(im)) return; R.shadow(a.x, 0, 14, 0.5); R.sprite(im, a.x, j.h, 0, { w: JUMP_H * (im.naturalWidth / im.naturalHeight), h: JUMP_H, feet: 0, lit: 0.25, nostretch: true }); };
-          if (pAir) drawJump(this.p, J.p);
-          this.partners.forEach((a, i) => { if (nAir[i]) drawJump(a, J.n[i]); });
+          if (pSw.air) drawJump(this.p, J.p);
+          this.partners.forEach((a, i) => { if (nSw[i].air) drawJump(a, J.n[i]); });
+          // La ESPERA en el suelo: perfil «en guardia» alternando
+          // sus dos frames hermanos a ~4,5 fps (reloj de pared: es
+          // una respiración, no depende del estado del duelo) con un
+          // leve squash senoidal en contrafase — el atleta respira
+          // esperando el salto. El ancho se fija con el aspecto del
+          // frame A para no saltar de escala al alternar, y la
+          // sombra la pone aquí (el Actor oculto no dibuja la suya).
+          const drawWait = (a) => { const imA = jumpImg('espera-' + a.id); if (!rocketReady(imA)) return; const im = Math.floor(t * 4.5) % 2 === 1 && rocketReady(jumpImg('espera2-' + a.id)) ? jumpImg('espera2-' + a.id) : imA; const sq = 1 - 0.03 * (0.5 + 0.5 * Math.sin(t * 6.9 + a.x)); R.shadow(a.x, 0, 14, 0.5); R.sprite(im, a.x, 0, 0, { w: ESPERA_H * (imA.naturalWidth / imA.naturalHeight) / sq, h: ESPERA_H * sq, feet: 0, lit: 0.25, nostretch: true }); };
+          if (pSw.wait) drawWait(this.p);
+          this.partners.forEach((a, i) => { if (nSw[i].wait) drawWait(a); });
           for (const j of [J.p, J.t, ...J.n]) if (j.out && j.smoke > 0) R.sprite(R.glowTex, j.x, 26, 0, { w: 30, h: 30, feet: 0, lit: 0, nostretch: true, alpha: 0.4 });
         },
         over: (c) => {
-          // la soga de fuego: curva entre los postes; su punto medio
-          // baja hasta el suelo cuando sin(a) = 1 (el paso peligroso)
-          const pl = R.project(-185, 52, 0), pr = R.project(185, 52, 0), mid = R.project(0, 62 - Math.sin(this.a) * 60, 0);
+          // LA SOGA DE FUEGO, fluida (ronda de la Soga): ya no es un
+          // arco rígido que solo rota. Su trayectoria base sigue
+          // siendo la cuadrática entre las manivelas de las
+          // calaveritas — extremos proyectados desde sus manos
+          // (±177, 74, 16) y punto de control el de siempre, cuya
+          // altura (62 − sin(a)·60) marca el paso peligroso cuando
+          // sin(a) = 1 — muestreada en 24 tramos con tres capas de
+          // vida cosmética:
+          //  · ONDA QUE VIAJA: desplazamiento vertical
+          //    A·sin(2πu)·cos(2a − 4u), con NODOS EXACTOS en u=0,
+          //    u=0,5 y u=1 (sin(2πu) se anula en los tres). El
+          //    CENTRO de la soga — el punto cuya altura lee el
+          //    jugador y cuyo instante cobra la lógica (el cruce
+          //    de this.a por π/2 en update) — queda matemáticamente
+          //    intacto: la onda es cero ahí siempre, así que lo
+          //    visual NUNCA se desincroniza de la colisión. La
+          //    amplitud crece un poco cuando la soga baja (cos(a)>0:
+          //    «panza» al descender; más tensa al subir).
+          //  · PARPADEO DE LLAMA por tramo: alfa y grosor del
+          //    núcleo oscilan con frecuencias distintas por tramo.
+          //  · Estrellas de fuego a lo largo, como antes, y chispas
+          //    desprendidas por W.puff desde update().
+          const pl = R.project(-177, 74, 16), pr = R.project(177, 74, 16), mid = R.project(0, 62 - Math.sin(this.a) * 60, 0);
           const slow = this.period() > 1.15, col = slow ? '#4fd0ff' : '#ff8a3c';
-          c.strokeStyle = col; c.globalAlpha = 0.35; c.lineWidth = 11; c.beginPath(); c.moveTo(pl.x, pl.y); c.quadraticCurveTo(mid.x, mid.y, pr.x, pr.y); c.stroke();
-          c.globalAlpha = 1; c.lineWidth = 4.5; c.beginPath(); c.moveTo(pl.x, pl.y); c.quadraticCurveTo(mid.x, mid.y, pr.x, pr.y); c.stroke();
-          for (let i = 1; i < 8; i++) { const u = i / 8, qx = (1 - u) * (1 - u) * pl.x + 2 * (1 - u) * u * mid.x + u * u * pr.x, qy = (1 - u) * (1 - u) * pl.y + 2 * (1 - u) * u * mid.y + u * u * pr.y; imgStar(c, qx, qy, 5 + Math.sin(t * 17 + i * 2) * 1.6, col); }
+          const NRP = 24, ropePts = [];
+          const amp = 4.5 * (1 + 0.35 * Math.max(0, Math.cos(this.a)));
+          for (let i = 0; i <= NRP; i++) {
+            const u = i / NRP;
+            const bx = (1 - u) * (1 - u) * pl.x + 2 * (1 - u) * u * mid.x + u * u * pr.x;
+            const by = (1 - u) * (1 - u) * pl.y + 2 * (1 - u) * u * mid.y + u * u * pr.y;
+            ropePts.push({ x: bx, y: by + amp * Math.sin(2 * Math.PI * u) * Math.cos(2 * this.a - 4 * u) });
+          }
+          c.strokeStyle = col; c.lineCap = 'round';
+          for (let pass = 0; pass < 2; pass++) { // 0 = halo, 1 = núcleo
+            for (let i = 0; i < NRP; i++) {
+              const u = (i + 0.5) / NRP, fl = 0.82 + 0.18 * Math.sin(t * 23 + u * 14 + this.a * 3);
+              c.globalAlpha = pass === 0 ? 0.30 * fl : fl;
+              c.lineWidth = pass === 0 ? 11 : 3.6 + 1.4 * fl;
+              c.beginPath(); c.moveTo(ropePts[i].x, ropePts[i].y); c.lineTo(ropePts[i + 1].x, ropePts[i + 1].y); c.stroke();
+            }
+          }
+          c.globalAlpha = 1;
+          for (let i = 1; i < 8; i++) { const u = i / 8, rp = ropePts[Math.round(u * NRP)]; imgStar(c, rp.x, rp.y, 5 + Math.sin(t * 17 + i * 2) * 1.6, col); }
           legendsHud(this, c, 'LA SOGA DE FUEGO', `Vuelta ${Math.min(this.passes + 1, this.maxPasses)}/${this.maxPasses} · ${slow ? 'LLAMA AZUL: lento' : 'LLAMA NARANJA: ¡rápido!'} · Roces tú ${J.p.roces} · ella ${J.t.roces}`);
           if (J.p.charge > 0) { const h = this.p.head(30); panel(c, h.x - 26, h.y, 52, 8, '#4a4458'); c.fillStyle = '#ffd23f'; c.fillRect(h.x - 24, h.y + 2, 48 * (J.p.charge / 0.5), 4); }
           if (this.teoSelfieT > 0) { const q = R.project(J.t.x, 96 + J.t.h, 0); if (q.ok) G.text(c, '¡SELFIE!', q.x, q.y, { size: 12, color: '#ffd7f0', lw: 5 }); }
@@ -4829,7 +4931,7 @@
 
   SogaDuel.CAM = SOGA_CAM;
   SogaDuel.LIGHT = SOGA_LIGHT;
-  SogaDuel.JUMP = { files: JUMP_FILES, teoH: SOGA_TEO_H, jumpH: JUMP_H };
+  SogaDuel.JUMP = { files: JUMP_FILES, teoH: SOGA_TEO_H, jumpH: JUMP_H, esperaH: ESPERA_H, calH: CAL_H };
 
   // ----- Cadena del clímax de Leyendas -----
   // Revelación del set → 2A Trazo → 2B Soga → resolución por la

@@ -1724,8 +1724,8 @@ const tick = () => new Promise((r) => setImmediate(r));
       // generados para todos y calaveritas diseñadas ---
       const sogaSrc = scenesTxtT.slice(scenesTxtT.indexOf('class SogaDuel'), scenesTxtT.indexOf('SogaDuel.CAM = SOGA_CAM'));
       const imgDirS = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
-      check('soga: la clase no dibuja a Teodora ni las calaveritas por código (sin teoCv/calCv) y usa sus sprites',
-        !sogaSrc.includes('teoCv(') && !sogaSrc.includes('calCv(') && sogaSrc.includes("teoImg(teoName)") && sogaSrc.includes("jumpImg('calaverita-clasica')") && sogaSrc.includes("jumpImg('calaverita-morada')"), '');
+      check('soga: la clase no dibuja a Teodora ni las calaveritas por código (sin teoCv/calCv) y usa sus sprites (calaveritas DE PERFIL desde la ronda de la Soga)',
+        !sogaSrc.includes('teoCv(') && !sogaSrc.includes('calCv(') && sogaSrc.includes("teoImg(teoName)") && sogaSrc.includes("jumpImg('calaverita-clasica-perfil-a')") && sogaSrc.includes("jumpImg('calaverita-morada-perfil-a')"), '');
       check('soga: Teodora suma salto (de su hoja de boss) y quemada (de la de faltantes) como PNG y data URI',
         ['teodora-salto', 'teodora-quemada'].every((n) => fs.existsSync(path.join(imgDirS, n + '.png'))
           && typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
@@ -1739,8 +1739,8 @@ const tick = () => new Promise((r) => setImmediate(r));
         JSON.stringify(Sc.SogaDuel.LIGHT));
       check('soga: la sombra de Teodora usa la firma vigente de R.flat (la antigua de 7 args ignoraba las opciones)',
         sogaSrc.includes('R.flat(R.glowTex, J.t.x, 0.8, 0, 21, { ry: 0.67') && !sogaSrc.includes('42, 28, { color:'), '');
-      check('soga: G.JUMP_DATA trae los 7 saltos y las 2 calaveritas como data URIs PNG y sus PNG existen',
-        !!G.JUMP_DATA && Sc.SogaDuel.JUMP.files.length === 9 && Sc.SogaDuel.JUMP.files.every((n) => typeof G.JUMP_DATA[n] === 'string' && G.JUMP_DATA[n].startsWith('data:image/png;base64,') && fs.existsSync(path.join(imgDirS, n + '.png'))),
+      check('soga: G.JUMP_DATA trae los 7 saltos, las calaveritas (frontales + perfiles ×2 frames) y las esperas ×2 de los 7 roomies como data URIs PNG y sus PNG existen',
+        !!G.JUMP_DATA && Sc.SogaDuel.JUMP.files.length === 27 && Sc.SogaDuel.JUMP.files.every((n) => typeof G.JUMP_DATA[n] === 'string' && G.JUMP_DATA[n].startsWith('data:image/png;base64,') && fs.existsSync(path.join(imgDirS, n + '.png'))),
         G.JUMP_DATA ? Object.keys(G.JUMP_DATA).join(',') : 'sin JUMP_DATA');
       check('soga: index.html incluye js/jump-sheets.js ANTES que js/scenes.js',
         htmlTxtT.includes('js/jump-sheets.js') && htmlTxtT.indexOf('js/jump-sheets.js') < htmlTxtT.indexOf('js/scenes.js'));
@@ -1873,6 +1873,48 @@ const tick = () => new Promise((r) => setImmediate(r));
         poseEspera === 'selfie' && frameA === 'side-izq' && frameB === 'side-izq2', `${poseEspera}/${frameA}/${frameB}`);
       check('trazo: el tecleo tiene su micro-animación (bob ~2 Hz de 1,6 u y balanceo) en draw',
         trazoSrcV.includes('Math.sin(t * 12.6) * 1.6') && trazoSrcV.includes('Math.sin(t * 6.3) * 0.03') && trazoSrcV.includes('this.teoAnimT += dt'), '');
+    }
+    // 2A-bis (4ª ronda — 2026-11-21): el vuelo de Teodora ya no
+    // «salta»: pose constante por trayecto (solo frames hermanos de
+    // la misma pose de perfil) y trayectoria con arco + bob continuo
+    // de baja frecuencia. Y la Soga: calaveritas de perfil animadas
+    // al ritmo del ángulo, espera del jugador con sprites, soga con
+    // onda de nodos exactos y patio ambientado.
+    {
+      const srcAll4 = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const imgDir4 = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+      const t04 = srcAll4.indexOf('class TrazoDuel'), t14 = srcAll4.indexOf('class SogaDuel');
+      const trazoSrc4 = srcAll4.slice(t04, t14), sogaSrc4 = srcAll4.slice(t14, srcAll4.indexOf('SogaDuel.CAM = SOGA_CAM', t14));
+      // Vuelo: en ningún tiempo de su reloj aparece un frontal.
+      const dv4 = new Sc.TrazoDuel('natalia', () => {});
+      dv4.st = 'play'; dv4.phase = 'corre'; dv4.teoMoving = true; dv4.teoVx = -100; dv4.teoVy = 0;
+      const posesVuelo = [0, 0.2, 0.4, 0.6, 0.8].map((tt) => { dv4.teoAnimT = tt; return dv4.teoPose(); });
+      check('trazo (4ª ronda): durante todo el trayecto la pose de vuelo es de la familia de perfil (nunca un frontal): ' + posesVuelo.join('/'),
+        posesVuelo.every((pp) => pp === 'side-izq' || pp === 'side-izq2'), posesVuelo.join(','));
+      check('trazo (4ª ronda): la elevación del vuelo sale del ARCO del trayecto (teoTrip/teoArc) con bob continuo de ~1,5 Hz (fuente)',
+        trazoSrc4.includes('this.teoTrip') && trazoSrc4.includes('this.teoArc = Math.sin(Math.PI') && trazoSrc4.includes('(this.teoArc || 0) * 11 + Math.sin(t * 9.42) * 3.5'), '');
+      check('trazo (4ª ronda): teodora-side2 y teodora-side-izq2 (frames hermanos generados) existen como PNG y data URI',
+        fs.existsSync(path.join(imgDir4, 'teodora-side2.png')) && fs.existsSync(path.join(imgDir4, 'teodora-side-izq2.png'))
+        && G.TEODORA_DATA['teodora-side2'].startsWith('data:image/png;base64,') && G.TEODORA_DATA['teodora-side-izq2'].startsWith('data:image/png;base64,'), '');
+      // Arco en vivo: con un único hexágono seguro lejano, a mitad
+      // de camino el arco es positivo y el trayecto está registrado.
+      const dw4 = new Sc.TrazoDuel('natalia', () => {});
+      dw4.st = 'play'; dw4.phase = 'corre'; dw4.pt = 1.0;
+      dw4.hexes.forEach((h) => { h.safe = false; }); dw4.hexes[dw4.hexes.length - 1].safe = true;
+      dw4.teo.x = -169; dw4.teo.y = 30;
+      for (let i = 0; i < 3; i++) dw4.update(0.05);
+      check('trazo (4ª ronda): en pleno vuelo el trayecto está registrado y el arco es positivo (sube al despegar)',
+        !!dw4.teoTrip && dw4.teoArc > 0, `trip=${!!dw4.teoTrip} arc=${dw4.teoArc.toFixed(3)}`);
+      check('soga (4ª ronda): las calaveritas de perfil se animan con la FASE del ángulo real de la soga y van delante de su poste (z=16, sobre la tarima)',
+        sogaSrc4.includes('Math.floor(this.a / Math.PI)') && sogaSrc4.includes('R.sprite(calL, -185, 52, 16') && sogaSrc4.includes('R.sprite(calR, 185, 52, 16'), '');
+      check('soga (4ª ronda): la espera del jugador usa los sprites espera-/espera2- (swap en el suelo, no al cargar ni en el aire)',
+        sogaSrc4.includes("jumpImg('espera-' + a.id)") && sogaSrc4.includes("jumpImg('espera2-' + a.id)") && sogaSrc4.includes('const drawWait'), '');
+      check('soga (4ª ronda): la soga lleva la ONDA que viaja con nodos exactos (sin(2πu): cero en u=0, 0,5 y 1) sobre la trayectoria de siempre y nace de las manivelas',
+        sogaSrc4.includes('Math.sin(2 * Math.PI * u)') && sogaSrc4.includes('Math.cos(2 * this.a - 4 * u)') && sogaSrc4.includes('R.project(-177, 74, 16)') && sogaSrc4.includes('R.project(0, 62 - Math.sin(this.a) * 60, 0)'), '');
+      check('soga (4ª ronda): el patio está ambientado (piso extendido, alfombra, fachada con arcos, torres de focos, faroles y guirnalda detrás del arco)',
+        sogaSrc4.includes('mb.box(0, -5, 20, 980, 10, 360') && sogaSrc4.includes("'#ffd98a', { emit: true }") && sogaSrc4.includes('Guirnalda de luces') && sogaSrc4.includes('z=-30'), '');
+      check('soga (4ª ronda): chispas desprendidas con W.puff a ritmo de la velocidad angular (fuente)',
+        sogaSrc4.includes('dt * this.omega() * 0.4') && sogaSrc4.includes('W.puff(rnd(-170, 170), 0, 1, true)'), '');
     }
     // 2B Soga: sin saltar te quemas; saltando a tiempo, Teodora cae en su selfie (~vuelta 10)
     {

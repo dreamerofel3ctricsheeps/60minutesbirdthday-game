@@ -14,6 +14,17 @@ traen pose de salto ni calaveritas de utilería):
   utileras que coronan los postes de la soga (en el código eran la
   figura dibujada por código calCv: calavera de azúcar con cuerpito
   y brazos en alto sobre una base). Dos variantes de color.
+- calaverita-{clasica,morada}-perfil-{a,b}.png (ronda de la Soga,
+  2026-11-21): las mismas calaveritas DE PERFIL mirando hacia
+  adentro (la clásica hacia la derecha, la morada hacia la
+  izquierda) agarrando la manivela de la soga — frame a con la
+  manivela arriba y frame b con la manivela abajo: en el duelo
+  alternan al ritmo del ángulo real de la soga.
+- espera-<id>.png y espera2-<id>.png de los 7 roomies: la pose de
+  ESPERA de perfil «en guardia» (de lado, rodillas semiflexionadas,
+  mirada en la soga) y su frame hermano más agachado, para la
+  animación de espera del jugador en el suelo (respiración de
+  atleta a ~4,5 fps con un leve squash por código).
 
 Las fuentes crudas generadas (sobre fondo magenta liso) viven en
 ~/workspace/goals/1-minuto-para-la-fiesta/files/diseno-leyendas/
@@ -57,6 +68,24 @@ CUTS = [
     ("salto-alan", "salto-alan-generada-v1.png"),
     ("calaverita-clasica", "calaverita-clasica-generada-v1.png"),
     ("calaverita-morada", "calaverita-morada-generada-v1.png"),
+    ("calaverita-clasica-perfil-a", "calaverita-clasica-perfil-a-generada-v1.png"),
+    ("calaverita-clasica-perfil-b", "calaverita-clasica-perfil-b-generada-v1.png"),
+    ("calaverita-morada-perfil-a", "calaverita-morada-perfil-a-generada-v1.png"),
+    ("calaverita-morada-perfil-b", "calaverita-morada-perfil-b-generada-v1.png"),
+    ("espera-natalia", "espera-natalia-generada-v1.png"),
+    ("espera-saulo", "espera-saulo-generada-v1.png"),
+    ("espera-itzel", "espera-itzel-generada-v1.png"),
+    ("espera-fatima", "espera-fatima-generada-v1.png"),
+    ("espera-samantha", "espera-samantha-generada-v1.png"),
+    ("espera-majo", "espera-majo-generada-v1.png"),
+    ("espera-alan", "espera-alan-generada-v1.png"),
+    ("espera2-natalia", "espera2-natalia-generada-v1.png"),
+    ("espera2-saulo", "espera2-saulo-generada-v1.png"),
+    ("espera2-itzel", "espera2-itzel-generada-v1.png"),
+    ("espera2-fatima", "espera2-fatima-generada-v1.png"),
+    ("espera2-samantha", "espera2-samantha-generada-v1.png"),
+    ("espera2-majo", "espera2-majo-generada-v1.png"),
+    ("espera2-alan", "espera2-alan-generada-v1.png"),
 ]
 NAMES = [n for n, _s in CUTS]
 
