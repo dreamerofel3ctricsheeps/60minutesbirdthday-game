@@ -31,7 +31,8 @@
     es = new EventSource('/events?room=' + room);
     es.onmessage = (e) => { try { apply(JSON.parse(e.data)); } catch (x) {} };
   }
-  function close() { if (es) { es.close(); es = null; } release(); if (panel) panel.style.display = 'none'; }
+  function hide() { if (panel) panel.style.display = 'none'; }        // oculta el panel, MANTIENE la conexión viva
+  function disconnect() { if (es) { es.close(); es = null; } release(); hide(); }
 
   function build(url) {
     styles();
@@ -43,10 +44,10 @@
       '<img class="rp-qr" alt="QR del mando">' +
       '<div class="rp-sub">o abre la dirección a mano:</div><div class="rp-url"></div>' +
       '<div class="rp-status">Esperando teléfono…</div>' +
-      '<button class="rp-close">Cerrar</button></div>';
+      '<button class="rp-close">Empezar a jugar</button></div>';
     panel.querySelector('.rp-url').textContent = url;
     panel.querySelector('.rp-qr').src = '/qr?data=' + encodeURIComponent(url);
-    panel.querySelector('.rp-close').onclick = close;
+    panel.querySelector('.rp-close').onclick = hide;
     document.body.appendChild(panel);
   }
   function styles() {
@@ -59,12 +60,13 @@
       '.rp-qr{width:220px;height:220px;background:#fff;border-radius:10px;padding:8px;margin:4px auto 12px;display:block}' +
       '.rp-url{font-size:14px;font-weight:700;color:#6fd3ff;background:#120f1b;border-radius:8px;padding:12px;word-break:break-all;margin-bottom:12px}' +
       '.rp-status{font-size:14px;color:#ffb86b;margin:8px 0 14px}' +
-      '.rp-close{background:#3a3350;color:#e8e4f0;border:0;border-radius:8px;padding:8px 18px;font-size:14px;cursor:pointer}' +
+      '.rp-close{background:#6fd3ff;color:#0a1a22;font-weight:700;border:0;border-radius:8px;padding:10px 22px;font-size:15px;cursor:pointer}' +
       '.rp-open{position:fixed;left:10px;bottom:10px;z-index:9998;background:#1a1626;border:1px solid #3a3350;color:#e8e4f0;border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;opacity:.82}';
     document.head.appendChild(s);
   }
   function addButton() { styles(); const b = document.createElement('button'); b.className = 'rp-open'; b.textContent = '📱 Mando'; b.onclick = open; document.body.appendChild(b); }
   if (document.readyState !== 'loading') addButton(); else document.addEventListener('DOMContentLoaded', addButton);
 
-  G.RemotePad = { open, close };
+  window.addEventListener('beforeunload', disconnect);
+  G.RemotePad = { open, hide, disconnect };
 })(typeof window !== 'undefined' ? window : globalThis);
