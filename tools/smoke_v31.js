@@ -1645,6 +1645,17 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('patrón: el billboard tiene vida (idle con bob/roll, pop al alumbrar, saltito, sacudida y brinco)',
         patronSrc.includes('this.popT') && patronSrc.includes('this.hopT') && patronSrc.includes('this.shakeT') && patronSrc.includes('this.celeT')
         && patronSrc.includes('this.albDraw') && patronSrc.includes('Math.sin(t * 1.7)'), '');
+      // --- Corrección de Jose (2026-11-21, 3ª ronda): la caja de
+      // estado del patrón lleva SOLO el estado actual (sin la imagen
+      // del Alebrije y sin el nombre del minijuego) y los chips de
+      // zona van sin el número inicial ---
+      check('patrón: su caja de estado es SOLO estado (legendsHud con { solo: true }; el helper dibuja la línea sin retrato ni título)',
+        patronSrc.includes("legendsHud(this, c, 'EL PATRÓN DEL ALEBRIJE'") && patronSrc.includes('{ solo: true }')
+        && scenesTxtM.includes('function legendsHud(d, c, title, lines, opts)') && scenesTxtM.includes('opts.solo'), '');
+      check('patrón: los demás duelos de Leyendas conservan su caja completa (3 llamadas a legendsHud, solo 1 con la opción solo)',
+        (scenesTxtM.match(/legendsHud\(this, c,/g) || []).length === 3 && (scenesTxtM.match(/\{ solo: true \}/g) || []).length === 1, '');
+      check('patrón: los chips de zona dicen solo el nombre, sin el número inicial',
+        patronSrc.includes('G.text(c, z.label, x + w / 2, y + 14') && !patronSrc.includes('${i + 1} ${z.label}'), '');
     }
     // 2A Trazo: siguiendo la línea y corriendo al seguro se gana; quieto en una esquina se pierde
     const driveTrazo = (win) => {

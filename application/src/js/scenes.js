@@ -3963,12 +3963,21 @@
     return specialURLs[id];
   };
   // HUD propio de los duelos de Leyendas (el hud() base usa face(),
-  // que exige hoja definida; aquí el retrato sale del dibujo por código)
-  function legendsHud(d, c, title, lines) {
-    panel(c, 8, 8, 306, 46, 'rgba(20,16,32,.78)');
-    c.drawImage(G.specialFace(d.bossId), 13, 13, 36, 36);
-    G.text(c, title, 56, 22, { size: 13, align: 'left', color: '#ffd7f0', lw: 4 });
-    G.text(c, lines, 56, 40, { size: 10.5, align: 'left', color: '#fff', lw: 3 });
+  // que exige hoja definida; aquí el retrato sale del dibujo por código).
+  // Con opts.solo la caja lleva SOLO el detalle del estado actual:
+  // sin retrato y sin el nombre del minijuego (corrección de Jose,
+  // 2026-11-21). Hoy la pide únicamente PatronDuel; Trazo y Soga no
+  // pasan la opción y conservan su caja completa.
+  function legendsHud(d, c, title, lines, opts) {
+    if (opts && opts.solo) {
+      panel(c, 8, 8, 306, 26, 'rgba(20,16,32,.78)');
+      G.text(c, lines, 14, 21, { size: 10.5, align: 'left', color: '#fff', lw: 3 });
+    } else {
+      panel(c, 8, 8, 306, 46, 'rgba(20,16,32,.78)');
+      c.drawImage(G.specialFace(d.bossId), 13, 13, 36, 36);
+      G.text(c, title, 56, 22, { size: 13, align: 'left', color: '#ffd7f0', lw: 4 });
+      G.text(c, lines, 56, 40, { size: 10.5, align: 'left', color: '#fff', lw: 3 });
+    }
     panel(c, 470, 8, 162, 12, '#4a4458'); c.fillStyle = '#ffd23f'; c.fillRect(472, 10, 158 * clamp15(d.time / d.timeMax, 0, 1), 8);
     if (d.bubble) { const bw = Math.min(430, 26 + d.bubble.text.length * 6.4); panel(c, 320 - bw / 2, 58, bw, 24, 'rgba(20,16,32,.85)'); G.text(c, d.bubble.text, 320, 71, { size: 12.5, color: d.bubble.color, lw: 4 }); }
   }
@@ -4143,7 +4152,7 @@
           // en el toque: queda dentro del radio de acierto (30 px).
           const b = R.project(d.x, d.elev, alb.y), tp = R.project(d.x, d.elev + d.h, alb.y), lf = R.project(d.x - d.w / 2, d.elev, alb.y), rt = R.project(d.x + d.w / 2, d.elev, alb.y);
           this.zonePts = ALB_ZONES.map((z) => ({ x: lf.x + z.fx * (rt.x - lf.x), y: tp.y + z.fy * (b.y - tp.y) }));
-          legendsHud(this, c, 'EL PATRÓN DEL ALEBRIJE', `Ronda ${Math.min(this.r + 1, 5)}/5 · Completas: ${this.doneR} · Fallos: ${this.lost}/2`);
+          legendsHud(this, c, 'EL PATRÓN DEL ALEBRIJE', `Ronda ${Math.min(this.r + 1, 5)}/5 · Completas: ${this.doneR} · Fallos: ${this.lost}/2`, { solo: true });
           if (this.phase === 'show') G.text(c, 'MIRA LA SECUENCIA…', 320, 84, { size: 15, color: '#ffe96a', lw: 6 });
           else if (this.phase === 'input') G.text(c, `REPITE: ${this.prog}/${this.seq.length} · zona: ${ALB_ZONES[this.sel].label}`, 320, 84, { size: 15, color: '#bfe2ff', lw: 6 });
           // NOMBRE de la zona alumbrada, en su color vivo y sin tapar
@@ -4152,10 +4161,13 @@
           // y, en la respuesta, un instante al marcar (flash).
           const nameZone = this.phase === 'show' ? glow : (this.flash ? this.flash.i : -1);
           if (nameZone >= 0) { const z = ALB_ZONES[nameZone]; G.text(c, `¡${z.label.toUpperCase()}!`, 320, 116, { size: 25, color: ALB_ZONE_COLORS[z.id], lw: 7 }); }
+          // Chips de zona SOLO con el nombre, sin el número inicial
+          // (corrección de Jose, 2026-11-21: los números sobraban; la
+          // selección sigue siendo ← → + ESPACIO o el toque).
           this.chipRects = ALB_ZONES.map((z, i) => {
             const w = 98, x = 14 + i * 103, y = 322;
             panel(c, x, y, w, 26, i === this.sel && this.phase === 'input' ? '#3f6fb5' : 'rgba(20,16,32,.8)');
-            G.text(c, `${i + 1} ${z.label}`, x + w / 2, y + 14, { size: 11.5, color: '#fff', lw: 3 });
+            G.text(c, z.label, x + w / 2, y + 14, { size: 11.5, color: '#fff', lw: 3 });
             return { x, y, w, h: 26 };
           });
           if (this.st === 'rend') this.endOverlay(c);
