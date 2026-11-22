@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#120f1b">
+<title>Mando · 1 Minuto para la Fiesta</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #120f1b; color: #e8e4f0;
+    font-family: system-ui, sans-serif; touch-action: none; overscroll-behavior: none; }
+  #pad { position: fixed; inset: 0; display: flex; }
+  .half { flex: 1; position: relative; }
+  #status { position: fixed; top: 8px; left: 0; right: 0; text-align: center; font-size: 13px;
+    color: #9a8fb8; pointer-events: none; z-index: 5; }
+  #status b { color: #6fd3ff; }
+  /* Joystick */
+  #joyBase { position: absolute; width: 150px; height: 150px; border-radius: 50%;
+    border: 2px solid #3a3350; background: rgba(255,255,255,.04); display: none; }
+  #joyThumb { position: absolute; width: 66px; height: 66px; border-radius: 50%;
+    background: #6fd3ff; opacity: .85; transform: translate(-50%, -50%); }
+  .hint { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 12px; color: #5a5270; }
+  /* Acción */
+  #act { position: absolute; right: 7vw; bottom: 50%; transform: translateY(50%);
+    width: 128px; height: 128px; border-radius: 50%; background: #ffb86b; color: #3a2a12;
+    font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 0 #c98a3f; transition: transform .03s, box-shadow .03s; }
+  #act.on { transform: translateY(calc(50% + 4px)); box-shadow: 0 2px 0 #c98a3f; background: #ffcf9a; }
+</style>
+</head>
+<body>
+<div id="status">Conectando…</div>
+<div id="pad">
+  <div class="half" id="joyHalf">
+    <div id="joyBase"><div id="joyThumb"></div></div>
+    <div class="hint">Mueve el dedo para caminar</div>
+  </div>
+  <div class="half" id="actHalf">
+    <div id="act">ACCIÓN</div>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  const room = new URLSearchParams(location.search).get('room') || 'default';
+  const statusEl = document.getElementById('status');
+  let connected = null;
+  function post(obj) {
+    return fetch('/input?room=' + encodeURIComponent(room), {
+      method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(obj),
+    }).then(r => r.json()).then(j => {
+      if (j.connected !== connected) { connected = j.connected;
+        statusEl.innerHTML = connected ? 'Conectado a <b>' + room + '</b>' : 'Esperando al juego (<b>' + room + '</b>)…'; }
+    }).catch(() => {});
+  }
+  // hello + heartbeat para saber si el juego está escuchando
+  post({ t: 'hello' });
+  setInterval(() => post({ t: 'ping' }), 2000);
+
+  // ---- Joystick (origen flotante en la mitad izquierda) ----
+  const base = document.getElementById('joyBase'), thumb = document.getElementById('joyThumb');
+  const R = 72; let joyId = null, ox = 0, oy = 0;
+  let lastJoy = 0, pendingJoy = null;
+  function sendJoy(x, y) { // throttle ~40ms con envío final
+    pendingJoy = { t: 'joy', x, y }; const now = performance.now();
+    if (now - lastJoy >= 40) { lastJoy = now; post(pendingJoy); pendingJoy = null; }
+  }
+  setInterval(() => { if (pendingJoy) { lastJoy = performance.now(); post(pendingJoy); pendingJoy = null; } }, 40);
+  const joyHalf = document.getElementById('joyHalf');
+  joyHalf.addEventListener('pointerdown', e => {
+    joyId = e.pointerId; ox = e.clientX; oy = e.clientY;
+    base.style.display = 'block'; base.style.left = (ox - 75) + 'px'; base.style.top = (oy - 75) + 'px';
+    thumb.style.left = '75px'; thumb.style.top = '75px';
+    joyHalf.setPointerCapture(joyId);
+  });
+  joyHalf.addEventListener('pointermove', e => {
+    if (e.pointerId !== joyId) return;
+    let dx = e.clientX - ox, dy = e.clientY - oy; const m = Math.hypot(dx, dy);
+    if (m > R) { dx = dx / m * R; dy = dy / m * R; }
+    thumb.style.left = (75 + dx) + 'px'; thumb.style.top = (75 + dy) + 'px';
+    sendJoy(dx / R, dy / R); // up-drag => dy<0 => y<0 => arriba (coincide con el juego)
+  });
+  function joyEnd(e) { if (e.pointerId !== joyId) return; joyId = null; base.style.display = 'none'; sendJoy(0, 0); }
+  joyHalf.addEventListener('pointerup', joyEnd);
+  joyHalf.addEventListener('pointercancel', joyEnd);
+
+  // ---- Botón de acción ----
+  const act = document.getElementById('act');
+  act.addEventListener('pointerdown', e => { e.preventDefault(); act.classList.add('on'); post({ t: 'act', down: true }); act.setPointerCapture(e.pointerId); });
+  const up = () => { act.classList.remove('on'); post({ t: 'act', down: false }); };
+  act.addEventListener('pointerup', up);
+  act.addEventListener('pointercancel', up);
+  // soltar todo si la pestaña se oculta
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { sendJoy(0, 0); up(); } });
+})();
+</script>
+</body>
+</html>

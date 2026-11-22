@@ -7,3 +7,4 @@ __pycache__/
 # La canción del easter egg «La Cita» NUNCA se sube al repo (tiene
 # derechos): vive solo en la copia local. El LEEME.txt SÍ se versiona.
 application/src/assets/audio/*.m4a
+package-lock.json

@@ -16,3 +16,4 @@ import './js/world.js';
 import './js/scenes.js';
 import './js/date.js';
 import './js/game.js';
+import './js/remote-pad.js';       // mando móvil (LAN)

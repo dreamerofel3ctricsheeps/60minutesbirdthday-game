@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "node tools/smoke_v31.cjs",
     "check:defined": "node tools/check_defined.cjs",
-    "check:date": "node tools/check_date.cjs"
+    "check:date": "node tools/check_date.cjs",
+    "relay": "node tools/relay.cjs"
   },
   "devDependencies": {
     "vite": "^8.3.8",
