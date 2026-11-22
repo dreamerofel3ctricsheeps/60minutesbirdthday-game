@@ -73,13 +73,28 @@ DESIGN_DIR = pathlib.Path.home() / "workspace" / "goals" / "1-minuto-para-la-fie
 # elipse de sombra bajo cada figura y en el idle frontal queda
 # CONECTADA a las puntas de las botas: hay que seccionarla, porque
 # Teodora flota y su sombra la pone el motor, no el sprite)
+#
+# TERCERA RONDA (2026-11-21): Jose vio el sprite de trazo CORTADO
+# por la izquierda en pantalla. Causa raíz MEDIDA sobre las hojas
+# (componentes opacos reales de cada figura): varias celdas eran
+# MÁS ESTRECHAS que su figura y la cercenaban en línea recta —
+# trazo ocupa x 1961–2681 en su hoja y su celda nacía en 2010
+# (49 px de sombrero y pelo fuera); dash ocupa 932–1528 y su celda
+# era 998–1482 (66 px fuera por la izquierda y 46 por la derecha);
+# derrotada llega a 504 y su celda cerraba en 490 (14 px del moño);
+# sorprendida nace en 1984 y su celda en 1990 (6 px). Las celdas de
+# abajo ya son las corregidas: nacen y mueren en los huecos entre
+# figuras (la vecina más cercana queda siempre fuera o, si un filo
+# entra, el filtro de componente mayor lo descarta). Además, TODAS
+# las poses salen ahora con MARGEN transparente (PAD) alrededor:
+# ningún píxel del diseño toca el borde del lienzo.
 CUTS = [
     ("idle", "teodora-expresiones-flotacion-v1.webp", (4, 4, 476, 636), True),
     ("selfie", "teodora-poses-boss-v1.webp", (1330, 0, 2090, 912), False),
-    ("trazo", "teodora-poses-boss-v1.webp", (2010, 0, 2736, 912), False),
-    ("dash", "teodora-sprites-faltantes-v1.webp", (998, 0, 1482, 992), False),
-    ("sorprendida", "teodora-sprites-faltantes-v1.webp", (1990, 0, 2474, 992), False),
-    ("derrotada", "teodora-sprites-faltantes-v1.webp", (6, 0, 490, 992), False),
+    ("trazo", "teodora-poses-boss-v1.webp", (1920, 0, 2736, 912), False),
+    ("dash", "teodora-sprites-faltantes-v1.webp", (900, 0, 1560, 992), False),
+    ("sorprendida", "teodora-sprites-faltantes-v1.webp", (1976, 0, 2474, 992), False),
+    ("derrotada", "teodora-sprites-faltantes-v1.webp", (6, 0, 512, 992), False),
     # Segunda ronda (2026-11-21): poses de MOVIMIENTO para que el vuelo
     # se lea como vuelo. La hoja de flotación es una rejilla 4×2 de
     # celdas 480×640: idle2 = 2ª celda de la fila superior (el otro
@@ -107,6 +122,7 @@ CUTS = [
 ]
 NAMES = [f"teodora-{pose}" for pose, _sheet, _cell, _sh in CUTS]
 TARGET_H = 440
+PAD = 14  # margen transparente alrededor de cada pose (ver CUTS)
 BG_TOL = 30  # tolerancia de color para considerar un píxel «fondo»
 
 
@@ -164,7 +180,15 @@ def extract(sheet_path: pathlib.Path, cell: tuple, shadow: bool = False) -> Imag
     img = img.resize((round(w * TARGET_H / h), TARGET_H), Image.LANCZOS)
     if shadow:
         img = cut_contact_shadow(img)
-    return img
+    # MARGEN transparente (tercera ronda): la figura queda flotando
+    # dentro del lienzo con PAD px de aire por cada lado, para que
+    # ningún píxel del diseño toque el borde (ni lo roce el muestreo
+    # de textura al pintar). La figura conserva sus 440 px de alto;
+    # los altos de billboard en scenes.js compensan el lienzo mayor
+    # (factor 468/440) para que su tamaño en mundo no cambie.
+    canvas = Image.new("RGBA", (img.size[0] + 2 * PAD, img.size[1] + 2 * PAD), (0, 0, 0, 0))
+    canvas.paste(img, (PAD, PAD))
+    return canvas
 
 
 def build_pngs() -> None:
