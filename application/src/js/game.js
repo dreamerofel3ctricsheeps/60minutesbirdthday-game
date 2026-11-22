@@ -335,7 +335,7 @@
   //      derrota, estándar o alternativo—: ver showEnding, que es el
   //      único cierre de la historia y no se invoca ni desde la
   //      práctica ni desde el easter egg «La Cita».
-  //   2) el código admin123 en la opción «???»: solo su hash SHA-256
+  //   2) el código admin en la opción «???»: solo su hash SHA-256
   //      vive en el repo (date.js, G.DateMode.verifyAdmin).
   // Sin almacenamiento disponible, el desbloqueo dura la sesión
   // (respaldo en memoria) en vez de romperse.
@@ -505,7 +505,7 @@
     $('#datego').onclick = () => {
       const inp = $('#datecode'); // se lee al hacer clic, no al abrir
       const val = inp ? inp.value : '';
-      // Segunda llave del mismo panel: el código admin123 NO abre
+      // Segunda llave del mismo panel: el código admin NO abre
       // la cita — desbloquea los Minijuegos (persistente) y lo
       // CONFIRMA en pantalla, a diferencia del código erróneo,
       // que sigue cerrando en silencio total.

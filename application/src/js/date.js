@@ -88,7 +88,7 @@
   function verifyCode(txt) { return sha256hex(normalizeCode(txt)) === CODE_HASH; }
 
   // ---------- Segundo código de «???»: la llave de Minijuegos ----------
-  // El mismo panel acepta OTRO código (admin123) que NO abre la
+  // El mismo panel acepta OTRO código (el admin) que NO abre la
   // cita: desbloquea el menú de Minijuegos (la llave vive en
   // game.js: G.unlockMinigames, persistente en localStorage).
   // Como el de la cita, del código solo vive su hash SHA-256
