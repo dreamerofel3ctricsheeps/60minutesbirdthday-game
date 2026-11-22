@@ -123,7 +123,7 @@
       if (S.party.length && G.PLAYABLE.includes(m.who) && !S.party.includes(m.who)) return;
       // Personajes especiales (Alebrije/Teodora): no están en G.CHARS
       // ni tienen hoja definida; su nombre/color salen de G.SPECIALS y
-      // su avatar es el retrato dibujado por código (G.specialURL).
+      // su avatar es su sprite diseñado vía G.specialURL.
       const ch = G.CHARS[m.who] || (G.SPECIALS && G.SPECIALS[m.who]);
       if (!ch) return;
       const typing = ui.raw(`<div class="typing">${ch.name} está escribiendo…</div>`);
@@ -326,8 +326,7 @@
   };
   // Jefes especiales (Alebrije/Teodora): NO están en G.CHARS (no tienen
   // hoja definida y check_defined la exigiría); sus datos salen de
-  // G.SPECIALS y su imagen, del retrato dibujado por código — salvo el
-  // Alebrije, cuyo retrato es su sprite real (ver G.specialURL).
+  // G.SPECIALS y su imagen, de su sprite diseñado (ver G.specialURL).
   function bossChar(ev) { return G.CHARS[ev.boss] || (G.SPECIALS && G.SPECIALS[ev.boss]) || { name: ev.boss, color: '#fff' }; }
   function bossImgOf(ev) { return G.CHARS[ev.boss] ? Sp.full(ev.boss) : G.specialURL(ev.boss); }
   function menuShow(html) { G.menuOpen = true; overlay.innerHTML = `<div class="modal wide">${html}</div>`; overlay.classList.add('show'); }

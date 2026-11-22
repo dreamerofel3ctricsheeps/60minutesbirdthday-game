@@ -3937,7 +3937,26 @@
   }
   const teoCvCache = {};
   function teoCv(pose) { const k = pose || 'idle'; if (!teoCvCache[k]) teoCvCache[k] = codeCv(170, 210, (x) => drawTeoFigure(x, { pose })); return teoCvCache[k]; }
-  function teoFaceCv() { if (!teoCvCache.face) teoCvCache.face = codeCv(96, 96, (x) => { x.scale(2.2, 2.2); x.translate(-41, -12); drawTeoFigure(x, {}); }); return teoCvCache.face; }
+  function teoFaceCv() {
+    // Respaldo por código mientras la imagen real no cargó (mismo
+    // patrón que albFaceCv con el Alebrije).
+    if (!teoCvCache.face) teoCvCache.face = codeCv(96, 96, (x) => { x.scale(2.2, 2.2); x.translate(-41, -12); drawTeoFigure(x, {}); });
+    // Retrato desde el SPRITE REAL (corrección de Jose, 2026-11-21):
+    // recorte de cabeza calculado de la anatomía de teodora-idle
+    // (sombrero en fy≈0, barbilla en fy≈0,44, cabeza centrada en
+    // fx 0,10–0,90), ajustado al lienzo. Se redibuja en cada llamada
+    // si la imagen ya cargó, así el HUD se corrige solo.
+    const im = typeof Image !== 'undefined' ? teoImg('teodora-idle') : null;
+    if (im && im.complete && im.naturalWidth) {
+      const cv = teoCvCache.face, x = cv.getContext('2d');
+      const iw = im.naturalWidth, ih = im.naturalHeight;
+      const sx = iw * 0.10, sy = 0, sw = iw * 0.80, sh = ih * 0.44;
+      const sc = Math.min(96 / sw, 96 / sh), dw = sw * sc, dh = sh * sc;
+      x.clearRect(0, 0, 96, 96);
+      x.drawImage(im, sx, sy, sw, sh, (96 - dw) / 2, (96 - dh) / 2, dw, dh);
+    }
+    return teoCvCache.face;
+  }
   // Calaverita utilera de la soga (extra simple dibujado por código;
   // NO es uno de los Hermanos Calavera, que son otro final).
   function calCv() {
@@ -3952,13 +3971,17 @@
   }
   G.specialFace = (id) => (id === 'alebrije' ? albFaceCv() : teoFaceCv());
   const specialURLs = {};
-  // El retrato del Alebrije (pantalla VS y avatar del chat) sale de
-  // su SPRITE REAL completo, como el Sp.full del jugador — nada de
-  // recortes de «cara» de la figura por código (corrección de Jose,
-  // 2026-11-21: salía un zoom roto, un arco amarillo con un ojo).
-  // Teodora sigue con su retrato por código (teoFaceCv), sin tocar.
+  // El retrato de los especiales (pantalla VS y avatar del chat)
+  // sale de su SPRITE REAL completo, como el Sp.full del jugador —
+  // nada de recortes de «cara» de la figura por código (corrección
+  // de Jose, 2026-11-21: el del Alebrije salía como un zoom roto, un
+  // arco amarillo con un ojo; el de Teodora, directamente su versión
+  // por código en vez de su diseño). El dibujo por código queda solo
+  // como respaldo de cara para el HUD (albFaceCv/teoFaceCv) y para
+  // la soga y la escena del final, que no son retratos.
   G.specialURL = (id) => {
     if (id === 'alebrije' && G.ALEBRIJE_DATA && G.ALEBRIJE_DATA['alebrije-frente']) return G.ALEBRIJE_DATA['alebrije-frente'];
+    if (id === 'teodora' && G.TEODORA_DATA && G.TEODORA_DATA['teodora-idle']) return G.TEODORA_DATA['teodora-idle'];
     if (!specialURLs[id]) specialURLs[id] = G.specialFace(id).toDataURL();
     return specialURLs[id];
   };
@@ -3966,8 +3989,8 @@
   // que exige hoja definida; aquí el retrato sale del dibujo por código).
   // Con opts.solo la caja lleva SOLO el detalle del estado actual:
   // sin retrato y sin el nombre del minijuego (corrección de Jose,
-  // 2026-11-21). Hoy la pide únicamente PatronDuel; Trazo y Soga no
-  // pasan la opción y conservan su caja completa.
+  // 2026-11-21). La piden PatronDuel y TrazoDuel; SogaDuel no pasa
+  // la opción y conserva su caja completa.
   function legendsHud(d, c, title, lines, opts) {
     if (opts && opts.solo) {
       panel(c, 8, 8, 306, 26, 'rgba(20,16,32,.78)');
@@ -4213,6 +4236,14 @@
   // y∈[144,269]).
   const TRAZO_SCALE = 0.72;
   const TRAZO_CAM = { x: 18, y: 24, z: 70, dist: 550, pitch: 0.56, fov: 44 };
+  // CUENTA REGRESIVA DE ESTE DUELO: 3·2·1 reales (~3 s). La clase
+  // base Duel arranca con stT = 3,6 y su visor anuncia un «4» antes
+  // del 3; sumada a la presentación del set en la cadena de Leyendas
+  // (LegendsRevealScene, ya comprimida a ~3,4 s), Jose medía hasta
+  // ~8 s antes de poder jugar. Aquí SOLO se acorta la cuenta de este
+  // duelo (el constructor la pisa tras super()); la base y los demás
+  // duelos no se tocan. Corrección de Jose, 2026-11-21.
+  const TRAZO_COUNT_T = 3.0;
   // FASES DEL HUNDIMIENTO: aviso (la loseta condenada parpadea en
   // rojo y tiembla) y caída con easing (acelerando, con inclinación,
   // polvo y sacudida de cámara). Antes la loseta simplemente bajaba
@@ -4252,7 +4283,13 @@
   // G.TEODORA_DATA, data URIs). drawTeoFigure/teoCv dejan de usarse
   // en esta clase; siguen vivos para «La soga de fuego» y la escena
   // del final, que no son este duelo.
-  const TEODORA_FILES = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada'];
+  // Segunda ronda (2026-11-21): poses de MOVIMIENTO — idle2 (el otro
+  // punto del bob de su hoja de flotación), side (perfil flotando a
+  // la derecha, de la misma hoja) y side-izq (perfil a la izquierda
+  // GENERADO desde su diseño: las hojas no lo traían y a Teodora no
+  // se la espeja jamás). Con ellas su desplazamiento se lee como
+  // VUELO por estados, no como una traslación tiesa.
+  const TEODORA_FILES = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada', 'teodora-idle2', 'teodora-side', 'teodora-side-izq'];
   const TEO_H = 80; // alto en mundo del billboard (≈74 px en pantalla con TRAZO_CAM)
   const teoImgs = {};
   function teoImg(name) {
@@ -4282,7 +4319,13 @@
       // temporizador y sacudida de cámara del hundimiento.
       this.teoVx = 0; this.teoVy = 0; this.teoMoving = false; this.teoRoll = 0; this.teoSelfieNow = false;
       this.teoShock = null; this.teoShockT = 0; this.shakeT = 0; this.shook = false;
+      // Vuelo con vida (2026-11-21): velocidad escalar para el bob y
+      // la estela, anticipación antes de despegar hacia el hexágono,
+      // asentamiento al llegar y estela de chispas en desplazamiento.
+      this.teoSpeed = 0; this.teoAnticip = 0; this.teoSettleT = 0; this.teoWasMoving = false;
+      this.teoTrail = []; this.teoTrailAcc = 0;
       teoPreload(); // Teodora de este duelo es imagen diseñada
+      this.stT = TRAZO_COUNT_T; // cuenta 3·2·1 de ESTE duelo (la base anuncia 3,6 con un «4»)
       this.begin();
     }
     setup() {
@@ -4377,16 +4420,39 @@
       // inclinación de vuelo y si va en «dash» o flotando.
       if (dt > 0) { this.teoVx = (this.teo.x - teoPx) / dt; this.teoVy = (this.teo.y - teoPy) / dt; }
       this.teoMoving = Math.hypot(this.teoVx, this.teoVy) > 26;
+      this.teoSpeed = Math.hypot(this.teoVx, this.teoVy);
+      // ANTICIPACIÓN: en «corre» ella despega hacia el seguro a los
+      // 0,9 s (su gracia de flotación); en los ~0,28 s previos se
+      // agacha y carga el impulso (en draw: baja y se aplasta un
+      // poco). Sin esto el despegue era un arranque en seco.
+      this.teoAnticip = (this.phase === 'corre' && this.pt > 0.62 && this.pt <= 0.9) ? clamp15((this.pt - 0.62) / 0.28, 0, 1) : 0;
+      // ASENTAMIENTO: al pasar de volar a quieta, un respiro de
+      // 0,3 s en el que el bob se hunde y vuelve (en draw).
+      if (this.teoWasMoving && !this.teoMoving) this.teoSettleT = 0.3;
+      if (this.teoSettleT > 0) this.teoSettleT -= dt;
+      this.teoWasMoving = this.teoMoving;
+      // ESTELA DE CHISPAS: es un fantasma — al desplazarse deja
+      // estrellitas que se apagan en ~0,5 s (se pintan en draw).
+      this.teoTrailAcc += dt;
+      if (this.teoSpeed > 40 && this.teoTrailAcc > 0.03) { this.teoTrailAcc = 0; this.teoTrail.push({ x: this.teo.x + rnd(-7, 7), y: this.teo.y + rnd(-5, 5), life: 0.5, max: 0.5, s: rnd(5, 11) }); if (this.teoTrail.length > 42) this.teoTrail.shift(); }
+      for (let i = this.teoTrail.length - 1; i >= 0; i--) { this.teoTrail[i].life -= dt; if (this.teoTrail[i].life <= 0) this.teoTrail.splice(i, 1); }
     }
     teoPose() {
       if (this.teoShockT > 0 && this.teoShock) return this.teoShock; // derrotada / sorprendida
       if (this.phase === 'trazo') return this.teoSelfieNow ? 'selfie' : 'trazo';
-      if (this.phase === 'corre' || this.phase === 'cae') {
-        if (this.teoVx > 12) return 'dash'; // el dash mira a la derecha, como está dibujado
-        if (this.teoMoving) return 'idle'; // hacia la izquierda va frontal inclinada (a Teodora NO se la espeja: su moño manda)
+      if ((this.phase === 'corre' || this.phase === 'cae') && this.teoMoving) {
+        // VUELO por dirección y velocidad, con pose propia para cada
+        // sentido (a Teodora NO se la espeja jamás: su moño manda):
+        // a la izquierda, su perfil izquierdo (generado desde su
+        // diseño; las hojas solo traían el derecho); a la derecha,
+        // ráfaga «dash» si va lanzada en horizontal y perfil de su
+        // hoja si va en diagonal; casi vertical, frontal flotando.
+        if (this.teoVx < -14) return 'side-izq';
+        if (this.teoVx > 60) return 'dash';
+        if (this.teoVx > 14) return 'side';
         return 'idle';
       }
-      return 'idle'; // aviso: flotando, presentando el color
+      return 'idle'; // aviso y reposo: flotando (draw alterna idle/idle2 con el bob)
     }
     draw(dt) {
       const t = performance.now() / 1000, p = this.p;
@@ -4430,17 +4496,31 @@
           }
           if (this.phase === 'trazo' || this.phase === 'aviso') for (let i = 0; i < this.pts.length; i += 2) R.flat(R.glowTex, this.pts[i].x, 1.6, this.pts[i].y, 11, { tint: [1, 0.85, 0.35], alpha: 0.5 + 0.3 * Math.sin(t * 5 + i) });
           R.flat(R.glowTex, this.teo.x, 0.8, this.teo.y, 30, { tint: [0.1, 0.05, 0.16], alpha: 0.5 }); // sombra suave de fantasma (ella flota: la sombra va en el suelo)
+          // Estela de chispas de su vuelo: puntos de luz que se
+          // apagan tras ella (la emite update() al desplazarse).
+          for (const tp of this.teoTrail) { const lf = Math.max(0, tp.life / tp.max), ss = tp.s * (0.5 + lf); R.sprite(R.glowTex, tp.x, 30 + Math.sin(t * 5 + tp.x) * 2, tp.y, { w: ss, h: ss, lit: 0, alpha: 0.38 * lf }); }
           // Teodora DISEÑADA como billboard, con la pose de su estado
-          // y SIEMPRE flotando (línea de dibujo elevada con bob).
-          const tim = teoImg('teodora-' + this.teoPose());
+          // y SIEMPRE flotando. El bob ya no es un vaivén fijo: su
+          // amplitud y frecuencia crecen con su velocidad, quieta
+          // alterna los DOS puntos del bob de su hoja (idle/idle2),
+          // antes de despegar se agacha (anticipación) y al llegar
+          // se asienta con un respiro.
+          let teoPoseName = this.teoPose();
+          if (teoPoseName === 'idle' && Math.sin(t * 2.2) > 0) teoPoseName = 'idle2';
+          const tim = teoImg('teodora-' + teoPoseName);
           if (rocketReady(tim)) {
             const asp = (tim.naturalWidth && tim.naturalHeight) ? tim.naturalWidth / tim.naturalHeight : 0.6;
-            R.sprite(tim, this.teo.x, 15 + Math.sin(t * 2.2) * 3, this.teo.y, { w: TEO_H * asp, h: TEO_H, feet: 0, lit: 0.2, nostretch: true, roll: this.teoRoll });
+            const spd = this.teoSpeed || 0;
+            let teoElevY = 15 + Math.sin(t * (2.2 + Math.min(3.2, spd * 0.026))) * (3 + Math.min(5, spd * 0.045));
+            if (this.teoSettleT > 0) teoElevY -= Math.sin((1 - this.teoSettleT / 0.3) * Math.PI) * 4; // asentamiento al llegar
+            teoElevY -= (this.teoAnticip || 0) * 5; // se agacha/carga antes de despegar
+            const squash = 1 - 0.06 * (this.teoAnticip || 0);
+            R.sprite(tim, this.teo.x, teoElevY, this.teo.y, { w: TEO_H * asp / squash, h: TEO_H * squash, feet: 0, lit: 0.2, nostretch: true, roll: this.teoRoll });
           }
         },
         over: (c) => {
           const e = this.extra();
-          legendsHud(this, c, 'EL SET SE HUNDE / TRAZA LA LEYENDA', `Ronda ${Math.min(this.r + 1, 3)}/3 · Precisión tú ${e.precP}% · Teodora ${e.precT}% · Caídas ${this.fallsP}/2`);
+          legendsHud(this, c, 'EL SET SE HUNDE / TRAZA LA LEYENDA', `Ronda ${Math.min(this.r + 1, 3)}/3 · Precisión tú ${e.precP}% · Teodora ${e.precT}% · Caídas ${this.fallsP}/2`, { solo: true });
           if (this.phase === 'trazo') G.text(c, `TRAZA LA LEYENDA (${this.pathKind.toUpperCase()}) — ${Math.max(0, this.tTrazo - this.pt).toFixed(0)}s`, 320, 84, { size: 14, color: '#ffe96a', lw: 6 });
           else if (this.phase === 'aviso' || this.phase === 'corre') { panel(c, 190, 66, 260, 34, HEX_COLORS[this.safeColor]); G.text(c, `¡AL ${HEX_NAMES[this.safeColor]}!`, 320, 84, { size: 19, color: '#241a10', lw: 2, stroke: false }); if (this.phase === 'corre') G.text(c, `El set se hunde en ${Math.max(0, this.tCorre - this.pt).toFixed(1)}…`, 320, 116, { size: 13, color: '#ff6b7a', lw: 5 }); }
           else if (this.phase === 'cae') G.text(c, '¡SE HUNDE!', 320, 84, { size: 19, color: '#ff6b7a', lw: 7 });
@@ -4463,6 +4543,7 @@
   TrazoDuel.SINK = { warn: SINK_WARN_T, fall: SINK_FALL_T };
   TrazoDuel.SCALE = TRAZO_SCALE;
   TrazoDuel.TEO = { h: TEO_H, files: TEODORA_FILES };
+  TrazoDuel.COUNT = TRAZO_COUNT_T;
 
   // ----- Boss 2B: «La soga de fuego» (Hot Rope Jump) -----
   class SogaDuel extends Duel {
@@ -4579,6 +4660,13 @@
     panel(c, 70, 294, 500, 54, 'rgba(14,10,24,.88)');
     wrap(c, text, 84, 308, 472, 13, color || '#fff');
   }
+  // Duración de la presentación del set antes de la primera prueba
+  // de Teodora: era 8,4 s (más la cuenta del duelo, Jose medía hasta
+  // ~8 s sin poder jugar). Comprimida a ~3,4 s con los mismos hitos
+  // (apagón → set encendido → Alebrije → Teodora reta) en tiempos
+  // cortos, y saltable con la acción desde 0,4 s, como las demás
+  // cinemáticas del juego. Corrección de Jose, 2026-11-21.
+  const REVEAL_DUR = 3.4;
   class LegendsRevealScene {
     constructor(done) { this.done = done; this.t = 0; this.who = (G.S && G.S.protagonist) || 'natalia'; G.captureKeys = true; }
     cast() {
@@ -4595,31 +4683,32 @@
     update(dt) {
       const cs = this.cast(); cs.p.update(dt); cs.party.forEach((a) => a.update(dt)); cs.xim.update(dt); cs.jose.update(dt); cs.cat.update(dt);
       this.t += dt;
-      if (this.t > 1 && G.input.hit('action')) this.t = Math.max(this.t, 8.2); // skippable
-      if (this.t >= 8.4) { const d = this.done; this.done = null; if (d) d(); }
+      if (this.t > 0.4 && G.input.hit('action')) this.t = Math.max(this.t, REVEAL_DUR - 0.05); // skippable
+      if (this.t >= REVEAL_DUR) { const d = this.done; this.done = null; if (d) d(); }
     }
     draw(dt) {
       const t = this.t, cs = this.cast();
-      const albX = t < 3.4 ? 380 : 380 + Math.min(1, (t - 3.4) / 1.2) * 120; // el Alebrije sale de su escondite entre la decoración
-      const teoElev = t < 4.6 ? 150 : Math.max(24, 150 - (t - 4.6) * 62); // Teodora desciende flotando
+      const albX = t < 0.9 ? 380 : 380 + Math.min(1, (t - 0.9) / 0.8) * 120; // el Alebrije sale de su escondite entre la decoración
+      const teoElev = t < 1.7 ? 150 : Math.max(24, 150 - (t - 1.7) * 115); // Teodora desciende flotando
       W.render({
-        cam: CAM_SALA(), dt, light: t < 1.6 && (t % 0.3) < 0.15 ? W.LIGHT.oscuro : W.LIGHT.fiesta, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
+        cam: CAM_SALA(), dt, light: t < 0.7 && (t % 0.3) < 0.15 ? W.LIGHT.oscuro : W.LIGHT.fiesta, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
         sprites: () => {
-          if (t > 3.2) R.sprite(albCv('director'), albX, 0, 168, { w: 104, h: 115, feet: 0, lit: 0.25, nostretch: true });
-          if (t > 4.4) { R.flat(R.glowTex, 772, 0.8, 168, 46, 30, { color: [0.1, 0.05, 0.16], alpha: 0.5 }); R.sprite(teoCv('altiva'), 772, teoElev, 168, { w: 62, h: 77, feet: 0, lit: 0.2, nostretch: true }); }
+          if (t > 0.7) R.sprite(albCv('director'), albX, 0, 168, { w: 104, h: 115, feet: 0, lit: 0.25, nostretch: true });
+          if (t > 1.6) { R.flat(R.glowTex, 772, 0.8, 168, 46, 30, { color: [0.1, 0.05, 0.16], alpha: 0.5 }); R.sprite(teoCv('altiva'), 772, teoElev, 168, { w: 62, h: 77, feet: 0, lit: 0.2, nostretch: true }); }
         },
         over: (c) => {
-          if (t > 1.8) { // reflectores del set apuntando a la sala
+          if (t > 0.8) { // reflectores del set apuntando a la sala
             for (const sx of [70, 570]) { const grd = c.createLinearGradient(sx, 0, 320, 300); grd.addColorStop(0, 'rgba(255,240,180,0.30)'); grd.addColorStop(1, 'rgba(255,240,180,0)'); c.fillStyle = grd; c.beginPath(); c.moveTo(sx, 0); c.lineTo(sx + 26, 0); c.lineTo(400, 310); c.lineTo(240, 310); c.closePath(); c.fill(); }
             G.text(c, 'SET DE FILMACIÓN · ESCENA 1 · TOMA 1', 320, 26, { size: 13, color: '#ffe96a', lw: 6 });
           }
-          const line = t < 1.8 ? 'La sala se apaga un segundo…' : t < 3.4 ? '…y se enciende COMO UN SET DE CINE. Las paredes eran utilería.' : t < 5.4 ? 'EL ALEBRIJE: «¡Sorpresa! ¡Su casa era mi set! ¿O mi set era su casa?»' : t < 7 ? 'TEODORA: «A ver, a ver… ¿esta es la sorpresa? Yo he visto mejores.»' : 'TEODORA: «Si quieren su final de película, superen mis dos pruebas.»';
-          legendsSubtitle(c, line, t >= 5.4 ? '#ffd7f0' : '#fff');
-          if (t > 1) G.prompt(c, 'ESPACIO: saltar', 590, 344);
+          const line = t < 0.8 ? 'La sala se apaga un segundo…' : t < 1.8 ? '…y se enciende COMO UN SET DE CINE. EL ALEBRIJE: «¡Sorpresa! ¡Su casa era mi set!»' : 'TEODORA: «¿Esta es la sorpresa? Yo he visto mejores… Si quieren su final de película, superen mis dos pruebas.»';
+          legendsSubtitle(c, line, t >= 1.8 ? '#ffd7f0' : '#fff');
+          if (t > 0.4) G.prompt(c, 'ESPACIO: saltar', 590, 344);
         },
       });
     }
   }
+  LegendsRevealScene.DUR = REVEAL_DUR;
   class LegendsFinaleScene {
     constructor(results, who, done) { this.results = results; this.who = who; this.done = done; this.t = 0; G.captureKeys = true; }
     wins() { return (this.results.trazo && this.results.trazo.win === 'win' ? 1 : 0) + (this.results.soga && this.results.soga.win === 'win' ? 1 : 0); }

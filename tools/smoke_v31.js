@@ -1652,8 +1652,9 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('patrón: su caja de estado es SOLO estado (legendsHud con { solo: true }; el helper dibuja la línea sin retrato ni título)',
         patronSrc.includes("legendsHud(this, c, 'EL PATRÓN DEL ALEBRIJE'") && patronSrc.includes('{ solo: true }')
         && scenesTxtM.includes('function legendsHud(d, c, title, lines, opts)') && scenesTxtM.includes('opts.solo'), '');
-      check('patrón: los demás duelos de Leyendas conservan su caja completa (3 llamadas a legendsHud, solo 1 con la opción solo)',
-        (scenesTxtM.match(/legendsHud\(this, c,/g) || []).length === 3 && (scenesTxtM.match(/\{ solo: true \}/g) || []).length === 1, '');
+      check('leyendas: las cajas SOLO-estado son Patrón y Trazo (3 llamadas a legendsHud, 2 con { solo: true }; la Soga conserva su caja completa)',
+        (scenesTxtM.match(/legendsHud\(this, c,/g) || []).length === 3 && (scenesTxtM.match(/\{ solo: true \}/g) || []).length === 2
+        && !scenesTxtM.slice(scenesTxtM.indexOf('class SogaDuel'), scenesTxtM.indexOf('class LegendsRevealScene')).includes('{ solo: true }'), '');
       check('patrón: los chips de zona dicen solo el nombre, sin el número inicial',
         patronSrc.includes('G.text(c, z.label, x + w / 2, y + 14') && !patronSrc.includes('${i + 1} ${z.label}'), '');
     }
@@ -1677,11 +1678,11 @@ const tick = () => new Promise((r) => setImmediate(r));
     // neutra, cámara que encuadra la arena, caminata sin deslizar y
     // hundimiento en fases ---
     {
-      const teoFiles = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada'];
+      const teoFiles = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada', 'teodora-idle2', 'teodora-side', 'teodora-side-izq'];
       const imgDirT = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
-      check('trazo: las 6 poses de Teodora existen en application/src/assets/img/',
+      check('trazo: las 9 poses de Teodora existen en application/src/assets/img/',
         teoFiles.every((n) => fs.existsSync(path.join(imgDirT, n + '.png'))));
-      check('trazo: G.TEODORA_DATA trae las 6 poses como data URIs PNG',
+      check('trazo: G.TEODORA_DATA trae las 9 poses como data URIs PNG',
         !!G.TEODORA_DATA && teoFiles.every((n) => typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
         G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
       const htmlTxtT = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
@@ -1690,7 +1691,7 @@ const tick = () => new Promise((r) => setImmediate(r));
       const scenesTxtT = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
       const trazoSrc = scenesTxtT.slice(scenesTxtT.indexOf('class TrazoDuel'), scenesTxtT.indexOf('class SogaDuel'));
       check('trazo: la clase ya no dibuja a Teodora por código (sin teoCv) y sí usa sus sprites diseñados',
-        !trazoSrc.includes('teoCv(') && trazoSrc.includes("teoImg('teodora-' + this.teoPose())") && trazoSrc.includes('teoPreload()'), '');
+        !trazoSrc.includes('teoCv(') && trazoSrc.includes("teoImg('teodora-' + teoPoseName)") && trazoSrc.includes('teoPreload()'), '');
       check('trazo: la figura por código de Teodora sigue viva SOLO para la soga y el final (teoCv selfie/idle fuera de esta clase)',
         scenesTxtT.includes("teoCv(this.teoSelfieT > 0 ? 'selfie' : 'idle')"), '');
       check('trazo: luz NEUTRA propia (amb/sun blancos equilibrados, sin puntos de color, sin W.LIGHT.fiesta)',
@@ -1716,6 +1717,48 @@ const tick = () => new Promise((r) => setImmediate(r));
       G.input.touchUp('right', 99);
       check('trazo: al moverse con velocidad real, la fase de zancada AVANZA (no desliza)',
         dw.p.step > step0 + 3 && dw.p.spd > 100, `step ${step0}→${dw.p.step.toFixed(1)}, spd ${dw.p.spd}`);
+    }
+    // --- Corrección de Jose (2026-11-21), 2ª ronda del Trazo: caja
+    // solo-estado también aquí, retrato diseñado de Teodora, cuenta
+    // 3·2·1 sin la presentación larga y vuelo de Teodora por estados ---
+    {
+      const scenesTxtU = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const trazoSrcU = scenesTxtU.slice(scenesTxtU.indexOf('class TrazoDuel'), scenesTxtU.indexOf('class SogaDuel'));
+      check('trazo: su caja de estado también es SOLO estado (legendsHud con { solo: true })',
+        trazoSrcU.includes("legendsHud(this, c, 'EL SET SE HUNDE / TRAZA LA LEYENDA'") && trazoSrcU.includes('{ solo: true }'), '');
+      check('trazo: el retrato VS/chat de Teodora sale de su sprite diseñado (specialURL → TEODORA_DATA idle); el del Alebrije no se rompe',
+        typeof G.specialURL === 'function' && G.specialURL('teodora') === G.TEODORA_DATA['teodora-idle']
+        && G.specialURL('alebrije') === G.ALEBRIJE_DATA['alebrije-frente'], '');
+      check('trazo: la cara del HUD de Teodora se recorta de su sprite real (teoFaceCv usa teoImg, con respaldo por código)',
+        scenesTxtU.includes("teoImg('teodora-idle')") && scenesTxtU.includes('function teoFaceCv()'), '');
+      check('trazo: cuenta regresiva PROPIA de 3 s (3·2·1), sin el «4» de la base (stT pisado en el constructor)',
+        Sc.TrazoDuel.COUNT === 3 && trazoSrcU.includes('this.stT = TRAZO_COUNT_T'), '');
+      check('trazo: la presentación del set dura ~3,4 s y es saltable desde 0,4 s (antes 8,4 s)',
+        scenesTxtU.includes('const REVEAL_DUR = 3.4') && scenesTxtU.includes('REVEAL_DUR - 0.05') && !scenesTxtU.includes('this.t >= 8.4'), '');
+      const dc = new Sc.TrazoDuel('natalia', () => {});
+      check('trazo: un duelo recién creado arranca con la cuenta en 3 (stT = 3)', dc.st === 'count' && dc.stT === 3, `stT=${dc.stT}`);
+      // Vuelo por estados: la pose depende de la dirección y la velocidad.
+      const dv = new Sc.TrazoDuel('natalia', () => {});
+      dv.phase = 'corre'; dv.teoMoving = true; dv.teoSpeed = 119;
+      dv.teoVx = -100; const poseIzq = dv.teoPose();
+      dv.teoVx = 100; const poseDash = dv.teoPose();
+      dv.teoVx = 30; const poseSide = dv.teoPose();
+      dv.teoVx = 0; const poseFrontal = dv.teoPose();
+      check('trazo: Teodora vuela con pose por dirección (izq → perfil izquierdo, der lanzada → dash, der diagonal → perfil, vertical → frontal)',
+        poseIzq === 'side-izq' && poseDash === 'dash' && poseSide === 'side' && poseFrontal === 'idle',
+        `${poseIzq}/${poseDash}/${poseSide}/${poseFrontal}`);
+      check('trazo: el vuelo deja estela, anticipa y se asienta (teoTrail/teoAnticip/teoSettleT en la clase; quieta alterna idle2)',
+        trazoSrcU.includes('this.teoTrail.push') && trazoSrcU.includes('teoAnticip') && trazoSrcU.includes('teoSettleT') && trazoSrcU.includes("teoPoseName = 'idle2'"), '');
+      // Comportamiento: en «corre», antes de despegar hay anticipación
+      // y al volar hacia el seguro emite estela de chispas.
+      const df = new Sc.TrazoDuel('natalia', () => {});
+      df.st = 'play'; df.phase = 'corre'; df.pt = 0.8;
+      df.update(0.016);
+      const anticip = df.teoAnticip;
+      df.pt = 1.0; df.teo.x = -169; df.teo.y = 30;
+      df.update(0.05); df.update(0.05); df.update(0.05);
+      check('trazo: anticipación antes del despegue y estela de chispas al volar',
+        anticip > 0 && df.teoTrail.length > 0 && df.teoSpeed > 40, `anticip=${anticip.toFixed(2)} trail=${df.teoTrail.length} spd=${df.teoSpeed.toFixed(0)}`);
     }
     // 2B Soga: sin saltar te quemas; saltando a tiempo, Teodora cae en su selfie (~vuelta 10)
     {
