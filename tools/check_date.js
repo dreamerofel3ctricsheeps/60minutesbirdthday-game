@@ -74,7 +74,14 @@
      obstáculo de fuego (recorte solo-local de película, ~7
      sobre la vereda; el choque da fogonazo con chispas,
      frena ×0,4 por 0,7 s medido en desplazamiento y lo deja
-     apagado unos segundos; el seguidor lo atraviesa),
+     apagado unos segundos; el seguidor lo atraviesa). La
+     colisión es la ELIPSE DEL NÚCLEO OPACO medido del
+     recorte (arreglo del playtest de Jose: la cuenta vieja
+     —un círculo de ~50 px desde el centro de la caja del
+     recorte— quemaba sin tocar la llama visible; ahora hay
+     casos de no-contacto verificados —izquierda, derecha,
+     diagonal y borde alto de la banda— y el contacto real
+     sigue disparando),
      Mononoke observando desde la arboleda dibujada del fondo
      (protagonista en la segunda mitad del paseo), y el cielo
      y la pradera llenos por código: 3 profundidades de nubes
@@ -1355,9 +1362,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     PCS.length === 7 && PCS.every((cc) => cc.x >= 650 && cc.x <= 3450 && cc.size >= 46 && cc.size <= 60 && Math.abs(cc.yOff) <= 26) &&
     PCS.every((cc) => Math.abs(cc.x - pr3.exitDoorX) > 300),
     'xs=' + PCS.map((cc) => cc.x).join(','));
-  check('el parpadeo varía la escala (calciferFlick oscila con el tiempo) y el radio de peligro queda en ~24–28 px',
+  check('el parpadeo varía la escala (calciferFlick oscila con el tiempo) y la zona de peligro es la elipse del NÚCLEO medido del recorte (semiancho 0,453·s, semialto 0,475·s, torso 15: alcance ~38,5 px a tamaño 52, no el círculo viejo de ~50)',
     DM.debug.calciferFlick(1.3, 0) !== DM.debug.calciferFlick(1.45, 0) &&
-    (() => { let mn = 99, mx = 0; for (let tt = 0; tt < 3; tt += 0.05) { const r = PCF.rBase * DM.debug.calciferFlick(tt, 2); if (r < mn) mn = r; if (r > mx) mx = r; } return mn >= 23.5 && mx <= 28.5; })());
+    Math.abs(PCF.coreRxK - 0.453) < 0.01 && Math.abs(PCF.coreRyK - 0.475) < 0.01 && Math.abs(PCF.coreCyK - 0.525) < 0.01 && PCF.charR === 15 &&
+    (PCF.coreRxK * 52 + PCF.charR) > 36 && (PCF.coreRxK * 52 + PCF.charR) < 42,
+    `alcanceX(52)=${(PCF.coreRxK * 52 + PCF.charR).toFixed(1)}, alcanceY(52)=${(PCF.coreRyK * 52 + PCF.charR).toFixed(1)}`);
   // El choque: el controlado se planta sobre el primer
   // Calcifer (su centro = la llama).
   pr3.resetCalcifers(); pr3.frenoT = 0;
@@ -1399,6 +1408,49 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   pr3.update(0.05);
   check('el SEGUIDOR atraviesa los Calcifer sin efecto (ni freno ni apagado: el choque es solo del controlado)',
     pr3.frenoT === 0 && C1.offT === 0, `frenoT=${pr3.frenoT}, offT=${C1.offT}`);
+  // El arreglo del playtest (Jose: «choque o no con el fuego
+  // igual me afecta, solo debería afectarme si realmente lo
+  // he tocado»): la cuenta vieja era un círculo de ~50 px
+  // (radio ~26 + 24) desde el centro de la CAJA del recorte
+  // y quemaba sin contacto con la llama visible. La nueva es
+  // la elipse del núcleo opaco medido. Estos acercamientos
+  // NO tocan el núcleo y ya no deben frenar (con la cuenta
+  // vieja, los tres primeros SÍ disparaban: distancias de
+  // centro ~48, ~48 y ~39 px contra un radio de ~48–52).
+  const sinToque = (cal, ax, ay, nombre) => {
+    pr3.resetCalcifers(); pr3.frenoT = 0;
+    A3.x = ax; A3.y = ay; B3.x = 300; B3.y = pr3.groundY;
+    pr3.update(0.05);
+    check(nombre, pr3.frenoT === 0 && cal.offT === 0, `frenoT=${pr3.frenoT}, offT=${cal.offT}`);
+  };
+  const C720 = pr3.calciferes[0]; // x=720, yOff=−18, size=52
+  const cyC720 = pr3.groundY + C720.yOff - 4 - PCF.coreCyK * C720.size; // centro del núcleo (a parpadeo ~1)
+  const alcanceX720 = PCF.coreRxK * C720.size * 1.06 + PCF.charR; // alcance máximo: parpadeo en su pico
+  sinToque(C720, C720.x - alcanceX720 - 8, cyC720 + 48,
+    'acercarse por la IZQUIERDA quedándose a ~8 px del borde visible del núcleo ya NO quema (sin solape no hay fogonazo)');
+  sinToque(C720, C720.x + alcanceX720 + 8, cyC720 + 48,
+    'acercarse por la DERECHA quedándose a ~8 px del borde visible del núcleo ya NO quema');
+  sinToque(C720, C720.x + 32, pr3.groundY + 26,
+    'pasar en DIAGONAL por debajo de una llama alta (fondo de la banda, cerca pero sin tocar el núcleo) ya NO quema');
+  // Por la banda a otra altura: llamas bajas (yOff +20/+16)
+  // con el personaje pegado al borde alto de la banda: su
+  // torso queda por encima de la punta de la llama, sin
+  // solape vertical con el núcleo.
+  const C1980 = pr3.calciferes[3]; // x=1980, yOff=+20, size=55
+  sinToque(C1980, C1980.x, pr3.groundY - 26,
+    'pasar por el borde ALTO de la banda frente a una llama baja (yOff +20) NO quema: el torso no alcanza el núcleo');
+  const C1150 = pr3.calciferes[1]; // x=1150, yOff=+16, size=58
+  sinToque(C1150, C1150.x, pr3.groundY - 26,
+    'pasar por el borde ALTO de la banda frente a otra llama baja (yOff +16, tamaño 58) NO quema');
+  // Y el contacto REAL sigue quemando: de frente, a la
+  // altura de la llama, con el torso dentro del núcleo.
+  pr3.resetCalcifers(); pr3.frenoT = 0;
+  const C0b = pr3.calciferes[0];
+  A3.x = C0b.x; A3.y = pr3.groundY + C0b.yOff; B3.x = 300; B3.y = pr3.groundY;
+  pr3.update(0.05);
+  check('el contacto REAL con el núcleo (de frente, a la altura de la llama) SÍ dispara el fogonazo, el freno y el apagado',
+    pr3.frenoT > 0.5 && C0b.offT > 2 && pr3.chispas.length >= 4,
+    `frenoT=${pr3.frenoT.toFixed(2)}, offT=${C0b.offT.toFixed(1)}, chispas=${pr3.chispas.length}`);
   // Mononoke y la arboleda del fondo.
   const ARB = PR.arboleda, protMo = (ARB.layerCx - 320) / ARB.par;
   check('Mononoke observa desde la arboleda: su protagonista cae en la segunda mitad del paseo (55–75% de pan 0..3710) y el recorte se dibuja SUTIL, a 110–125 px de alto (la mitad de su primera versión, que a 218 dominaba el fondo)',

@@ -2145,10 +2145,37 @@
     // frenoK/frenoT: el trastabilleo de siempre. offT: tras
     // el fogonazo el Calcifer queda «apagado» (tenue y sin
     // colisión) esos segundos y se reaviva — no puede frenar
-    // dos veces seguidas al mismo paso. rBase: el radio de
-    // peligro, que pulsa con el parpadeo (rBase × flick da
-    // ~24–28 px).
-    calcifer: { frenoK: 0.4, frenoT: 0.7, offT: 3, rBase: 26 },
+    // dos veces seguidas al mismo paso.
+    // La ZONA DE PELIGRO es una elipse ajustada al NÚCLEO
+    // OPACO de la llama, MEDIDO del recorte calcifer.png
+    // (800×326): las columnas con ≥45% de su alto opaco a
+    // alfa ≥245 ocupan x 250–544 (el cuerpo: 0,369 del ancho
+    // total, centro en 0,496) y el cuerpo llena el 95% del
+    // alto. Los BRAZOS extendidos y el resplandor suave
+    // quedan FUERA: no queman. (Bug del playtest de Jose:
+    // «choque o no con el fuego igual me afecta» — la cuenta
+    // vieja era un círculo de radio ~26+24 ≈ 50 px desde el
+    // centro de la CAJA del recorte y alcanzaba al personaje
+    // sin que tocara la llama visible.) Como el recorte se
+    // dibuja de alto s y ancho s×800/326, el núcleo en
+    // pantalla mide 0,369×(800/326)·s de ancho y 0,95·s de
+    // alto, de donde:
+    //   coreRxK = 0,369 × 800/326 / 2 ≈ 0,453 (semiancho, en s)
+    //   coreRyK = 0,95 / 2 = 0,475 (semialto, en s)
+    //   coreCyK = 0,525: el centro del núcleo cae a
+    //     base − 4 − 0,525·s (la caja se dibuja desde
+    //     base − 4 − s y el núcleo llena su 95% superior).
+    // charR: el radio del TORSO del personaje controlado
+    // (los torsos medidos de las hojas definidas, a 96 px de
+    // alto, miden 37–48 px de ancho; 15 deja fuera pelo,
+    // brazos y borde blanco: el fogonazo exige solape visual
+    // real entre el torso y el núcleo, ni un px antes). Las
+    // mismas constantes valen para la llamita de respaldo
+    // dibujada (su cuerpo mide ±0,38·s de ancho y s de alto:
+    // la elipse la cubre con ~4 px de margen en su punto más
+    // ancho). El parpadeo entra vía s: la elipse escala con
+    // el tamaño dibujado (±6% como mucho).
+    calcifer: { frenoK: 0.4, frenoT: 0.7, offT: 3, coreRxK: 0.453, coreRyK: 0.475, coreCyK: 0.525, charR: 15 },
     // La ARBOLEDA del fondo (dibujada por código) y MONONOKE
     // observando desde ella: viven en una capa de fondo
     // (parallax 0,45, la de la colina lejana). Su centro de
@@ -2224,8 +2251,9 @@
     };
   }
   // El parpadeo de un Calcifer: dos senos desfasados por
-  // instancia; escala 1 ± 0,06 como mucho. Su radio de
-  // peligro pulsa con el mismo factor (rBase × flick).
+  // instancia; escala 1 ± 0,06 como mucho. La elipse de
+  // peligro se deriva del tamaño dibujado (s × flick), así
+  // que pulsa con el mismo factor: ±6%, nunca más.
   function calciferFlick(t, i) {
     return 1 + 0.04 * Math.sin(t * 7 + i * 1.93) + 0.02 * Math.sin(t * 11.3 + i * 0.71);
   }
@@ -2343,22 +2371,28 @@
     }
     // Los Calcifer de la vereda: quietos sobre su tronquito,
     // parpadeando. SOLO el personaje CONTROLADO puede
-    // quemarse (círculo contra círculo: su radio de peligro
-    // pulsa con el parpadeo); el seguidor los atraviesa sin
-    // efecto, como a las bolas de paja. Al tocar uno: fogonazo
-    // (popT, con sus chispas) + el trastabilleo de siempre
-    // (frenoT), y ese Calcifer queda APAGADO offT segundos
-    // (tenue y sin colisión) antes de reavivarse.
+    // quemarse: su torso (círculo de radio charR en su centro
+    // corporal, A.y−48) contra la elipse del NÚCLEO opaco de
+    // la llama (las constantes medidas de PRADERA.calcifer).
+    // El fogonazo exige solape visual real entre el torso y
+    // el núcleo: ni los brazos del recorte, ni su resplandor,
+    // ni la caja entera de la imagen queman. El seguidor los
+    // atraviesa sin efecto, como a las bolas de paja. Al
+    // tocar uno: fogonazo (popT, con sus chispas) + el
+    // trastabilleo de siempre (frenoT), y ese Calcifer queda
+    // APAGADO offT segundos (tenue y sin colisión) antes de
+    // reavivarse.
     updateCalcifers(dt) {
       const F = this.free, A = F.chars[F.active], CFG = PRADERA.calcifer;
       for (const cal of this.calciferes) {
         if (cal.offT > 0) cal.offT = Math.max(0, cal.offT - dt);
         if (cal.popT > 0) cal.popT = Math.max(0, cal.popT - dt);
         if (cal.offT > 0) continue;
-        const r = CFG.rBase * calciferFlick(this.t, cal.i);
-        const cx = cal.x, cy = this.groundY + cal.yOff - cal.size / 2;
-        const dx = cx - A.x, dy = cy - (A.y - 48);
-        if (dx * dx + dy * dy < (r + 24) * (r + 24)) {
+        const sF = cal.size * calciferFlick(this.t, cal.i);
+        const cx = cal.x, cy = this.groundY + cal.yOff - 4 - CFG.coreCyK * sF;
+        const ex = (cx - A.x) / (CFG.coreRxK * sF + CFG.charR);
+        const ey = (cy - (A.y - 48)) / (CFG.coreRyK * sF + CFG.charR);
+        if (ex * ex + ey * ey < 1) {
           cal.offT = CFG.offT; cal.popT = 0.28;
           for (let i = 0; i < 8; i++) {
             const ang = Math.random() * 6.283, sp = 26 + Math.random() * 60;
