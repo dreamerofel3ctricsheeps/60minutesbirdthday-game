@@ -231,7 +231,7 @@
   // que en un celular/tablet los controles aparezcan solos la primera vez,
   // y en escritorio queden apagados salvo que el jugador los active a mano.
   const SETTINGS_KEY = '1mtp.settings';
-  function detectTouch() { return !!((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0); }
+  function detectTouch() { return !!((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)); }
   let savedSettings = {};
   try { savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { savedSettings = {}; }
   G.settings = Object.assign({ touch: detectTouch() }, savedSettings);
