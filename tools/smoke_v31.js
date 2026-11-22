@@ -1194,15 +1194,56 @@ const tick = () => new Promise((r) => setImmediate(r));
         d.phase === 'show' && d.phaseT < 0.6 && d.josePick === null, `phase=${d.phase} phaseT=${d.phaseT} josePick=${d.josePick}`);
     }
     {
-      // entrada bloqueada durante el destape: ni el jugador ni José resuelven
+      // José NO elige durante el destape: su reloj arranca recién con
+      // la imagen completa, aunque esté «listo para responder ya»
       const d = new Sc.ImageDuel('natalia', () => {});
-      d.st = 'play'; d.joseAt = 0; d.joseAcc = 1; // José «listo para responder ya»… pero la fase manda
-      d.choose(d.diffIdx); // acierto durante el destape: NO cuenta ni penaliza
-      d.clickIdx = d.diffIdx; // ni un clic encolado
-      for (let i = 0; i < 60; i++) d.update(0.05); // ~3 s de destape
-      check('imagen: elegir durante el destape NO resuelve la ronda ni mueve puntos (jugador ni José)',
-        d.phase === 'uncover' && d.pPick === null && d.josePick === null && d.pw === 0 && d.bw === 0 && d.clickIdx === -1,
-        `phase=${d.phase} pPick=${d.pPick} josePick=${d.josePick} pw=${d.pw} bw=${d.bw} clickIdx=${d.clickIdx}`);
+      d.st = 'play'; d.joseAt = 0; d.joseAcc = 1;
+      for (let i = 0; i < 60; i++) d.update(0.05); // ~3 s de destape, sin elección del jugador
+      check('imagen: José NO responde durante el destape (su reloj arranca con la imagen completa)',
+        d.phase === 'uncover' && d.josePick === null && d.pw === 0 && d.bw === 0,
+        `phase=${d.phase} josePick=${d.josePick} pw=${d.pw} bw=${d.bw}`);
+    }
+    {
+      // ELECCIÓN ANTICIPADA acertada (pedido de Jose): a mitad del
+      // destape, un clic en el panel correcto (clickIdx, el canal del
+      // puntero) resuelve la ronda EN ESE INSTANTE, sin esperar los 7 s
+      const d = new Sc.ImageDuel('natalia', () => {});
+      d.st = 'play';
+      for (let i = 0; i < 40; i++) d.update(0.05); // ~2 s de destape
+      const midT = d.uncoverT;
+      d.clickIdx = d.diffIdx; d.update(0.05);
+      check('imagen: elegir BIEN a mitad del destape resuelve la ronda al instante (fase reveal, punto del jugador en curso)',
+        midT < 7 && d.phase === 'reveal' && !!d.pendingEnd && d.pendingEnd.w === 'p' && d.pPick === d.diffIdx,
+        `uncoverT=${midT} phase=${d.phase} pending=${d.pendingEnd && d.pendingEnd.w} pPick=${d.pPick} diff=${d.diffIdx}`);
+      for (let i = 0; i < 200 && d.st === 'play'; i++) d.update(0.05); // revelado + cierre de ronda
+      check('imagen: el punto de la anticipada acertada llega al marcador', d.pw === 1 && d.bw === 0, `pw=${d.pw} bw=${d.bw}`);
+    }
+    {
+      // ELECCIÓN ANTICIPADA errada: la cubierta cae de golpe (la fase
+      // pasa a 'show' y drawPanels ya no pinta la cubierta) y José
+      // apura su respuesta sobre la imagen revelada: la regla de
+      // fallo de siempre, con el punto para él si acierta
+      const d = new Sc.ImageDuel('natalia', () => {});
+      d.st = 'play'; d.joseAcc = 1; // José no falla la suya
+      for (let i = 0; i < 40; i++) d.update(0.05); // ~2 s de destape
+      const wrong = (d.diffIdx + 1) % 3;
+      d.clickIdx = wrong; d.update(0.05);
+      check('imagen: elegir MAL a mitad del destape hace caer la cubierta (fase show) y apura a José (≤1,1 s)',
+        d.phase === 'show' && d.pPick === wrong && d.joseAt <= 1.11,
+        `phase=${d.phase} pPick=${d.pPick} wrong=${wrong} joseAt=${d.joseAt} phaseT=${d.phaseT}`);
+      for (let i = 0; i < 400 && d.st === 'play'; i++) d.update(0.05);
+      check('imagen: tras la anticipada errada, José acierta y se lleva el punto (como en la fase final)', d.bw === 1 && d.pw === 0, `pw=${d.pw} bw=${d.bw}`);
+    }
+    {
+      // ELECCIÓN ANTICIPADA por TECLADO: la flecha → durante el destape
+      // elige el panel 2 por el mismo hit() de la fase final
+      const d = new Sc.ImageDuel('natalia', () => {});
+      d.st = 'play';
+      for (let i = 0; i < 40; i++) d.update(0.05); // ~2 s de destape
+      G.input.touchDown('right', 991); d.update(0.05); G.input.touchUp('right', 991); G.input.flush();
+      check('imagen: la flecha → también elige DURANTE el destape (panel 2, la fase uncover quedó atrás)',
+        d.pPick === 2 && d.phase !== 'uncover',
+        `phase=${d.phase} pPick=${d.pPick}`);
     }
     const skipUncover = (d) => { for (let i = 0; i < 300 && d.phase === 'uncover'; i++) d.update(0.05); }; // deja correr la cuenta atrás del destape
     const playImg = (mutate) => {

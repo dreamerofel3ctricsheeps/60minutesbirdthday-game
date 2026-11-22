@@ -322,7 +322,7 @@
         { who: 'jose', text: 'Deja eso. Yo tengo ojo de águila: apuesto a que encuentro la imagen distinta antes que cualquiera de ustedes. Si gano, despierto a Xime y le muestro el collage YO.', direct: true },
         { who: 'majo', text: 'Nadie despierta a nadie. Alguien le gana a José en su propio juego de mirar fijamente.' },
       ],
-      intro: 'Tres paneles con objetos de la fiesta: dos son idénticos y uno es DISTINTO. Señálalo con ← ↓ → (o clic en el panel) antes que José. Las diferencias empiezan obvias y se van poniendo sutiles: una raya menos, una cereza de más, la imagen espejada… Si te equivocas, José tiene su oportunidad; si él falla primero, tienes un instante para rescatar el punto.',
+      intro: 'Tres paneles con objetos de la fiesta: dos son idénticos y uno es DISTINTO. Los paneles se van destapando poco a poco, y puedes señalarlo con ← ↓ → (o clic en el panel) EN CUANTO creas saber cuál es: arriesga temprano o espera a ver más, no hace falta esperar a que se revelen enteros. Las diferencias empiezan obvias y se van poniendo sutiles: una raya menos, una cereza de más, la imagen espejada… Si te equivocas, la cubierta cae y José tiene su oportunidad sobre la imagen ya destapada; si él falla primero, tienes un instante para rescatar el punto.',
       goal: 'Carrera a 5 puntos: el primero en señalar la imagen distinta se lleva el punto.',
       results: {
         win: { effects: { quality: 5 }, reply: (who) => [{ who, text: 'Ojo de águila, decía. El collage quedó perfecto y sin duplicados raros.', mood: 'happy' }, { who: 'jose', text: 'La última era IMPOSIBLE. Una raya. ¡UNA raya!', direct: true }] },

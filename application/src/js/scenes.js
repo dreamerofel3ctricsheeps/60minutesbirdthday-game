@@ -2357,10 +2357,19 @@
   // arranca con los 3 paneles CUBIERTOS por una cubierta de rejilla
   // 6×4 que se destapa poco a poco durante IMG_UNCOVER_T segundos,
   // con su cuenta atrás visible: al inicio no se puede identificar
-  // ni la imagen completa ni la diferencia (duda y ansiedad), NADIE
-  // puede elegir durante el destape (ni el jugador ni José: su reloj
-  // de respuesta arranca recién en la elección) y SOLO al llegar la
-  // cuenta a cero la imagen se revela entera y se puede elegir.
+  // ni la imagen completa ni la diferencia (duda y ansiedad). Si la
+  // cuenta llega a cero sin elección, la imagen se revela entera y
+  // se elige como siempre. ELECCIÓN ANTICIPADA (pedido de Jose): el
+  // JUGADOR puede señalar un panel EN CUALQUIER MOMENTO del destape,
+  // en cuanto crea saber cuál es la distinta — arriesgar temprano o
+  // esperar a ver más es la decisión de cada ronda. Al elegir, la
+  // cubierta cae DE GOLPE (los 3 paneles se ven enteros al instante,
+  // como confirmación visual) y la elección entra por el mismo
+  // choose() de la fase final: si acierta, el punto es suyo antes de
+  // que arranque el reloj de José; si falla, rige la regla de
+  // siempre (José apura su respuesta, ya sobre la imagen revelada).
+  // José NO elige durante el destape: su reloj de respuesta arranca
+  // recién cuando la imagen está completa (por destape o anticipada).
   // JUSTICIA DE LA MÁSCARA (regla dura): la progresión de la cubierta
   // es IDÉNTICA en los 3 paneles en todo instante — el orden de
   // destape es UNA sola permutación por ronda (maskPos) y la opacidad
@@ -2468,19 +2477,21 @@
   }
   class ImageDuel extends Duel {
     constructor(who, done) {
-      super(who, 'jose', done, { rounds: 9, need: 5, label: 'PUNTO', title: 'LA IMAGEN DISTINTA', hint: 'Las imágenes se destapan poco a poco… al revelarse, señala la DISTINTA con ← ↓ → o clic antes que José', rendT: 1.1 });
+      super(who, 'jose', done, { rounds: 9, need: 5, label: 'PUNTO', title: 'LA IMAGEN DISTINTA', hint: 'Las imágenes se destapan poco a poco: señala la DISTINTA con ← ↓ → o clic en cuanto creas saber cuál es — arriesga temprano o espera a ver más, pero que no te gane José', rendT: 1.1 });
       this.isImage = true;
       this.p = new Actor(who, 190, 292); this.jose = new Actor('jose', 810, 292);
       this.p.dir = 'up'; this.jose.dir = 'up';
       fixSpawn(this.p, 'sala'); fixSpawn(this.jose, 'sala');
       this.cam = CAM_SALA();
       // Clic en los paneles (además del teclado): se traduce a choose(i)
-      // con las mismas coordenadas de pantalla (640×360) del dibujo.
+      // con las mismas coordenadas de pantalla (640×360) del dibujo;
+      // durante el destape encola la ELECCIÓN ANTICIPADA (update la
+      // recoge y la pasa por earlyPick → choose, el mismo camino).
       this.clickIdx = -1;
       try {
         const cv = document.querySelector('#cv');
         if (cv && cv.addEventListener) cv.addEventListener('pointerdown', (e) => {
-          if (this.st !== 'play' || this.phase !== 'show') return;
+          if (this.st !== 'play' || (this.phase !== 'show' && this.phase !== 'uncover')) return;
           const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: 640, height: 360 };
           const lx = ((e.clientX - r.left) * 640) / Math.max(1, r.width), ly = ((e.clientY - r.top) * 360) / Math.max(1, r.height);
           const i = IMG_PANELS.findIndex((pn) => lx >= pn.x && lx <= pn.x + IMG_W && ly >= pn.y && ly <= pn.y + IMG_H);
@@ -2491,14 +2502,21 @@
     }
     level() { return this.round < 2 ? 0 : this.round < 4 ? 1 : 2; }
     setup(n) {
+      // La ronda nace con el búfer de entrada LIMPIO: como el destape
+      // ahora SÍ escucha las flechas (elección anticipada), ninguna
+      // tecla anterior a la ronda (cuenta atrás, revelado previo)
+      // puede colarse como elección; solo cuentan las pulsaciones
+      // hechas durante ESTE destape.
+      G.input.flush();
       const lv = this.level();
       const base = imgBase(IMG_KINDS[(Math.random() * IMG_KINDS.length) | 0]);
       const { variant, type } = imgVariant(base, lv);
       this.diffIdx = (Math.random() * 3) | 0;
       this.panels = [base, base, base]; this.panels[this.diffIdx] = variant; // exactamente UNA distinta, por construcción
       this.diffType = type;
-      // la ronda nace en DESTAPE: paneles cubiertos, nadie elige hasta
-      // que la cuenta atrás llegue a cero (ver la fase 'uncover')
+      // la ronda nace en DESTAPE: paneles cubiertos; el jugador puede
+      // arriesgar su elección durante el destape (earlyPick) y José
+      // espera a la imagen completa (ver la fase 'uncover')
       this.phase = 'uncover'; this.uncoverT = 0; this.maskPos = imgMaskPos();
       this.phaseT = 0; this.pPick = null; this.josePick = null; this.graceT = 0; this.revealT = 0; this.pendingEnd = null; this.clickIdx = -1;
       // IA de José: tarda más y acierta menos cuanto más sutil; tu Lógica lo frena un poco más
@@ -2519,6 +2537,20 @@
     visibleFrac() { // fracción visible de las imágenes (la misma en los 3 paneles)
       let s = 0; for (let i = 0; i < IMG_CELLS; i++) s += 1 - this.cellCover(i);
       return s / IMG_CELLS;
+    }
+    earlyPick(i) { // ELECCIÓN ANTICIPADA durante el destape (pedido de Jose)
+      // La cubierta cae DE GOLPE: la fase pasa a 'show' y los paneles
+      // se ven enteros al instante (drawPanels solo pinta la cubierta
+      // en 'uncover'), como confirmación visual de la apuesta. La
+      // elección entra por choose(), el MISMO camino de la fase
+      // final y con sus mismas consecuencias: si aciertas, el punto
+      // es tuyo antes de que arranque el reloj de José; si fallas,
+      // choose() apura la respuesta de José sobre la imagen ya
+      // revelada (si acierta se lleva el punto; si falla, se anula).
+      this.phase = 'show'; this.phaseT = 0;
+      G.input.flush(); // ni la tecla ni el clic que eligieron se repiten en 'show'
+      this.say('¡Elección anticipada!', '#7fd3ff', 0.9);
+      this.choose(i);
     }
     choose(i) { // elección del jugador (teclado o clic)
       if (this.st !== 'play' || this.phase !== 'show' || this.pPick !== null) return;
@@ -2547,9 +2579,18 @@
       const p = this.p, j = this.jose; p.update(dt); j.update(dt);
       if (!this.tick(dt)) return;
       if (this.phase === 'reveal') { if ((this.revealT -= dt) <= 0 && this.pendingEnd) { const pe = this.pendingEnd; this.pendingEnd = null; this.endRound(pe.w, pe.text); } return; }
-      if (this.phase === 'uncover') { // DESTAPE: solo corre la cuenta atrás; la entrada se descarta, no se acumula
-        this.uncoverT += dt; this.clickIdx = -1;
-        if (this.uncoverT >= IMG_UNCOVER_T) { // cuenta a cero: imagen completa y a elegir
+      if (this.phase === 'uncover') { // DESTAPE: corre la cuenta atrás y el jugador YA puede arriesgar su elección
+        this.uncoverT += dt;
+        // Elección anticipada por los MISMOS canales de la fase final:
+        // el clic encolado (clickIdx) o las flechas ← ↓ →. La tecla que
+        // elige se consume aquí mismo; no queda «cargada» para 'show'.
+        let pick = -1;
+        if (this.clickIdx >= 0) { pick = this.clickIdx; this.clickIdx = -1; }
+        else if (G.input.hit('left')) pick = 0;
+        else if (G.input.hit('down')) pick = 1;
+        else if (G.input.hit('right')) pick = 2;
+        if (pick >= 0) { this.earlyPick(pick); return; }
+        if (this.uncoverT >= IMG_UNCOVER_T) { // cuenta a cero sin elección: imagen completa y a elegir
           this.phase = 'show'; this.phaseT = 0; G.input.flush(); // ninguna tecla del destape se cuela como elección
           G.sfx('ok'); this.say('¡Imagen completa! ¡A elegir!', '#ffd23f', 1.2);
         }
