@@ -82,6 +82,23 @@
      ciclo ~120 s, bandadas con aleteo, árboles solitarios,
      rocas y mariposas. calcifer.png y mononoke.png quedan
      solo-locales (gitignore + FUENTES.md), como castillo.png.
+   O) Escena 5 «El departamento de noche, con la cita»: la
+     Puerta del castillo cruza al depa final (la cadena queda
+     completa en ambos sentidos: la puerta principal del depa
+     devuelve a las praderas junto a la Puerta del castillo),
+     la noche (luz «velas») se aplica SOLO ahí (la apertura
+     sigue de día, sin mesa puesta ni Jose dentro), la mesa
+     para dos está puesta sobre la mesa de fiesta (mantel,
+     platos, copas y velas vía el gancho extraBoxes de esa
+     HomeScene; los asientos DENTRO de la huella para que el
+     tablero ocluya: «sentados»), los roomies espían por la
+     rendija y Pollito desde SOBRE el armario, Jose acompaña
+     a Ximena por la casa, y la cinemática de cierre avanza
+     por sus estados en orden (sentarse → Pollito baja con la
+     bandeja → sirve → la campana se levanta y aparece el
+     pastelito → panel con FINAL_TEXT → se levantan y vuelve
+     el control); el salto la deja en el estado posterior y
+     la canción/reloj no se reinician al entrar.
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -1128,18 +1145,143 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('la Puerta de salida del aeropuerto vuelve a cruzar a las praderas (la cadena es estable en ambos sentidos)',
     G.scene === pr && DM.state.state === 'castillo', 'state=' + DM.state.state);
   for (let i = 0; i < 25 && pr.phase !== 'free'; i++) pr.update(0.05);
-  // …y la Puerta del CASTILLO devuelve, POR AHORA, también al
-  // aeropuerto junto a su salida (marcador hasta que exista
-  // la escena 5, el departamento final).
+  // …y la Puerta del CASTILLO cruza al DEPARTAMENTO FINAL
+  // (escena 5): la cadena del paseo queda completa.
   const PX2 = pr.free.chars[pr.free.active];
   PX2.x = pr.exitDoorX - 10; PX2.y = pr.groundY;
   pr.update(0.05);
   check('junto a la Puerta del castillo se ofrece cruzarla (nearDoor)', pr.nearDoor === true && pr.nearDoorX === pr.exitDoorX);
   key('Space', true); pr.update(0.016); key('Space', false);
   for (let i = 0; i < 25 && G.scene === pr; i++) pr.update(0.05);
-  check('la Puerta del castillo devuelve (por ahora) al aeropuerto, junto a su salida — marcador hasta la escena 5 (el depa final)',
-    G.scene === ae2 && DM.state.state === 'aero' &&
-    Math.abs(ae2.free.chars[ae2.free.active].x - ae2.exitDoorX) < 220,
+  const fin = G.scene;
+  check('la Puerta del castillo cruza al DEPARTAMENTO FINAL (escena 5): plaza ⇄ San Ángel ⇄ aeropuerto ⇄ praderas ⇄ depa, la cadena completa',
+    !!fin && fin.id === 'cita' && DM.state.state === 'cita' && fin === DM.state.finaleScene,
+    'state=' + DM.state.state);
+
+  console.log('\nO) Escena 5: el departamento de noche, con la cita (mesa puesta, Pollito mesero y el texto final)');
+  // Venimos de cruzar la Puerta del castillo (fin de la
+  // sección N): fundido de luz cálida y la casa queda libre.
+  for (let i = 0; i < 25 && fin.phase !== 'home'; i++) fin.update(0.05);
+  const fh = fin.home, fxi = fin.xi, fjo = fin.jose, fcat = fin.cat, FIN = DM.debug.FINALE;
+  check("tras el fundido de luz la escena queda en fase 'home' (explorable)", fin.phase === 'home', 'phase=' + fin.phase);
+  check('la pareja aparece junto a la puerta principal de la casa (Ximena jugable visible, Jose presente)',
+    fxi.hidden === false && fjo.hidden === false &&
+    Math.hypot(fxi.x - 510, fxi.y - 566) < 95 && Math.hypot(fjo.x - fxi.x, fjo.y - fxi.y) < 110,
+    `xi(${fxi.x},${fxi.y}) jose(${fjo.x},${fjo.y})`);
+  check('la configuración es de NOCHE DE CITA: luz cálida propia (lightKey «velas», con su punto de velas sobre la mesa), distinta del día',
+    fh.lightKey === 'velas' && !!fh.lightB && fh.lightB.amb[0] < 0.5 &&
+    fh.lightB.points.some((p) => p.x === FIN.table.cx && p.z === FIN.table.cz),
+    'lightKey=' + fh.lightKey);
+  check('los 7 roomies espían desde el armario (hidden + closetPeek con los 7), como en la apertura',
+    fh.roomies.length === 7 && fh.roomies.every((a) => a.hidden) &&
+    Array.isArray(fh.closetPeek) && fh.closetPeek.length === 7);
+  check('Pollito espía desde su escondite SOBRE el armario (visible, elev ≈ 100, quieto)',
+    fcat.hidden === false && fcat.elev > 90 && Math.abs(fcat.x - FIN.catHide.x) < 2 && fcat.arrived,
+    `cat(${fcat.x},${fcat.y}) elev=${fcat.elev}`);
+  check('la mesa puesta entra por el gancho de props de ESTA casa (extraBoxes) y los asientos quedan DENTRO de la huella de la mesa (el tablero ocluye la mitad inferior: «sentados»)',
+    typeof fh.extraBoxes === 'function' &&
+    FIN.seatXi.x > FIN.table.x && FIN.seatXi.x < FIN.table.x + FIN.table.w && FIN.seatXi.y > FIN.table.z && FIN.seatXi.y < FIN.table.z + FIN.table.d &&
+    FIN.seatJose.x > FIN.table.x && FIN.seatJose.x < FIN.table.x + FIN.table.w && FIN.seatJose.y > FIN.table.z && FIN.seatJose.y < FIN.table.z + FIN.table.d);
+  // La puesta, pieza a pieza, con un MB registrador (el pase
+  // 3D real necesita GPU y no se ejercita en el harness, como
+  // el depa de la apertura): mantel, 2 platos, 2 copas, 2
+  // llamas de vela con emit, y sin pastel todavía.
+  const rec = { box: [], cyl: [] };
+  const recMb = { box(...a) { rec.box.push(a); }, cyl(...a) { rec.cyl.push(a); }, flat() {}, wallQuad() {} };
+  fin.drawTableBoxes(recMb);
+  check('la puesta dibuja sus piezas: mantel + camino, 2 platos, 2 copas y las 2 velas ENCENDIDAS (llama con emit); el pastel aún no está',
+    rec.box.length >= 5 && rec.cyl.length >= 8 &&
+    rec.box.filter((a) => a[7] && a[7].emit).length >= 2 && fin.tableCloche === false,
+    `box=${rec.box.length} cyl=${rec.cyl.length}`);
+  check('la APERTURA no se contaminó: su casa sigue de día, sin mesa puesta (extraBoxes null), sin Jose dentro y con Pollito escondido',
+    (() => { const ah = DM.state.plazaScene.home; return ah.lightKey === 'dia' && ah.extraBoxes === null && ah.jose.hidden === true && ah.cat.hidden === true; })());
+  check('entrar al final NO arranca ni reinicia el reloj/la canción (en esta escena no se inicia nada)',
+    DM.state.clockStarted === false && DM.state.clockRunning === false && DM.dateNow() === 0);
+  // Jose ACOMPAÑA a Ximena dentro de la casa: ella aparece
+  // lejos (la sala, junto a la TV) y él la sigue por rutas.
+  fxi.x = 860; fxi.y = 130; fxi.vx = fxi.vy = 0;
+  const jd0 = Math.hypot(fjo.x - fxi.x, fjo.y - fxi.y);
+  for (let i = 0; i < 160; i++) fin.update(0.05);
+  const jd1 = Math.hypot(fjo.x - fxi.x, fjo.y - fxi.y);
+  check('Jose acompaña a Ximena por la casa (la sigue y termina cerca de ella)', jd1 < jd0 - 150 && jd1 < 90, `dist ${jd0.toFixed(0)} → ${jd1.toFixed(0)}`);
+  // El overlay de la escena (avisos, fundidos, panel) sin la
+  // casa 3D: home.draw necesita GPU (como en la apertura).
+  let finDrawOk = true;
+  const homeDrawOrig = fh.draw;
+  fh.draw = () => {};
+  try { fin.draw(0.016); } catch (e) { finDrawOk = false; }
+  fh.draw = homeDrawOrig;
+  check('draw() del final no explota (overlay: avisos y fundidos; la casa 3D va por GPU, como la apertura)', finDrawOk);
+  // --- la cinemática de cierre, de principio a fin ---
+  fxi.x = FIN.table.cx; fxi.y = 284; fxi.vx = fxi.vy = 0;
+  for (let i = 0; i < 40; i++) fin.update(0.05); // Jose se acomoda cerca
+  check('junto a la mesa se ofrece la acción (nearTable)', fin.nearTable === true);
+  key('Space', true); fin.update(0.016); key('Space', false);
+  check('ESPACIO arranca la cinemática (estado seats, control bloqueado)', fin.cine.st === 'seats', 'cine=' + fin.cine.st);
+  const seen = [];
+  let panelSeen = false;
+  for (let i = 0; i < 700 && fin.cine.st !== 'done'; i++) {
+    fin.update(0.05);
+    if (!seen.length || seen[seen.length - 1] !== fin.cine.st) seen.push(fin.cine.st);
+    if (fin.cine.st === 'panel' && fin.panelA > 0.9) panelSeen = true;
+  }
+  const cineOrder = ['seats', 'pause', 'descend', 'serve', 'place', 'reveal', 'gaze', 'panelIn', 'panel', 'panelOut', 'rise'];
+  check('la cinemática avanza por sus estados EN ORDEN (sentarse → Pollito baja con la bandeja → sirve → campana y pastel → panel → levantarse) y termina',
+    cineOrder.every((s, i) => seen[i] === s) && fin.cine.st === 'done', 'vistos: ' + seen.join(' → '));
+  check('el panel del texto final se vio a plena opacidad (panelA > 0,9 en el estado panel)', panelSeen);
+  check('la pareja quedó SENTADA tras la mesa durante la cinemática y el pastel quedó revelado: campana a un lado y Pollito junto a la mesa, orgulloso con su bandeja',
+    fin.cakeShown === true && fin.tableCloche === true && fin.clocheAside === true &&
+    Math.hypot(fcat.x - FIN.catServe.x, fcat.y - FIN.catServe.y) < 30 && fin.trayHeld === true && fcat.elev === 0,
+    `cat(${fcat.x},${fcat.y})`);
+  check('FINAL_TEXT es la constante de date.js con su valor inicial (la P4 sigue abierta: el definitivo lo escribe Jose)',
+    DM.debug.FINAL_TEXT === 'Feliz cumpleaños, mi amor' && dateSrc.includes('const FINAL_TEXT'));
+  // Con el pastel servido, la puesta incluye pastel+campana.
+  rec.box.length = 0; rec.cyl.length = 0;
+  fin.drawTableBoxes(recMb);
+  check('tras la cinemática la puesta incluye el pastelito con su vela y la campana a un lado (más cilindros que al inicio)',
+    rec.cyl.length >= 13, `cyl=${rec.cyl.length}`);
+  // El panel, dibujado a mano: sin errores y con su alfa.
+  // (nearTable/nearDoor se apagan a mano: los avisos usan
+  // head() → R.project, que necesita el VP de un render real
+  // con GPU — la misma limitación del depa en este harness.)
+  fh.draw = () => {};
+  let panelDrawOk = true;
+  fin.panelA = 1; fin.nearTable = false; fin.nearDoor = false;
+  try { fin.draw(0.016); } catch (e) { panelDrawOk = false; }
+  fin.panelA = 0;
+  fh.draw = homeDrawOrig;
+  check('el panel del texto final se dibuja sin errores (tarjeta serena con FINAL_TEXT)', panelDrawOk);
+  // Control devuelto: Ximena camina de nuevo, ya fuera de
+  // la huella de la mesa.
+  const cx0 = fxi.x;
+  key('ArrowRight', true);
+  for (let i = 0; i < 10; i++) fin.update(0.05);
+  key('ArrowRight', false);
+  check('al terminar la cinemática el control vuelve: Ximena camina de nuevo (fuera de la huella de la mesa)',
+    fxi.x > cx0 + 15 &&
+    !(fxi.x > FIN.table.x && fxi.x < FIN.table.x + FIN.table.w && fxi.y > FIN.table.z && fxi.y < FIN.table.z + FIN.table.d),
+    `x ${cx0} → ${fxi.x}, en (${fxi.x.toFixed(0)},${fxi.y.toFixed(0)})`);
+  // --- el SALTO de la cinemática (repetir y saltar) ---
+  fxi.x = FIN.table.cx; fxi.y = 284; fxi.vx = fxi.vy = 0;
+  for (let i = 0; i < 40; i++) fin.update(0.05);
+  key('Space', true); fin.update(0.016); key('Space', false);
+  check('la cinemática se puede REPETIR (la mesa se repone: el pastel vuelve bajo la campana)',
+    fin.cine.st === 'seats' && fin.cakeShown === false && fin.tableCloche === false, 'cine=' + fin.cine.st);
+  for (let i = 0; i < 30; i++) fin.update(0.05); // avanza (t > 0,4: el salto queda armado)
+  key('Space', true); fin.update(0.016); key('Space', false);
+  for (let i = 0; i < 200 && fin.cine.st !== 'done'; i++) fin.update(0.05);
+  check('SALTAR la cinemática deja la escena en su estado posterior (pastel revelado, sin panel, control devuelto)',
+    fin.cine.st === 'done' && fin.cakeShown === true && fin.clocheAside === true && fin.panelA === 0,
+    'cine=' + fin.cine.st);
+  // --- la salida de revisión: puerta principal → praderas ---
+  fxi.x = 510; fxi.y = 560; fxi.vx = fxi.vy = 0;
+  fin.update(0.05);
+  check('junto a la puerta principal se ofrece la salida (nearDoor)', fin.nearDoor === true);
+  key('Space', true); fin.update(0.016); key('Space', false);
+  for (let i = 0; i < 25 && G.scene === fin; i++) fin.update(0.05);
+  check('la puerta principal del depa devuelve a las PRADERAS, junto a la Puerta del castillo (salida solo de revisión: la cadena cierra en ambos sentidos)',
+    G.scene === pr && DM.state.state === 'castillo' &&
+    Math.abs(pr.free.chars[pr.free.active].x - pr.exitDoorX) < 220,
     'state=' + DM.state.state);
   DM.stop();
 

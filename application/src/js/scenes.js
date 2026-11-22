@@ -331,6 +331,12 @@
       // rendija entreabierta. closetPeek = ids en orden de guardado
       // (se apilan de abajo arriba en la rendija); null = nadie mira.
       this.closetPeek = null;
+      // Gancho OPCIONAL de props 3D extra para escenas que
+      // reusan la casa con utilería propia (hoy: solo la
+      // escena final de «La Cita», que monta su mesa puesta
+      // sobre la mesa de fiesta). En null — el juego principal
+      // y la apertura de la cita — el dibujo es el de siempre.
+      this.extraBoxes = null; // (mb) => void, corre en el pase de props
       W.closet.k = 0; W.closet.target = 0; W.closet.wobble = 0;
       this.cam = { ...VIEWS.todo, y: 0, fov: 34 }; this.view = VIEWS.todo; this.followA = null; this.T = Math.random() * 9;
       this.lightA = W.LIGHT.noche; this.lightB = W.LIGHT.noche; this.lk = 1; this.lightKey = 'noche';
@@ -425,7 +431,7 @@
       const sleeping = this.xState === 'sleeping';
       W.render({
         cam: this.cam, dt, light, actors: [...this.roomies, this.cat, this.xi, this.jose], focusZ: this.followA ? this.followA.y : this.view.z < 300 || this.view === VIEWS.todo ? 0 : 400,
-        boxes: (mb) => { if (sleeping) { mb.box(876, 27, 384, 58, 7, 72, '#b48cf0', { top: '#c9a9f7' }); mb.box(884, 33, 392, 42, 4, 54, '#c9a9f7'); } },
+        boxes: (mb) => { if (sleeping) { mb.box(876, 27, 384, 58, 7, 72, '#b48cf0', { top: '#c9a9f7' }); mb.box(884, 33, 392, 42, 4, 54, '#c9a9f7'); } if (this.extraBoxes) this.extraBoxes(mb); },
         sprites: () => { if (sleeping) R.sprite(Sp.headC('ximena', 'sleep'), 905, 20, 366, { roll: 0.16 }); },
         over: (c, t) => {
           if (this.closetPeek) this.drawClosetEyes(c, t);

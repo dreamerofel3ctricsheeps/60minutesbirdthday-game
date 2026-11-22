@@ -132,8 +132,8 @@
 
   // ---------- Estado propio del modo ----------
   const D = {
-    active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|sanangel|aero|castillo|done
-    scene: null, plazaScene: null, angelScene: null, aeroScene: null, praderaScene: null,
+    active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|sanangel|aero|castillo|cita|done
+    scene: null, plazaScene: null, angelScene: null, aeroScene: null, praderaScene: null, finaleScene: null,
     arrived: false, joseJoined: false,
     clockRunning: false, clockStarted: false, factor: 1, tap: false,
     // clockStarted: la canción ya arrancó en ESTA sesión de la
@@ -2001,6 +2001,19 @@
       this.pan = 0; this.nearDoor = false;
       this.frenoT = 0; this.speedK = 1; this.resetCalcifers();
     }
+    // Vuelta desde el departamento final (por su puerta
+    // principal): se reaparece junto a la Puerta del castillo,
+    // la de SALIDA de las praderas. La «salida» del depa es
+    // solo para revisión: en la secuencia la cita es el final.
+    enterFromFinale() {
+      this.phase = 'light'; this.phaseT = 0;
+      const F = this.free, A = F.chars[F.active], B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
+      A.x = this.exitDoorX - 70; A.y = this.groundY;
+      B.x = this.exitDoorX - 140; B.y = this.groundY; B.follow = false;
+      this.pan = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
+      this.nearDoor = false;
+      this.frenoT = 0; this.speedK = 1; this.resetCalcifers();
+    }
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
@@ -2014,13 +2027,16 @@
         return;
       }
       if (this.phase === 'exitdoor') {
-        // AMBAS Puertas de las praderas devuelven por ahora
-        // al aeropuerto, junto a su Puerta de salida: la de
-        // ENTRADA porque es la vuelta natural de la cadena, y
-        // la del CASTILLO como MARCADOR hasta que exista la
-        // escena 5 (el departamento final de la cita).
+        // La Puerta usada manda en la cadena: la de ENTRADA
+        // devuelve al aeropuerto, junto a su Puerta de salida;
+        // la del CASTILLO sigue el paseo al DEPARTAMENTO
+        // FINAL (escena 5, la cita). Sin reloj nuevo en
+        // ningún caso.
         this.phaseT += dt;
-        if (this.phaseT >= 1) travelTo('aero', 'pradera');
+        if (this.phaseT >= 1) {
+          if (this.usedDoorX === this.exitDoorX) travelTo('cita');
+          else travelTo('aero', 'pradera');
+        }
         return;
       }
       if (this.phase === 'free') {
@@ -2499,8 +2515,486 @@
     }
   }
 
+  // =========================================================
+  // ESCENA 5 — EL DEPARTAMENTO DE NOCHE, CON LA CITA
+  // =========================================================
+  // La última escena de la ruta: la MISMA casa 3D de la
+  // apertura (su propia HomeScene), en configuración de noche
+  // de cita. Se llega por la Puerta del castillo de las
+  // praderas; Ximena sigue siendo la jugable (colisiones
+  // reales) y Jose la acompaña por la casa. La canción/reloj
+  // NO se tocan al entrar: si el reloj corre desde la plaza,
+  // sigue; en esta escena no arranca nada.
+
+  // EL TEXTO FINAL de la cita (pendiente P4 del documento
+  // técnico): aparece en el panel sereno que cierra la
+  // cinemática. Este valor es SOLO el inicial, de relleno:
+  // el texto definitivo lo escribe Jose — basta cambiar
+  // esta línea por la suya.
+  const FINAL_TEXT = 'Feliz cumpleaños, mi amor';
+
+  const FINALE = {
+    // La mesa de fiesta de la sala (ptable en world.js:
+    // huella x 800–930, z 200–245, tablero a y=34) hace de
+    // mesa de la cita: la puesta (mantel, platos, copas,
+    // velas, pastel) se monta SOBRE ella como props 3D de
+    // esta escena, sin tocar la casa del juego principal.
+    table: { x: 800, z: 200, w: 130, d: 45, top: 34, cx: 865, cz: 222 },
+    // Los asientos quedan DENTRO de la huella de la mesa:
+    // con la cámara de seguimiento, el tablero ocluye la
+    // mitad inferior de los billboards y se lee «sentados»
+    // (el truco clásico del set). Ximena al norte (de frente
+    // a la cámara), Jose al sur (de espaldas), mirándose.
+    seatXi: { x: 848, y: 208 }, seatJose: { x: 882, y: 237 },
+    // Al levantarse salen por rutas (follow() ignora la
+    // colisión) a estos puntos libres al sur de la mesa; el
+    // control vuelve recién ahí: un actor CONTROLADO dentro
+    // de la huella no podría salir caminando (walk() frena
+    // contra el mueble en cada paso).
+    outXi: { x: 848, y: 266 }, outJose: { x: 886, y: 268 },
+    promptR: 84, // distancia al centro de la mesa para ofrecer «sentarse»
+    // El escondite de Pollito: SOBRE el armario del pasillo
+    // (el cuerpo del armario llega a y=98; elev 100 lo apoya
+    // encima). Los roomies espían por la rendija (closetPeek,
+    // como en la apertura); él, desde arriba del mueble.
+    catHide: { x: 600, y: 330, elev: 100 }, catFloor: { x: 600, y: 354 },
+    catServe: { x: 800, y: 262 }, // junto a la mesa, ya servido el pastel
+    cake: { x: 865, z: 222 }, clocheAside: { x: 902, z: 222 },
+    spawnXi: { x: 478, y: 534 }, spawnJose: { x: 540, y: 534 },
+  };
+  // Luz cálida y tenue de la noche de cita: ambiente bajo y
+  // puntos cálidos de vela/lámpara en los mismos sitios que
+  // la luz «noche» de la casa. Objeto propio con la forma de
+  // W.LIGHT: se asigna directo a la HomeScene del final
+  // (lightKey 'velas'); la apertura sigue con su día intacto.
+  const FINALE_LIGHT = {
+    amb: [0.36, 0.28, 0.30], sun: [0.10, 0.08, 0.13], sky: '#17101f',
+    points: [
+      { x: 865, y: 52, z: 222, r: 215, c: [0.80, 0.52, 0.22] }, // las velas de la mesa
+      { x: 798, y: 66, z: 80, r: 265, c: [0.52, 0.38, 0.20] },  // la lámpara de la sala
+      { x: 510, y: 48, z: 430, r: 205, c: [0.30, 0.22, 0.16] }, // el pasillo, tenue
+      { x: 839, y: 42, z: 352, r: 140, c: [0.32, 0.22, 0.36] }, // el cuarto de Ximena
+    ],
+  };
+
+  class FinaleScene {
+    constructor() {
+      this.id = 'cita';
+      this.phase = 'light'; this.t = 0; this.phaseT = 0;
+      this.nearDoor = false; this.nearTable = false;
+      this.cine = { st: 'idle', t: 0 };
+      this.panelA = 0; this.climbK = 0;
+      this.tableCloche = false; this.cakeShown = false; this.clocheAside = false;
+      this.trayHeld = false; this.trayCloche = false; this.revealPuffed = false;
+      const home = (this.home = new G.Scenes.HomeScene(G.PLAYABLE.slice()));
+      this.xi = home.xi; this.jose = home.jose; this.cat = home.cat;
+      // --- la configuración «noche de cita»: la variante de
+      // la apertura (misma casa, otro momento) ---
+      home.wander = false; home.xState = 'away';
+      home.lightA = FINALE_LIGHT; home.lightB = FINALE_LIGHT; home.lk = 1; home.lightKey = 'velas';
+      // Los 7 roomies, dentro del armario: solo los ojitos
+      // por la rendija, igual que en la apertura.
+      for (const r of home.roomies) { r.x = 600; r.y = 346; r.dir = 'down'; r.hidden = true; }
+      home.closetPeek = G.PLAYABLE.slice();
+      W.closet.k = W.closet.target = W.CLOSET_PEEK;
+      W.xDoorOpen = true;
+      // Pollito espía desde SOBRE el armario (FINALE.catHide).
+      const cat = this.cat;
+      cat.x = FINALE.catHide.x; cat.y = FINALE.catHide.y; cat.elev = FINALE.catHide.elev;
+      cat.dir = 'down'; cat.hidden = false; cat.route = null;
+      // La puesta de la mesa entra por el gancho de props de
+      // la casa (extraBoxes): solo ESTA instancia lo usa, así
+      // que ni el juego principal ni la apertura la ven.
+      home.extraBoxes = (mb) => this.drawTableBoxes(mb);
+      // La pareja, junto a la puerta principal.
+      const xi = this.xi;
+      xi.hidden = false; xi.x = FINALE.spawnXi.x; xi.y = FINALE.spawnXi.y; xi.dir = 'up'; xi.speed = 165;
+      const jo = this.jose;
+      jo.hidden = false; jo.x = FINALE.spawnJose.x; jo.y = FINALE.spawnJose.y; jo.dir = 'up'; jo.speed = 175; jo.route = null;
+      home.follow(xi, 560);
+      home.cam.x = xi.x; home.cam.z = xi.y - 30; home.cam.dist = 560;
+      this.scaleRef = this.rawProjectedHeight();
+    }
+    // Compensación de escala de Ximena: la misma de la
+    // apertura (su altura en pantalla no debe depender de
+    // dónde esté parada respecto de la cámara).
+    rawProjectedHeight() {
+      const vp = vpFromCam({ x: FINALE.spawnXi.x, y: 0, z: FINALE.spawnXi.y - 30, dist: 560, pitch: 0.8 });
+      const a = projectWithCam(vp, this.xi.x, 0, this.xi.y), b = projectWithCam(vp, this.xi.x, 122, this.xi.y);
+      return Math.abs(a.y - b.y);
+    }
+    projectedHeight() {
+      const vp = vpFromCam(this.home.cam);
+      const a = projectWithCam(vp, this.xi.x, 0, this.xi.y), b = projectWithCam(vp, this.xi.x, 122 * (this.xi.scale || 1), this.xi.y);
+      return Math.abs(a.y - b.y);
+    }
+    compensateScale() {
+      if (!this.scaleRef) return;
+      const raw = this.projectedHeight() / (this.xi.scale || 1);
+      if (raw > 0) this.xi.scale = Math.max(0.8, Math.min(1.25, this.scaleRef / raw));
+    }
+    // Entrada desde las praderas (por la Puerta del castillo):
+    // fundido de luz cálida (~1 s) y la pareja aparece junto
+    // a la puerta principal de la casa.
+    enterFinale() {
+      this.phase = 'light'; this.phaseT = 0;
+      const xi = this.xi, jo = this.jose, cat = this.cat, home = this.home;
+      xi.hidden = false; xi.x = FINALE.spawnXi.x; xi.y = FINALE.spawnXi.y; xi.dir = 'up';
+      xi.vx = xi.vy = 0; xi.route = null; xi.expr = null; xi.speed = 165;
+      jo.hidden = false; jo.x = FINALE.spawnJose.x; jo.y = FINALE.spawnJose.y; jo.dir = 'up';
+      jo.vx = jo.vy = 0; jo.route = null; jo.expr = null;
+      // Pollito vuelve a su escondite: si una visita anterior
+      // lo dejó sirviendo junto a la mesa, espía de nuevo.
+      cat.hidden = false; cat.x = FINALE.catHide.x; cat.y = FINALE.catHide.y; cat.elev = FINALE.catHide.elev;
+      cat.route = null; cat.dir = 'down'; cat.moving = false;
+      this.trayHeld = false; this.trayCloche = false; this.climbK = 0;
+      // Si el pastel ya se sirvió en una visita anterior, la
+      // mesa queda como quedó (y la cinemática, repetible).
+      this.cine = { st: this.cakeShown ? 'done' : 'idle', t: 0 };
+      this.panelA = 0;
+      W.closet.k = W.closet.target = W.CLOSET_PEEK;
+      W.xDoorOpen = true;
+      home.follow(xi, 560);
+      home.cam.x = xi.x; home.cam.z = xi.y - 30; home.cam.dist = 560;
+      this.nearDoor = false; this.nearTable = false;
+    }
+    // Salida SOLO PARA REVISIÓN: en la secuencia esta escena
+    // es el final del easter egg; en modo libre, la puerta
+    // principal devuelve a las praderas, junto a la Puerta
+    // del castillo. La salida por pausa no se toca.
+    beginExit() {
+      if (this.phase !== 'home') return;
+      this.phase = 'exitlight'; this.phaseT = 0; D.tap = false;
+      G.sfx('door');
+    }
+    update(dt) {
+      this.t += dt;
+      const home = this.home;
+      if (this.phase === 'light') {
+        this.phaseT += dt;
+        home.update(dt);
+        if (this.phaseT >= 1) { this.phase = 'home'; this.phaseT = 0; }
+        return;
+      }
+      if (this.phase === 'exitlight') {
+        this.phaseT += dt;
+        home.update(dt);
+        if (this.phaseT >= 1) travelTo('castillo', 'finale');
+        return;
+      }
+      // fase 'home': la casa en modo libre o en cinemática
+      const cineOn = this.cine.st !== 'idle' && this.cine.st !== 'done';
+      const act = G.input.hit('action') || D.tap;
+      if (!cineOn) {
+        const ax = G.input.axis();
+        const ix = ax.x + (D.touch ? D.touch.x : 0), iy = ax.y + (D.touch ? D.touch.y : 0);
+        this.xi.walk(ix, iy, 165, dt);
+        this.updateCompanion();
+      } else {
+        this.xi.vx = this.xi.vy = 0; this.xi.moving = false;
+      }
+      this.updateCine(dt);
+      home.update(dt);
+      this.compensateScale();
+      this.nearTable = !cineOn && Math.hypot(this.xi.x - FINALE.table.cx, this.xi.y - FINALE.table.cz) < FINALE.promptR;
+      this.nearDoor = Math.hypot(this.xi.x - MAIN_DOOR.x, this.xi.y - MAIN_DOOR.y) < 52;
+      if (act) {
+        if (cineOn) { if (this.cine.t > 0.4) this.skipCine(); }
+        else if (this.nearTable) this.startCine();
+        else if (this.nearDoor) this.beginExit();
+      }
+      D.tap = false;
+    }
+    // Jose acompaña a Ximena por la casa (en la apertura no
+    // hacía falta: él esperaba en la plaza). La sigue con
+    // rutas del mundo cuando se aleja y, cerca y quieto, la
+    // mira. Mismo patrón que los partners del juego.
+    updateCompanion() {
+      const jo = this.jose, xi = this.xi;
+      const d = Math.hypot(jo.x - xi.x, jo.y - xi.y);
+      if (jo.arrived) {
+        if (d > 54) jo.goTo(xi.x, xi.y, 175);
+        else {
+          const dx = xi.x - jo.x, dy = xi.y - jo.y;
+          jo.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+        }
+      } else if (d < 26) { jo.route = null; jo.moving = false; jo.vx = jo.vy = 0; }
+    }
+    // ---------- la cinemática de cierre ----------
+    // Estados: seats → pause → descend → serve → place →
+    // reveal → gaze → panelIn → panel → panelOut → rise →
+    // done. Saltable con la acción en cualquier estado
+    // (skipCine deja la escena en su estado posterior).
+    startCine() {
+      // (Re)arranca: la mesa se «repone» (el pastel vuelve
+      // bajo la campana) y Pollito volverá a servirlo. Así
+      // la cinemática se puede repetir para revisión.
+      this.cine = { st: 'seats', t: 0, placed: false };
+      this.panelA = 0; this.climbK = 0;
+      this.tableCloche = false; this.cakeShown = false; this.clocheAside = false;
+      this.trayHeld = false; this.trayCloche = false; this.revealPuffed = false;
+      this.xi.expr = null; this.jose.expr = null;
+      this.seatRoute(this.xi, FINALE.seatXi);
+      this.seatRoute(this.jose, FINALE.seatJose);
+    }
+    seatRoute(a, seat) {
+      // La ruta sale de World.path (puertas entre cuartos,
+      // como los partners). Si el actor está del otro lado
+      // de la mesa, rodea primero por el extremo más
+      // cercano: la recta final cruzaría el tablero.
+      const T = FINALE.table;
+      const north = a.y < T.cz, seatNorth = seat.y < T.cz;
+      if (north !== seatNorth) {
+        const wx = a.x < T.cx ? T.x - 36 : T.x + T.w + 36;
+        a.route = W.path(a.x, a.y, wx, T.cz);
+        a.route.push([seat.x, seat.y]);
+      } else {
+        a.route = W.path(a.x, a.y, seat.x, seat.y);
+      }
+      a.speed = 132;
+    }
+    nextCine(st) { this.cine.st = st; this.cine.t = 0; }
+    catIsHome() {
+      const c = this.cat;
+      return c.elev > 90 && Math.abs(c.x - FINALE.catHide.x) < 4 && Math.abs(c.y - FINALE.catHide.y) < 4;
+    }
+    // Devuelve a Pollito a su escondite (para repetir la
+    // cinemática): camina al pie del armario y trepa.
+    catHome(dt) {
+      const c = this.cat;
+      if (this.catIsHome()) return;
+      if (c.elev > 1) { c.x = FINALE.catHide.x; c.y = FINALE.catHide.y; c.route = null; return; }
+      if (c.arrived) {
+        if (Math.hypot(c.x - FINALE.catFloor.x, c.y - FINALE.catFloor.y) > 6) { c.goTo(FINALE.catFloor.x, FINALE.catFloor.y, 140); return; }
+        this.climbK = Math.min(1, this.climbK + dt / 0.8);
+        const e = this.climbK * this.climbK;
+        c.x = FINALE.catHide.x;
+        c.y = FINALE.catFloor.y + (FINALE.catHide.y - FINALE.catFloor.y) * e;
+        c.elev = FINALE.catHide.elev * e;
+        if (this.climbK >= 1) { this.climbK = 0; c.elev = FINALE.catHide.elev; c.y = FINALE.catHide.y; }
+      }
+    }
+    updateCine(dt) {
+      const C = this.cine;
+      if (C.st === 'idle' || C.st === 'done') return;
+      C.t += dt;
+      const xi = this.xi, jo = this.jose, cat = this.cat;
+      const coupleSeated = () => xi.arrived && jo.arrived;
+      switch (C.st) {
+        case 'seats': {
+          this.catHome(dt); // Pollito a su escondite, si estaba sirviendo
+          if ((coupleSeated() && this.catIsHome()) || C.t > 9) {
+            if (!coupleSeated()) {
+              xi.x = FINALE.seatXi.x; xi.y = FINALE.seatXi.y; xi.route = null;
+              jo.x = FINALE.seatJose.x; jo.y = FINALE.seatJose.y; jo.route = null;
+            }
+            if (!this.catIsHome()) { cat.x = FINALE.catHide.x; cat.y = FINALE.catHide.y; cat.elev = FINALE.catHide.elev; cat.route = null; }
+            xi.dir = 'down'; jo.dir = 'up'; // se miran
+            xi.moving = jo.moving = false; xi.vx = xi.vy = jo.vx = jo.vy = 0;
+            this.nextCine('pause');
+          }
+          break;
+        }
+        case 'pause': if (C.t > 0.6) this.nextCine('descend'); break;
+        case 'descend': {
+          // Pollito baja del armario ya con la bandeja.
+          const k = Math.min(1, C.t / 0.9), e = 1 - (1 - k) * (1 - k);
+          cat.x = FINALE.catHide.x;
+          cat.y = FINALE.catHide.y + (FINALE.catFloor.y - FINALE.catHide.y) * e;
+          cat.elev = FINALE.catHide.elev * (1 - e);
+          cat.dir = 'down';
+          this.trayHeld = true; this.trayCloche = true;
+          if (k >= 1) {
+            cat.elev = 0; cat.y = FINALE.catFloor.y;
+            cat.goTo(FINALE.catServe.x, FINALE.catServe.y, 128);
+            this.nextCine('serve');
+          }
+          break;
+        }
+        case 'serve': {
+          if (cat.arrived || C.t > 9) {
+            cat.x = FINALE.catServe.x; cat.y = FINALE.catServe.y; cat.route = null; cat.moving = false;
+            cat.dir = 'up'; // frente a la mesa (y a la pareja)
+            this.nextCine('place');
+          }
+          break;
+        }
+        case 'place': {
+          if (!C.placed && C.t > 0.45) {
+            C.placed = true;
+            this.tableCloche = true; this.trayCloche = false; // la campana pasa a la mesa
+            cat.hop(130);
+            W.puff(FINALE.cake.x, FINALE.cake.z, 4, true);
+          }
+          if (C.t > 0.95) this.nextCine('reveal');
+          break;
+        }
+        case 'reveal': {
+          // La campana se levanta (el arco y el destino los
+          // dibuja drawTableBoxes desde el estado) y debajo
+          // está el pastelito con su vela encendida.
+          if (!this.revealPuffed && C.t > 0.6) {
+            this.revealPuffed = true; this.cakeShown = true;
+            xi.expr = 'happy'; jo.expr = 'happy';
+            W.puff(FINALE.cake.x, FINALE.cake.z, 6, true);
+            G.sfx('pop');
+          }
+          if (C.t > 1.9) { this.clocheAside = true; this.nextCine('gaze'); }
+          break;
+        }
+        case 'gaze': if (C.t > 1.8) this.nextCine('panelIn'); break;
+        case 'panelIn': this.panelA = Math.min(1, C.t / 1.2); if (C.t >= 1.2) this.nextCine('panel'); break;
+        case 'panel': this.panelA = 1; if (C.t > 3.4) this.nextCine('panelOut'); break;
+        case 'panelOut':
+          this.panelA = Math.max(0, 1 - C.t / 1.2);
+          if (C.t >= 1.2) { this.panelA = 0; this.beginRise(); }
+          break;
+        case 'rise': {
+          if (xi.arrived && jo.arrived) {
+            xi.expr = null; jo.expr = null;
+            xi.dir = 'down'; jo.dir = 'up';
+            this.cine = { st: 'done', t: 0, placed: true };
+          }
+          break;
+        }
+      }
+    }
+    beginRise() {
+      // Se levantan y salen de la huella de la mesa por
+      // rutas (follow ignora la colisión): el control vuelve
+      // al llegar, ya fuera del mueble.
+      this.xi.route = [[FINALE.outXi.x, FINALE.outXi.y]]; this.xi.speed = 132;
+      this.jose.route = [[FINALE.outJose.x, FINALE.outJose.y]]; this.jose.speed = 132;
+      this.nextCine('rise');
+    }
+    skipCine() {
+      // Salto de la cinemática (acción/ESPACIO, como las
+      // demás del juego): la escena queda en su estado
+      // posterior — mesa servida, pastel revelado, sin panel.
+      if (this.cine.st === 'rise') {
+        this.xi.x = FINALE.outXi.x; this.xi.y = FINALE.outXi.y; this.xi.route = null;
+        this.jose.x = FINALE.outJose.x; this.jose.y = FINALE.outJose.y; this.jose.route = null;
+        this.xi.expr = null; this.jose.expr = null;
+        this.cine = { st: 'done', t: 0, placed: true };
+        return;
+      }
+      this.tableCloche = true; this.cakeShown = true; this.clocheAside = true;
+      this.revealPuffed = true; this.panelA = 0;
+      this.trayHeld = true; this.trayCloche = false;
+      const cat = this.cat;
+      cat.elev = 0; cat.route = null; cat.moving = false;
+      cat.x = FINALE.catServe.x; cat.y = FINALE.catServe.y; cat.dir = 'up';
+      this.xi.expr = null; this.jose.expr = null;
+      this.beginRise();
+    }
+    // ---------- la puesta de la mesa (props 3D) ----------
+    // Corre en el pase de props de la casa (extraBoxes) SOLO
+    // en esta escena: cajas y cilindros reales, con oclusión
+    // y luz de la escena. Las llamas usan candleGlow (el
+    // parpadeo de velas del modo) y `emit` para brillar.
+    drawCloche(mb, cx, yBase, cz, r) {
+      mb.cyl(cx, yBase, cz, r, 2.6, '#c3c9d4', { top: '#dde2ea', r2: r * 0.88 });
+      mb.cyl(cx, yBase + 2.6, cz, r * 0.88, 4.2, '#ccd2dc', { top: '#e6ebf2', r2: r * 0.52 });
+      mb.cyl(cx, yBase + 6.8, cz, r * 0.52, 2.0, '#d5dbe4', { top: '#eef1f6', r2: r * 0.18 });
+      mb.cyl(cx, yBase + 8.8, cz, r * 0.18 + 0.7, 1.6, '#8f96a3', { top: '#aab1bd' });
+    }
+    drawTableBoxes(mb) {
+      const T = FINALE.table, topY = T.top + 2.5, t = this.t;
+      // el mantel y el camino de mesa
+      mb.box(T.x - 4, T.top, T.z - 4, T.w + 8, 2.5, T.d + 8, '#efe6d0', { top: '#f7efdb' });
+      mb.box(T.x + 4, topY, T.cz - 13, T.w - 8, 1.2, 26, '#8e3b34', { top: '#a84a41' });
+      const surfY = topY + 1.2; // sobre el camino/mantel
+      // dos platos con su plato interior, frente a cada asiento
+      for (const [px, pz] of [[FINALE.seatXi.x, FINALE.seatXi.y + 10], [FINALE.seatJose.x, FINALE.seatJose.y - 10]]) {
+        mb.cyl(px, surfY, pz, 8.5, 1.5, '#e9e4d8', { top: '#fbf8ef', r2: 6.5 });
+        mb.cyl(px, surfY + 1.5, pz, 5.5, 0.8, '#f4efe2', { top: '#fffdf6', r2: 5.5 });
+      }
+      // dos copas
+      mb.cyl(FINALE.seatXi.x + 14, surfY, FINALE.seatXi.y + 3, 2.3, 5.5, '#b9d2de', { top: '#dceef6', r2: 1.9 });
+      mb.cyl(FINALE.seatJose.x - 14, surfY, FINALE.seatJose.y - 3, 2.3, 5.5, '#b9d2de', { top: '#dceef6', r2: 1.9 });
+      // dos candelabros con su llama parpadeante, flanqueando el centro
+      [836, 894].forEach((cx, i) => {
+        mb.cyl(cx, surfY, T.cz, 3.2, 1.2, '#8a6f3c', { top: '#a8874c' });
+        mb.cyl(cx, surfY + 1.2, T.cz, 1.4, 6.5, '#e7dcc2', { top: '#f4ecd8' });
+        const fh = 2.4 + candleGlow(t, i * 3 + 1) * 1.8;
+        mb.box(cx - 1, surfY + 7.7, T.cz - 1, 2, fh, 2, '#ffab3d', { emit: true });
+        mb.box(cx - 0.5, surfY + 8.1, T.cz - 0.5, 1, fh * 0.6, 1, '#ffe9a8', { emit: true });
+      });
+      // el pastelito (bajo la campana desde 'place'; visible
+      // al levantarse) con su vela encendida
+      if (this.tableCloche) {
+        const cx = FINALE.cake.x, cz = FINALE.cake.z;
+        mb.cyl(cx, surfY, cz, 8.5, 5.5, '#eec3d0', { top: '#f9e8ee' });
+        mb.cyl(cx, surfY + 5.5, cz, 6, 4, '#f9e8ee', { top: '#fff4f8', r2: 6 });
+        mb.cyl(cx, surfY + 9.5, cz, 0.9, 4.2, '#e23b4e', { top: '#f0566c' });
+        const fh = 2.2 + candleGlow(t, 7) * 1.4;
+        mb.box(cx - 0.8, surfY + 13.7, cz - 0.8, 1.6, fh, 1.6, '#ffab3d', { emit: true });
+      }
+      // la campana: en la bandeja de Pollito, sobre el pastel
+      // en la mesa, levantándose en 'reveal' o ya a un lado
+      if (this.trayHeld && this.trayCloche && !this.cat.hidden) {
+        const ty = this.trayY();
+        mb.box(this.cat.x - 13, ty, this.cat.y - 9, 26, 1.6, 18, '#aeb5c0', { top: '#ccd2dc' });
+        this.drawCloche(mb, this.cat.x, ty + 1.6, this.cat.y, 9);
+      } else if (this.trayHeld && !this.cat.hidden) {
+        // tras servir, Pollito se queda con la bandeja vacía
+        const ty = this.trayY();
+        mb.box(this.cat.x - 13, ty, this.cat.y - 9, 26, 1.6, 18, '#aeb5c0', { top: '#ccd2dc' });
+      }
+      if (this.tableCloche && !this.clocheAside) {
+        let cx = FINALE.cake.x, yB = surfY;
+        if (this.cine.st === 'reveal') {
+          const k = Math.min(1, this.cine.t / 1.4), e = k * k * (3 - 2 * k);
+          cx = FINALE.cake.x + (FINALE.clocheAside.x - FINALE.cake.x) * e;
+          yB = surfY + Math.sin(k * Math.PI) * 24;
+        }
+        this.drawCloche(mb, cx, yB, FINALE.cake.z, 11);
+      }
+      if (this.clocheAside) this.drawCloche(mb, FINALE.clocheAside.x, surfY, FINALE.clocheAside.z, 11);
+    }
+    // La altura de la bandeja de Pollito: sobre su cabeza,
+    // con el balanceo de su paso (o su respiración, quieto).
+    trayY() {
+      const cat = this.cat;
+      const bob = cat.moving ? Math.sin(cat.step * 2) * 1.1 : Math.sin(this.t * 2.2) * 0.5;
+      return 47 + cat.elev + (cat.jy || 0) + bob;
+    }
+    draw(dt) {
+      this.home.draw(dt);
+      const c = G.ovCtx; if (!c) return;
+      c.setTransform(2, 0, 0, 2, 0, 0);
+      // el fundido de luz cálida de la entrada (y de la salida)
+      if (this.phase === 'light' || this.phase === 'exitlight') {
+        const k = this.phase === 'light' ? 1 - this.phaseT : this.phaseT;
+        if (k > 0) { c.fillStyle = `rgba(255,238,196,${(k * k * 0.85).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+        return;
+      }
+      if (this.phase !== 'home') return;
+      const cineOn = this.cine.st !== 'idle' && this.cine.st !== 'done';
+      if (!cineOn && this.nearTable) { const p = this.xi.head(44); G.prompt(c, 'ESPACIO: sentarse', p.x, p.y); }
+      else if (!cineOn && this.nearDoor) { const p = this.xi.head(46); G.prompt(c, 'ESPACIO: salir a las praderas', p.x, p.y); }
+      if (this.panelA > 0) this.drawPanel(c);
+    }
+    // El panel sereno del texto final: velo tenue, tarjeta
+    // oscura semitransparente y el texto centrado. Sin
+    // emojis: es el cierre del regalo.
+    drawPanel(c) {
+      const a = this.panelA;
+      c.globalAlpha = a;
+      c.fillStyle = 'rgba(10,7,16,0.45)'; c.fillRect(0, 0, 640, 360);
+      const w = 430, h = 92, x = (640 - w) / 2, y = 128;
+      c.fillStyle = 'rgba(18,13,26,0.88)';
+      c.beginPath(); c.roundRect(x, y, w, h, 10); c.fill();
+      c.strokeStyle = 'rgba(255,205,120,0.55)'; c.lineWidth = 1.5;
+      c.beginPath(); c.roundRect(x, y, w, h, 10); c.stroke();
+      G.text(c, FINAL_TEXT, 320, y + h / 2 + 1, { size: 17, color: '#ffe9c4', align: 'center' });
+      c.globalAlpha = 1;
+    }
+  }
+
   // Viajes entre escenas por la Puerta (la cadena del paseo:
-  // plaza ⇄ San Ángel ⇄ aeropuerto ⇄ praderas). NO tocan el
+  // plaza ⇄ San Ángel ⇄ aeropuerto ⇄ praderas ⇄ el
+  // departamento final). NO tocan el
   // reloj ni la canción: si el audio ya terminó, las escenas
   // siguen en silencio (nada de play() forzado). `at` distingue
   // la llegada: a San Ángel, 'plaza' = por su Puerta de entrada
@@ -2526,8 +3020,17 @@
     } else if (dest === 'castillo') {
       if (!D.praderaScene) D.praderaScene = new PraderaScene();
       D.scene = D.praderaScene;
-      D.praderaScene.enterFromAero();
+      if (at === 'finale') D.praderaScene.enterFromFinale();
+      else D.praderaScene.enterFromAero();
       D.state = 'castillo';
+      G.setScene(D.scene);
+    } else if (dest === 'cita') {
+      // La escena 5: el departamento de noche, con la cita.
+      // Se entra por la Puerta del castillo de las praderas.
+      if (!D.finaleScene) D.finaleScene = new FinaleScene();
+      D.scene = D.finaleScene;
+      D.finaleScene.enterFinale();
+      D.state = 'cita';
       G.setScene(D.scene);
     } else {
       D.scene = D.plazaScene;
@@ -2546,7 +3049,7 @@
     if (G.S) G.S.phase = 'date';
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.add('date-mode');
     D.scene = new DateScene(onDone);
-    D.plazaScene = D.scene; D.angelScene = null; D.aeroScene = null; D.praderaScene = null;
+    D.plazaScene = D.scene; D.angelScene = null; D.aeroScene = null; D.praderaScene = null; D.finaleScene = null;
     G.setScene(D.scene);
   }
   function stop() {
@@ -2555,7 +3058,7 @@
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('date-mode');
     W.closet.target = 0; W.xDoorOpen = false;
-    D.scene = null; D.plazaScene = null; D.angelScene = null; D.aeroScene = null; D.praderaScene = null;
+    D.scene = null; D.plazaScene = null; D.angelScene = null; D.aeroScene = null; D.praderaScene = null; D.finaleScene = null;
   }
   G.DateMode = {
     start, stop, setPaused, verify: verifyCode, dateNow,
@@ -2566,7 +3069,7 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY, praderaClouds, dirigibleXAt, bandadaAt, calciferFlick, mariposaAt,
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY, praderaClouds, dirigibleXAt, bandadaAt, calciferFlick, mariposaAt, FINALE, FINAL_TEXT,
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.
