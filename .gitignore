@@ -1,21 +1,9 @@
 node_modules/
 dist/
+.vite/
+__pycache__/
+*.pyc
 
-# La canción del easter egg «La Cita» NUNCA se sube al repo (es
-# público y el tema tiene derechos): vive solo en la copia local.
-# El LEEME.txt de la carpeta SÍ se versiona (no casa con *.m4a/*.mp3).
+# La canción del easter egg «La Cita» NUNCA se sube al repo (tiene
+# derechos): vive solo en la copia local. El LEEME.txt SÍ se versiona.
 application/src/assets/audio/*.m4a
-
-# El castillo ambulante (castillo.png) es arte de una película
-# aportado por Jose: SOLO-LOCAL, como la canción — nunca se
-# sube al repo. El código lo dibuja solo si el archivo está.
-application/src/assets/date/castillo.png
-
-# Calcifer (calcifer.png) y Mononoke (mononoke.png): dos
-# recortes más de películas aportados por Jose para las
-# praderas del castillo — SOLO-LOCALES, con la misma regla
-# que el castillo: nunca se suben al repo y el código los
-# dibuja solo si el archivo está (Calcifer tiene respaldo
-# dibujado y la arboleda se dibuja sin Mononoke).
-application/src/assets/date/calcifer.png
-application/src/assets/date/mononoke.png

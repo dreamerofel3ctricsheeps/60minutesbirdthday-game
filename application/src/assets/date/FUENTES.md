@@ -155,7 +155,7 @@
   izquierda rodando, y al chocar con el personaje controlado
   estalla en pajitas y lo frena un instante (×0,4 por 0,7 s).
 
-## castillo.png — El castillo ambulante, a lo lejos y al final de las praderas (NO versionado)
+## castillo.png — El castillo ambulante, a lo lejos y al final de las praderas (versionado)
 - El castillo ambulante, del póster de la película — imagen
   aportada por Jose, uso personal, **asset solo-local no
   incluido en el repositorio** (protegido en `.gitignore`,
@@ -183,7 +183,7 @@
   local, ninguna de las dos escenas lo dibuja y ambas se
   juegan igual.
 
-## calcifer.png — Calcifer, el obstáculo de fuego de las praderas (NO versionado)
+## calcifer.png — Calcifer, el obstáculo de fuego de las praderas (versionado)
 - Calcifer, el demonio de fuego de la película del castillo
   ambulante, en su chimenea — imagen aportada por Jose, uso
   personal, **asset solo-local no incluido en el
@@ -209,7 +209,7 @@
   código (una llamita con ojos) y el obstáculo funciona
   igual.
 
-## mononoke.png — San y la loba Moro observando desde la arboleda (NO versionado)
+## mononoke.png — San y la loba Moro observando desde la arboleda (versionado)
 - San junto a la cabeza de la loba Moro, de La princesa
   Mononoke — imagen aportada por Jose, uso personal,
   **asset solo-local no incluido en el repositorio**

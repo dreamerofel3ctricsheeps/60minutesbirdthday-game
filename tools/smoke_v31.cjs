@@ -1673,7 +1673,7 @@ const tick = () => new Promise((r) => setImmediate(r));
       G.ROCKET_DATA ? Object.keys(G.ROCKET_DATA).join(',') : 'sin ROCKET_DATA');
     check('contador 4: scenes.js carga los cohetes desde G.ROCKET_DATA, NO desde la ruta assets/img/',
       scenesTxt2.includes('G.ROCKET_DATA[name]') && !scenesTxt2.includes("'assets/img/' +"));
-    const htmlTxt2 = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+    const htmlTxt2 = fs.readFileSync(path.join(SRC, '..', 'main.js'), 'utf8');
     check('contador 4: index.html incluye js/rocket-sheets.js ANTES que js/scenes.js',
       htmlTxt2.includes('js/rocket-sheets.js') && htmlTxt2.indexOf('js/rocket-sheets.js') < htmlTxt2.indexOf('js/scenes.js'));
     const gameTxt2 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
@@ -1869,7 +1869,7 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('patrón: G.ALEBRIJE_DATA trae base + 6 zonas como data URIs PNG',
         !!G.ALEBRIJE_DATA && albFiles.every((n) => typeof G.ALEBRIJE_DATA[n] === 'string' && G.ALEBRIJE_DATA[n].startsWith('data:image/png;base64,')),
         G.ALEBRIJE_DATA ? Object.keys(G.ALEBRIJE_DATA).join(',') : 'sin ALEBRIJE_DATA');
-      const htmlTxtM = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+      const htmlTxtM = fs.readFileSync(path.join(SRC, '..', 'main.js'), 'utf8');
       check('patrón: index.html incluye js/alebrije-sheets.js ANTES que js/scenes.js',
         htmlTxtM.includes('js/alebrije-sheets.js') && htmlTxtM.indexOf('js/alebrije-sheets.js') < htmlTxtM.indexOf('js/scenes.js'));
       const scenesTxtM = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
@@ -1972,7 +1972,7 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('trazo: G.TEODORA_DATA trae las 9 poses como data URIs PNG',
         !!G.TEODORA_DATA && teoFiles.every((n) => typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
         G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
-      const htmlTxtT = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+      const htmlTxtT = fs.readFileSync(path.join(SRC, '..', 'main.js'), 'utf8');
       check('trazo: index.html incluye js/teodora-sheets.js ANTES que js/scenes.js',
         htmlTxtT.includes('js/teodora-sheets.js') && htmlTxtT.indexOf('js/teodora-sheets.js') < htmlTxtT.indexOf('js/scenes.js'));
       const scenesTxtT = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
@@ -2659,7 +2659,7 @@ const tick = () => new Promise((r) => setImmediate(r));
         afterMenu === 'menu' && afterCollect === 'collect' && afterBad === 'collect' && afterGestion === 'gestion' && M.current() === null,
         [afterMenu, afterCollect, afterBad, afterGestion, M.current()].join(','));
     } catch (e) { threw = e; check('música: play/pausa/stop no lanzan sin archivos', false, String(e && e.message)); }
-    const htmlQ = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'index.html'), 'utf8');
+    const htmlQ = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'main.js'), 'utf8');
     const iData = htmlQ.indexOf('js/data.js'), iMusic = htmlQ.indexOf('js/music.js'), iGame = htmlQ.indexOf('js/game.js');
     check('música: index.html carga js/music.js DESPUÉS de data.js y ANTES de game.js',
       iData >= 0 && iMusic > iData && iGame > iMusic, `data=${iData} music=${iMusic} game=${iGame}`);
@@ -3199,7 +3199,7 @@ const tick = () => new Promise((r) => setImmediate(r));
   {
     console.log('\nW3) Decisiones dentro del flujo de mensajes y pastilla de aviso');
     const gameW3 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
-    const htmlW3 = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+    const htmlW3 = fs.readFileSync(path.join(SRC, '..', 'main.js'), 'utf8');
     const cssW3 = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
 
     // --- Fuente: el nuevo hogar del bloque ---

@@ -279,7 +279,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   console.log('\nD) Entrada «???» y panel');
   const gameSrc = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
-  const indexSrc = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+  const indexSrc = fs.readFileSync(path.join(SRC, '..', 'main.js'), 'utf8');
   check('el título tiene su botón ??? (id tsecret)', gameSrc.includes('id="tsecret"') && gameSrc.includes('>???</button>'));
   check('el menú de pausa tiene su botón ??? (id psecret)', gameSrc.includes('id="psecret"'));
   check('la pausa avisa al modo date (DateMode.setPaused)', gameSrc.includes('G.DateMode.setPaused(v)'));
@@ -835,8 +835,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       return out.trim().length > 0;
     } catch (e) { return true; } // sin git a la vista: fallar cerrado
   })();
-  check('castillo.png existe en la copia local y NO está versionado (material de película aportado por Jose, como la canción)',
-    fs.existsSync(path.join(DATE_DIR, 'castillo.png')) && !castilloVersionado);
+  check('castillo.png existe en la copia local y SÍ está versionado (decisión de Jose: se versiona el material de película)',
+    fs.existsSync(path.join(DATE_DIR, 'castillo.png')) && castilloVersionado);
   // La cinta caminadora: tramo central y empuje de +90 px/s.
   check('la cinta caminadora cubre el tramo central (1200–2400) y empuja a +90 px/s; la escena la expone al motor (sc.belt)',
     AE.belt.x0 === 1200 && AE.belt.x1 === 2400 && AE.belt.speed === 90 && aer.belt === AE.belt,
@@ -1337,11 +1337,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       return out.trim().length === 0;
     } catch (e) { return false; } // sin git a la vista: fallar cerrado
   };
-  check('calcifer.png y mononoke.png existen en la copia local y NO están versionados (material de película de Jose, como castillo.png)',
+  check('calcifer.png y mononoke.png existen en la copia local y SÍ están versionados (como castillo.png)',
     fs.existsSync(path.join(DATE_DIR, 'calcifer.png')) && fs.existsSync(path.join(DATE_DIR, 'mononoke.png')) &&
-    noVersionado('calcifer.png') && noVersionado('mononoke.png'));
-  check('.gitignore protege calcifer.png y mononoke.png, y FUENTES.md registra ambos recortes',
-    gitignore.includes('calcifer.png') && gitignore.includes('mononoke.png') &&
+    !noVersionado('calcifer.png') && !noVersionado('mononoke.png'));
+  check('FUENTES.md registra calcifer.png y mononoke.png (ahora versionados)',
     fuentes.includes('calcifer.png') && fuentes.includes('mononoke.png'));
   check('date.js carga ambos recortes con guarda imgOk (sin ellos: llamita dibujada de respaldo y la arboleda igual)',
     dateSrc.includes("loadDateImg('assets/date/calcifer.png')") && dateSrc.includes('imgOk(calciferImg)') &&
