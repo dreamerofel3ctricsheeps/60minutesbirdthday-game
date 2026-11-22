@@ -467,6 +467,13 @@
   // segmentos deben cubrir hasta x≈1950 de capa para que la
   // calle no se quede sin casas en ningún punto del paseo; el
   // árbol ancla su centro en el espacio de la suya (0,25).
+  // El camino de velas del final de la franja: las dos filas
+  // del suelo arrancan en SA_VELAS_X0 (395 px antes de la
+  // Puerta del árbol) y convergen hacia ella. Es EL ancla de
+  // la «zona del árbol»: la comparten el dibujo de las velas
+  // (SanAngelScene) y la zona donde se ofrece el abrazo
+  // (SA_ABRAZO.x0) — un solo número, dos usos.
+  const SA_VELAS_X0 = 3405;
   const SANANGEL = { worldW: sceneOf('sanangel').w, entryDoorX: 90, exitDoorX: 3800, groundY: 316, horizon: 246 };
   const SA_HOUSES = [
     { img: saCasasA, x: -10, h: 112 }, { img: saCasasB, x: 176, h: 126 },
@@ -511,9 +518,17 @@
   // terminar, el aviso no vuelve hasta separarse más allá de
   // rearmeDist o esperar rearmeT segundos (anti-spam amable:
   // repetir el abrazo es a voluntad, separándose y volviendo).
+  // La oferta SOLO existe en la parte final de la escena,
+  // frente al árbol (refinamiento de Jose): el punto del
+  // abrazo — el punto medio de la pareja — debe estar dentro
+  // de la zona del árbol, que arranca donde arranca el camino
+  // de velas (x0 = SA_VELAS_X0, el mismo ancla que dibuja las
+  // filas). En la calle o junto a la pileta, por muy cerca que
+  // estén, no hay aviso ni abrazo posible.
   const SA_ABRAZO = {
     cercaDist: 80, rearmeDist: 140, rearmeT: 4,
     acercarT: 0.5, abrazoT: 2.4, separarT: 0.6, hugGap: 34,
+    x0: SA_VELAS_X0,
   };
 
   // ---------- Escena 3: AEROPUERTO (interior dibujado) ----------
@@ -1198,12 +1213,13 @@
       // Las velas del suelo: dos filas curvas que convergen
       // hacia la Puerta del árbol formando el camino de la
       // pintura, más un arco de velas frente a la Puerta. Las
-      // filas arrancan ~395 px antes de la Puerta y cierran a
-      // ~65 px de ella (las mismas distancias de siempre,
-      // ancladas a la nueva posición de la Puerta, x=3800).
+      // filas arrancan en SA_VELAS_X0 (~395 px antes de la
+      // Puerta) y cierran a ~65 px de ella (las mismas
+      // distancias de siempre, ancladas a la nueva posición
+      // de la Puerta, x=3800).
       this.candles = [];
       for (let i = 0; i < 15; i++) {
-        const s = i / 14, cx = 3405 + s * 330, cy = 340 - s * 22, off = 17 - s * 7;
+        const s = i / 14, cx = SA_VELAS_X0 + s * 330, cy = 340 - s * 22, off = 17 - s * 7;
         this.candles.push({ x: cx, y: cy - off, size: 11 + (i % 3) * 3, v: i % 2 });
         this.candles.push({ x: cx + 9, y: cy + off, size: 12 + ((i + 1) % 3) * 3, v: (i + 1) % 2 });
       }
@@ -1316,16 +1332,23 @@
       this.nearDoor = Math.min(dE, dX) < 58 && Math.abs(A.y - this.groundY) < 40;
       this.nearDoorX = dE <= dX ? this.entryDoorX : this.exitDoorX;
       if (this.nearDoor && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
-      // La oferta del abrazo: con los dos cerca (entre pies) y
-      // el aviso armado. La Puerta manda si ambas ofertas
-      // coinciden (nearHug exige no estar junto a una Puerta).
+      // La oferta del abrazo: con los dos cerca (entre pies),
+      // el aviso armado Y el punto del abrazo dentro de la
+      // zona del árbol (el punto medio de la pareja a partir
+      // de SA_ABRAZO.x0, donde arranca el camino de velas:
+      // solo frente al árbol, no en cualquier parte de la
+      // franja). La Puerta manda si ambas ofertas coinciden
+      // (nearHug exige no estar junto a una Puerta: junto a
+      // la Puerta del árbol la oferta de puerta tiene
+      // prioridad por proximidad, como siempre).
       const B = F.chars[F.active === 'ximena' ? 'jose' : 'ximena'];
       const dHug = Math.hypot(A.x - B.x, A.y - B.y);
+      const midHugX = (A.x + B.x) / 2;
       if (!this.hugArmed) {
         this.hugRearmT += dt;
         if (dHug > SA_ABRAZO.rearmeDist || this.hugRearmT >= SA_ABRAZO.rearmeT) this.hugArmed = true;
       }
-      this.nearHug = this.hugArmed && !this.nearDoor && dHug <= SA_ABRAZO.cercaDist;
+      this.nearHug = this.hugArmed && !this.nearDoor && midHugX >= SA_ABRAZO.x0 && dHug <= SA_ABRAZO.cercaDist;
       if (this.nearHug && (G.input.hit('action') || D.tap)) { this.beginHug(); return; }
       // El trastabilleo por bola de paja: mientras dura, el
       // motor compartido mueve al activo con speedK (×0,4).
@@ -3282,7 +3305,7 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, SA_ABRAZO, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY, praderaClouds, dirigibleXAt, bandadaAt, calciferFlick, mariposaAt, FINALE, FINAL_TEXT,
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, SA_ABRAZO, SA_VELAS_X0, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt, PRADERA, ridgeY, praderaClouds, dirigibleXAt, bandadaAt, calciferFlick, mariposaAt, FINALE, FINAL_TEXT,
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.

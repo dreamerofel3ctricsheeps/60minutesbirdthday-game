@@ -103,8 +103,13 @@
      sprite NUEVO de la pareja abrazándose (abrazo.png, arte
      original del juego generado desde los sprites definidos
      como referencia de identidad; versionado y registrado en
-     FUENTES.md). Con el controlado y el seguidor cerca
-     (≤80 px entre pies) se ofrece «ESPACIO: abrazarse»; la
+     FUENTES.md). La oferta SOLO existe en la parte final de
+     la escena, frente al árbol: el punto medio de la pareja
+     debe estar en la zona del árbol, que arranca en el ancla
+     del camino de velas (SA_ABRAZO.x0 === SA_VELAS_X0); cerca
+     pero en la calle o junto a la pileta NO se ofrece. Con el
+     controlado y el seguidor cerca (≤80 px entre pies) y en
+     zona se ofrece «ESPACIO: abrazarse»; la
      secuencia (~3,5 s) acerca a la pareja frente a frente,
      sostiene el abrazo (con el sprite de la pareja si cargó;
      en el humo manda el respaldo de los dos sprites, porque
@@ -1465,12 +1470,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     (abrazoPng.h / abrazoPng.w) >= 0.8 && (abrazoPng.h / abrazoPng.w) <= 1.1,
     abrazoPng ? `${abrazoPng.w}×${abrazoPng.h}, transp=${(abrazoPng.fracT * 100).toFixed(0)}%, opaco=${(abrazoPng.fracO * 100).toFixed(0)}%` : 'sin PNG legible');
   const AB = DM.debug.SA_ABRAZO;
-  check('date.js carga abrazo.png con su guarda imgOk y expone SA_ABRAZO (cerca ≤80, rearme >140 o ~4 s, secuencia ~3,5 s)',
+  check('date.js carga abrazo.png con su guarda imgOk y expone SA_ABRAZO (cerca ≤80, rearme >140 o ~4 s, secuencia ~3,5 s, zona del árbol desde el ancla de velas)',
     dateSrc.includes("loadDateImg('assets/date/abrazo.png')") && dateSrc.includes('imgOk(abrazoImg)') &&
     dateSrc.includes('drawHugSprite') && !!AB &&
     AB.cercaDist === 80 && AB.rearmeDist === 140 && AB.rearmeT === 4 &&
+    AB.x0 === DM.debug.SA_VELAS_X0 &&
     Math.abs((AB.acercarT + AB.abrazoT + AB.separarT) - 3.5) < 0.01,
-    AB ? `total=${(AB.acercarT + AB.abrazoT + AB.separarT).toFixed(1)} s` : 'sin SA_ABRAZO');
+    AB ? `total=${(AB.acercarT + AB.abrazoT + AB.separarT).toFixed(1)} s, x0=${AB.x0}` : 'sin SA_ABRAZO');
   check('el abrazo es SOLO de San Ángel: la plaza (DateScene) no tiene estado hug',
     !('hug' in sc) && sc.hug === undefined);
   // Se re-entra a la cita y se cruza a San Ángel en modo libre.
@@ -1481,14 +1487,31 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('se vuelve a San Ángel en modo libre para ejercitar el abrazo', sa3.id === 'sanangel' && sa3.phase === 'free', 'phase=' + sa3.phase);
   const HF = sa3.free, HA = HF.chars[HF.active], HB = HF.chars[HF.active === 'ximena' ? 'jose' : 'ximena'];
   const runHugTo = (fase, tope) => { for (let i = 0; i < tope && sa3.hug.phase !== fase; i++) sa3.update(0.05); };
+  // El límite de la zona es el ancla del camino de velas: la
+  // primera vela del suelo nace exactamente en SA_VELAS_X0 y
+  // SA_ABRAZO.x0 es ese mismo número (un solo ancla).
+  const primeraVelaX = Math.min(...sa3.candles.map((cd) => cd.x));
+  check('la zona del abrazo arranca en el ancla del camino de velas (SA_ABRAZO.x0 === SA_VELAS_X0 === la primera vela del suelo)',
+    AB.x0 === DM.debug.SA_VELAS_X0 && primeraVelaX === DM.debug.SA_VELAS_X0,
+    `x0=${AB.x0}, ancla=${DM.debug.SA_VELAS_X0}, primera vela=${primeraVelaX}`);
   // Lejos: no hay oferta.
   HA.x = 600; HA.y = sa3.groundY; HB.x = 900; HB.y = sa3.groundY; sa3.pan = 280;
   sa3.update(0.016);
   check('con los dos LEJOS (>80 px entre pies) no se ofrece el abrazo', sa3.nearHug === false && sa3.hug.phase === 'off');
-  // Cerca: aparece el aviso.
-  HB.x = HA.x + 55; HB.y = sa3.groundY;
+  // Cerca pero FUERA de la zona del árbol (la calle): no hay
+  // aviso ni abrazo posible, aunque estén pegados.
+  HA.x = 1200; HA.y = sa3.groundY; HB.x = HA.x + 55; HB.y = sa3.groundY; sa3.pan = 880;
   sa3.update(0.016);
-  check('con los dos CERCA (≤80 px) aparece la oferta del abrazo (nearHug, aviso armado)', sa3.nearHug === true && sa3.hugArmed === true);
+  check('con los dos CERCA en la CALLE (x≈1200, fuera de la zona del árbol) NO se ofrece el abrazo', sa3.nearHug === false && sa3.hug.phase === 'off');
+  // Cerca pero junto a la pileta (mitad de la franja): tampoco.
+  HA.x = 1950; HA.y = sa3.groundY; HB.x = HA.x + 55; HB.y = sa3.groundY; sa3.pan = 1630;
+  sa3.update(0.016);
+  check('con los dos CERCA junto a la PILETA (x≈1950, fuera de la zona del árbol) NO se ofrece el abrazo', sa3.nearHug === false && sa3.hug.phase === 'off');
+  // Cerca Y dentro de la zona del árbol (junto a las velas,
+  // antes de la Puerta): aparece el aviso.
+  HA.x = 3500; HA.y = sa3.groundY; HB.x = HA.x + 55; HB.y = sa3.groundY; sa3.pan = 3180;
+  sa3.update(0.016);
+  check('con los dos CERCA y frente al ÁRBOL (punto medio ≥ SA_ABRAZO.x0) aparece la oferta del abrazo (nearHug, aviso armado)', sa3.nearHug === true && sa3.hugArmed === true);
   // Al alejarse, el aviso desaparece.
   HB.x = HA.x + 300;
   sa3.update(0.016);
@@ -1544,9 +1567,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // funciona igual con cualquiera de activo.
   if (HF.active !== 'jose') sa3.switchActive();
   const JA = HF.chars.jose, JB = HF.chars.ximena;
-  JA.x = 1200; JA.y = sa3.groundY; JB.x = JA.x - 55; JB.y = sa3.groundY; sa3.pan = 880;
+  JA.x = 3520; JA.y = sa3.groundY; JB.x = JA.x - 55; JB.y = sa3.groundY; sa3.pan = 3200;
   sa3.update(0.016);
-  check('controlando a JOSE también aparece la oferta junto a Ximena', sa3.nearHug === true && HF.active === 'jose');
+  check('controlando a JOSE también aparece la oferta junto a Ximena frente al árbol', sa3.nearHug === true && HF.active === 'jose');
   key('Space', true); sa3.update(0.016); key('Space', false);
   runHugTo('hold', 30);
   check('el abrazo con Jose de activo llega a su fase hold igual', sa3.hug.phase === 'hold', 'phase=' + sa3.hug.phase);
