@@ -124,36 +124,83 @@
   // mismos tiempos de antes) y el teléfono aparece en el mismo
   // instante en que llega el primero; y ninguna decisión puede
   // empezar sin mostrarlo, porque ui.choose/ui.assign lo fuerzan.
+  //
+  // EXCEPCIÓN — MODO FLOTANTE (pedido de Jose, 2026-11-22, probando
+  // el modo inmersivo en horizontal): cuando el panel FLOTA sobre
+  // la escena (el bloque horizontal compacto de style.css lo pone
+  // `position: absolute`; es el único sitio donde eso ocurre), el
+  // aparecer/desaparecer solo NO le gusta: en ese modo el panel
+  // NUNCA se abre solo (ni por mensajes ni por decisión pendiente)
+  // y NUNCA se auto-oculta — lo abre y lo cierra ÉL con el botón
+  // del teléfono (que por eso crece en ese modo, ver style.css).
+  // Lo que llega con el panel cerrado se acumula en la INSIGNIA
+  // del botón: contador de no leídos, y si hay una DECISIÓN
+  // pendiente la insignia pasa a «!» en alerta (pulso suave),
+  // porque el juego no avanza sin esa elección; al abrir el
+  // panel la insignia se limpia. Un pulso breve del botón
+  // (clase .ping) avisa de que llegó algo, sin abrir nada.
+  // El modo se detecta de la FUENTE DE VERDAD del CSS — la
+  // posición calculada del panel — en vez de duplicar las media
+  // queries en JS; sin getComputedStyle (el arnés del humo)
+  // manda el campo floatMode, que la prueba fija a mano como
+  // hace con cromo.active.
   const PHONE_GRACE_MS = 4000; // gracia antes del auto-ocultado
   const phoneEl = $('#phone'), phoneBadge = $('#phonebadge');
   const phone = {
-    visible: false, pending: false, pinned: false, muted: false, unread: 0, graceT: null, graceMs: PHONE_GRACE_MS,
-    state() { return { visible: this.visible, pending: this.pending, pinned: this.pinned, muted: this.muted, unread: this.unread }; },
+    visible: false, pending: false, pinned: false, muted: false, unread: 0, graceT: null, graceMs: PHONE_GRACE_MS, floatMode: false, pingT: null,
+    state() { return { visible: this.visible, pending: this.pending, pinned: this.pinned, muted: this.muted, unread: this.unread, floating: this.floatMode }; },
+    syncFloat() { // ¿el CSS tiene el panel flotando sobre la escena?
+      if (phoneEl && typeof getComputedStyle === 'function') {
+        try { this.floatMode = getComputedStyle(phoneEl).position === 'absolute'; } catch (e) { /* sin estilo calculable: se conserva el valor anterior */ }
+      }
+      return this.floatMode;
+    },
+    floating() { return this.syncFloat(); },
     paint() {
       if (phoneEl) phoneEl.classList.toggle('ph-off', !this.visible);
       if (phoneBadge) {
-        phoneBadge.textContent = this.unread > 0 ? String(this.unread) : '';
-        phoneBadge.style.display = this.unread > 0 ? 'grid' : 'none';
+        // Decisión esperando con el panel cerrado → alerta «!»;
+        // si no, el contador de no leídos de siempre. Con el panel
+        // abierto la insignia no muestra nada (se está leyendo).
+        const alert = this.pending && !this.visible;
+        const show = alert || this.unread > 0;
+        phoneBadge.textContent = alert ? '!' : (this.unread > 0 ? String(this.unread) : '');
+        phoneBadge.style.display = show ? 'grid' : 'none';
+        phoneBadge.classList.toggle('alert', alert);
       }
+    },
+    ping() { // pulso breve de atención sobre el botón (el panel NO se abre)
+      const b = $('#phonebtn'); if (!b || !b.classList) return;
+      b.classList.remove('ping'); void b.offsetWidth; b.classList.add('ping');
+      clearTimeout(this.pingT);
+      this.pingT = setTimeout(() => b.classList.remove('ping'), 650);
     },
     armGrace() {
       clearTimeout(this.graceT);
-      if (!this.visible || this.pending || this.pinned) return;
+      if (this.floating() || !this.visible || this.pending || this.pinned) return; // flotante: jamás se auto-oculta
       this.graceT = setTimeout(() => {
         // Si al vencer la gracia el juego está en pausa, se rearma:
         // el teléfono no desaparece debajo del menú de pausa.
-        if (this.pending || this.pinned || G.paused) this.armGrace();
+        if (this.pending || this.pinned || G.paused || this.floating()) this.armGrace();
         else this.hide();
       }, this.graceMs);
     },
     show() { this.visible = true; this.unread = 0; this.paint(); this.armGrace(); },
     hide() { this.visible = false; clearTimeout(this.graceT); this.paint(); },
     content() { // llegó algo al chat (ui.raw)
+      if (this.floating()) { // flotante: control manual — nunca se abre solo; suma a la insignia
+        if (!this.visible) { this.unread++; this.ping(); }
+        this.paint(); return;
+      }
       if (!this.visible && this.muted) { this.unread++; this.paint(); return; }
       this.show();
     },
     decision(on) { // una decisión del jugador empieza/termina
       this.pending = !!on;
+      if (this.floating()) { // flotante: no se abre solo; la insignia queda en alerta hasta responderla
+        if (on) this.ping();
+        this.paint(); return;
+      }
       if (on) { this.muted = false; this.show(); clearTimeout(this.graceT); }
       else this.armGrace();
       this.paint();
@@ -162,8 +209,9 @@
       if (this.visible) { this.pinned = false; this.muted = true; this.hide(); }
       else { this.muted = false; this.pinned = true; this.show(); }
     },
-    reset() { this.pending = false; this.pinned = false; this.muted = false; this.unread = 0; this.hide(); },
+    reset() { this.pending = false; this.pinned = false; this.muted = false; this.unread = 0; clearTimeout(this.pingT); this.hide(); },
   };
+  const CHAT_STICK_PX = 48; // «casi al final»: dentro de este margen el chat sigue a los mensajes nuevos (ver ui.scroll)
   const ui = (G.ui = {
     fast: false,
     refreshHUD() {
@@ -184,8 +232,22 @@
       if (G.ui.cromo) G.ui.cromo.watchInv(); // modo inmersivo: ¿cambió el contenido? (p. ej. al recoger un ítem)
       recalc();
     },
-    scroll() { msgs.scrollTop = msgs.scrollHeight; },
-    raw(html) { const d = el('div', 'row', html); msgs.appendChild(d); ui.scroll(); phone.content(); return d; },
+    // El chat NO salta solo al último mensaje (pedido de Jose,
+    // 2026-11-22): si el jugador está leyendo más arriba, un
+    // mensaje nuevo le robaba la posición y era confuso. Regla
+    // estándar de chat: solo se sigue al fondo si YA se estaba
+    // (casi) al final — dentro de CHAT_STICK_PX —; si no, la
+    // posición de lectura se conserva intacta. ui.scroll es el
+    // punto común (lo llaman raw, choose y assign) y raw mide la
+    // cercanía al final ANTES de añadir, para que el mensaje
+    // nuevo no cuente como «lejos del final».
+    scroll() { if (msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight <= CHAT_STICK_PX) msgs.scrollTop = msgs.scrollHeight; },
+    raw(html) {
+      const stick = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight <= CHAT_STICK_PX;
+      const d = el('div', 'row', html); msgs.appendChild(d);
+      if (stick) msgs.scrollTop = msgs.scrollHeight;
+      phone.content(); return d;
+    },
     system(text) { ui.raw(`<div class="sys">${text}</div>`); },
     header(kind, title) { ui.raw(`<div class="evhead"><span>${kind}</span>${title}</div>`); },
     async post(m) {
@@ -618,9 +680,53 @@
   (function initTouchLayout() {
     const pad = $('#touchpad'), wrap = $('#stagewrap'), stage = $('#stage');
     const joy = $('#joystick'), act = pad ? pad.querySelector('.taction') : null;
-    if (!pad || !wrap || !stage || !joy || !act) return;
+    if (!pad || !wrap || !stage) return; // sin joy/act (el arnés del humo) la banda igual se sincroniza; el calcado se apaga solo en layout()
     const clear = (el) => { el.style.left = ''; el.style.right = ''; el.style.top = ''; el.style.bottom = ''; el.style.width = ''; el.style.height = ''; };
+    // ---------- Banda inferior de controles en VERTICAL ----------
+    // Pedido de Jose (2026-11-22, captura en retrato): la
+    // distribución vertical le gusta (HUD arriba, escena, chat en
+    // el medio), pero la parte inferior de la pantalla quedaba
+    // desaprovechada y el joystick/acción superpuestos sobre la
+    // escena obligaban a estirar los pulgares hasta arriba. En
+    // VERTICAL la capa ENTERA se muda en el DOM: sale de
+    // #stagewrap y queda como última hija de main, donde el CSS
+    // del bloque de retrato le da forma de banda en flujo pegada
+    // al fondo de la columna (margin-top:auto, bajo el chat),
+    // joystick a la izquierda y acción a la derecha. La escena
+    // vertical queda SIN controles superpuestos; en horizontal
+    // la capa vuelve a #stagewrap y manda el calcado/márgenes de
+    // siempre (este bloque no se toca). La detección espeja las
+    // media queries de retrato del CSS, acotadas a orientación
+    // vertical para no pisar el horizontal compacto de ≤760px.
+    // El cableado de pointer events vive sobre los elementos
+    // (#joystick y .tbtn), no sobre su posición: mudar el nodo
+    // no lo altera y el multitáctil sigue igual. Al volver de la
+    // banda, la capa se repone con appendChild al final de
+    // #stagewrap: su orden entre hermanas no importa (es
+    // absoluta y la regla de ocultación con modal usa ~, que
+    // solo pide que siga siendo hermana POSTERIOR de #stage).
+    const portraitMQ = (typeof window !== 'undefined' && window.matchMedia)
+      ? window.matchMedia('(max-aspect-ratio: 4/5), (max-width: 760px) and (orientation: portrait)')
+      : null;
+    let band = false;
+    function syncBand(force) {
+      const want = typeof force === 'boolean' ? force : !!(portraitMQ && portraitMQ.matches);
+      if (want !== band) {
+        band = want;
+        if (band) { const mainEl = $('main'); if (mainEl) mainEl.appendChild(pad); }
+        else wrap.appendChild(pad);
+        layout();
+      } else if (band) layout();
+      return band;
+    }
+    G.touchBandSync = syncBand; // sin matchMedia (arnés del humo) el modo se fuerza a mano, como cromo.active
     function layout() {
+      if (band) { // en la banda manda el CSS en flujo: fuera los estilos en línea del modo superpuesto/márgenes
+        clear(pad); if (joy) joy.style.left = ''; if (act) { act.style.left = ''; act.style.right = ''; }
+        pad.classList.remove('joy-margin', 'act-margin');
+        return;
+      }
+      if (!joy || !act) return; // sin controles reales que posicionar (p. ej. el arnés del humo)
       if (!document.body.classList.contains('touch-on')) { clear(pad); joy.style.left = ''; act.style.left = ''; act.style.right = ''; return; }
       if (!wrap.getBoundingClientRect || !stage.getBoundingClientRect) return;
       const wr = wrap.getBoundingClientRect(), sr = stage.getBoundingClientRect();
@@ -651,11 +757,14 @@
     }
     G.touchLayoutRefresh = layout;
     layout();
+    syncBand(); // retrato al cargar: la capa nace ya en la banda
+    if (portraitMQ) { if (portraitMQ.addEventListener) portraitMQ.addEventListener('change', () => syncBand()); else if (portraitMQ.addListener) portraitMQ.addListener(() => syncBand()); }
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(() => layout());
       ro.observe(wrap); ro.observe(stage);
     }
     window.addEventListener('resize', layout);
+    window.addEventListener('resize', () => syncBand());
     window.addEventListener('orientationchange', layout);
   })();
   window.addEventListener('blur', () => G.input.touchReset());
