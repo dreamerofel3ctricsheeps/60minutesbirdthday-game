@@ -4184,14 +4184,72 @@
   // hexágonos seguros (los de ese color que la línea cruzó); el
   // resto del suelo se hunde. Caer 2 veces = fuera de la escena.
   const HEX_COLORS = ['#ffd23f', '#4fd0ff', '#ff8ad6'], HEX_NAMES = ['ÁMBAR', 'CELESTE', 'ROSA'];
+  // --- Correcciones de Jose (2026-11-21) a este duelo ---
+  // LUZ NEUTRA propia (patrón de PATRON_LIGHT): el duelo usaba la
+  // luz de fiesta y el set salía con su lavado saturado de colores.
+  const TRAZO_LIGHT = { amb: [0.74, 0.74, 0.74], sun: [0.34, 0.34, 0.34], sky: '#231c2e', points: [] };
+  // EL SET SE REESCALA ×0,72 (TRAZO_SCALE): con la lente fija del
+  // motor (26°), la arena original (centros de hexágono de −250 a
+  // 300) NO cabía en pantalla a ningún encuadre con personajes
+  // legibles — con la cámara anterior (dist 470, pitch 0,66, objetivo
+  // descentrado) la arena se proyectaba a x∈[−146,862], y∈[227,501]
+  // del canvas 640×360: recortada por los cuatro lados. Reescalando
+  // TODO el set (rejilla, línea, spawns, límites y velocidades; los
+  // TIEMPOS y las reglas no cambian), la arena completa entra con
+  // margen y el jugador se proyecta a ~77–82 px (verificado con la
+  // proyección real de gl3d.js: esquinas de la arena a x∈[29,611],
+  // y∈[144,269]).
+  const TRAZO_SCALE = 0.72;
+  const TRAZO_CAM = { x: 18, y: 24, z: 70, dist: 550, pitch: 0.56, fov: 44 };
+  // FASES DEL HUNDIMIENTO: aviso (la loseta condenada parpadea en
+  // rojo y tiembla) y caída con easing (acelerando, con inclinación,
+  // polvo y sacudida de cámara). Antes la loseta simplemente bajaba
+  // lineal en 0,55 s, sin aviso ni hueco.
+  const SINK_WARN_T = 0.5, SINK_FALL_T = 0.9;
+  const HEX_R = 47, HEX_RY = 0.79; // huella de cada loseta en mundo
+  function shadeHex(hex, f) { const n = parseInt(hex.slice(1), 16), r = Math.min(255, ((n >> 16) & 255) * f), g = Math.min(255, ((n >> 8) & 255) * f), b = Math.min(255, (n & 255) * f); return `rgb(${r | 0},${g | 0},${b | 0})`; }
+  function hexPath(x, cx, cy, r) { x.beginPath(); for (let i = 0; i < 6; i++) { const a = (Math.PI / 3) * i + Math.PI / 6, px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.closePath(); }
   const hexCvCache = {};
   function hexCv(ci) {
-    if (!hexCvCache[ci]) hexCvCache[ci] = codeCv(64, 64, (x) => {
-      x.beginPath(); for (let i = 0; i < 6; i++) { const a = (Math.PI / 3) * i + Math.PI / 6, px = 32 + Math.cos(a) * 29, py = 32 + Math.sin(a) * 29; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.closePath();
-      x.fillStyle = HEX_COLORS[ci]; x.globalAlpha = 0.92; x.fill(); x.globalAlpha = 1; x.strokeStyle = '#fff2cf'; x.lineWidth = 3; x.stroke();
+    // Loseta con VOLUMEN: cara lateral oscura desplazada (grosor),
+    // cara superior en SU color (el que manda en el anuncio, siempre
+    // legible), luz cenital y filo claro.
+    if (!hexCvCache[ci]) hexCvCache[ci] = codeCv(96, 96, (x) => {
+      const col = HEX_COLORS[ci];
+      hexPath(x, 48, 52, 44); x.fillStyle = shadeHex(col, 0.5); x.fill();
+      hexPath(x, 48, 46, 44); x.fillStyle = col; x.fill();
+      hexPath(x, 48, 46, 35); x.fillStyle = shadeHex(col, 1.22); x.globalAlpha = 0.55; x.fill(); x.globalAlpha = 1;
+      hexPath(x, 48, 46, 44); x.strokeStyle = '#fff2cf'; x.lineWidth = 3; x.stroke();
     });
     return hexCvCache[ci];
   }
+  function hexHoleCv() { // el hueco que deja la loseta: vacío oscuro, no un agujero plano
+    if (!hexCvCache.hole) hexCvCache.hole = codeCv(96, 96, (x) => {
+      hexPath(x, 48, 48, 44); x.fillStyle = '#171126'; x.fill();
+      hexPath(x, 48, 48, 34); x.fillStyle = '#070510'; x.fill();
+      hexPath(x, 48, 48, 44); x.strokeStyle = 'rgba(0,0,0,0.65)'; x.lineWidth = 4; x.stroke();
+    });
+    return hexCvCache.hole;
+  }
+  function hexWarnCv() { // velo rojo del aviso de hundimiento
+    if (!hexCvCache.warn) hexCvCache.warn = codeCv(96, 96, (x) => { hexPath(x, 48, 48, 44); x.fillStyle = '#ff3b30'; x.fill(); });
+    return hexCvCache.warn;
+  }
+  // Teodora en ESTE duelo es su sprite DISEÑADO (corrección de Jose):
+  // poses recortadas de sus hojas aprobadas (tools/mkteodora.py →
+  // G.TEODORA_DATA, data URIs). drawTeoFigure/teoCv dejan de usarse
+  // en esta clase; siguen vivos para «La soga de fuego» y la escena
+  // del final, que no son este duelo.
+  const TEODORA_FILES = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada'];
+  const TEO_H = 80; // alto en mundo del billboard (≈74 px en pantalla con TRAZO_CAM)
+  const teoImgs = {};
+  function teoImg(name) {
+    if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
+    if (!G.TEODORA_DATA || !G.TEODORA_DATA[name]) return null; // sin teodora-sheets.js cargado: no reventar
+    if (!teoImgs[name]) { const im = new Image(); im.src = G.TEODORA_DATA[name]; teoImgs[name] = im; }
+    return teoImgs[name];
+  }
+  function teoPreload() { for (const n of TEODORA_FILES) teoImg(n); }
   function legendPath(kind) { // línea guía (puntos cada ~12 u) en el patio: x∈[-240,240], y∈[0,200]
     const pts = [];
     if (kind === 'luna') { for (let a = -2.4; a <= 2.4; a += 0.16) pts.push({ x: Math.sin(a) * 150, y: 100 - Math.cos(a) * 88 }); for (let a = 2.0; a >= -2.0; a -= 0.16) pts.push({ x: Math.sin(a) * 150 + 44, y: 100 - Math.cos(a) * 66 }); }
@@ -4205,67 +4263,97 @@
       this.timeMax = 300;
       this.p = new Actor(who, -200, 190);
       this.partners = (G.S && G.S.party ? G.S.party.filter((id) => id !== who) : []).slice(0, 2).map((id, i) => new Actor(id, -160 + i * 40, 205));
-      this.cam = { x: 0, y: 96, z: 6, dist: 470, pitch: 0.66, fov: 44 };
-      this.teo = { x: -235, y: 100 };
+      this.cam = { ...TRAZO_CAM };
+      this.teo = { x: -169, y: 72 };
+      // Estado de presentación de Teodora (sprite diseñado): velocidad
+      // medida para inclinación/movimiento, pose de reacción con
+      // temporizador y sacudida de cámara del hundimiento.
+      this.teoVx = 0; this.teoVy = 0; this.teoMoving = false; this.teoRoll = 0; this.teoSelfieNow = false;
+      this.teoShock = null; this.teoShockT = 0; this.shakeT = 0; this.shook = false;
+      teoPreload(); // Teodora de este duelo es imagen diseñada
       this.begin();
     }
     setup() {
       this.r = 0; this.fallsP = 0; this.fallsT = 0; this.precP = []; this.precT = [];
-      this.tTrazo = 11; this.tAviso = 1.4; this.tCorre = 3.4; this.tCae = 1.1; // duraciones (el humo las acorta)
+      this.tTrazo = 11; this.tAviso = 1.4; this.tCorre = 3.4; this.tCae = SINK_WARN_T + SINK_FALL_T + 0.3; // duraciones (el humo las acorta)
       this.newRound();
     }
     newRound() {
       const kinds = ['alebrije', 'calavera', 'luna'];
-      this.pathKind = kinds[this.r % 3]; this.pts = legendPath(this.pathKind);
+      this.pathKind = kinds[this.r % 3];
+      this.pts = legendPath(this.pathKind).map((p) => ({ x: p.x * TRAZO_SCALE, y: p.y * TRAZO_SCALE })); // la línea, reescalada con el set
       this.hexes = [];
-      for (let row = 0; row < 4; row++) for (let col = 0; col < 6; col++) this.hexes.push({ x: -250 + col * 100 + (row % 2) * 50, y: 8 + row * 54, color: (Math.random() * 3) | 0, safe: false, sink: 0 });
+      for (let row = 0; row < 4; row++) for (let col = 0; col < 6; col++) this.hexes.push({ x: (-250 + col * 100 + (row % 2) * 50) * TRAZO_SCALE, y: (8 + row * 54) * TRAZO_SCALE, color: (Math.random() * 3) | 0, safe: false, sink: 0, warn: 0, puffed: false });
       // color seguro: el que más hexágonos tenga CERCA de la línea (mín. 3)
       let best = 0, bestN = -1;
-      for (let ci = 0; ci < 3; ci++) { const n = this.hexes.filter((h) => h.color === ci && this.distPath(h) < 36).length; if (n > bestN) { bestN = n; best = ci; } }
+      for (let ci = 0; ci < 3; ci++) { const n = this.hexes.filter((h) => h.color === ci && this.distPath(h) < 26).length; if (n > bestN) { bestN = n; best = ci; } }
       this.safeColor = best;
-      this.hexes.forEach((h) => { h.safe = h.color === best && this.distPath(h) < 36; });
+      this.hexes.forEach((h) => { h.safe = h.color === best && this.distPath(h) < 26; });
       if (this.hexes.filter((h) => h.safe).length < 2) { const near = [...this.hexes].sort((a, b) => this.distPath(a) - this.distPath(b)).slice(0, 3); near.forEach((h) => { h.color = best; h.safe = true; }); }
       this.phase = 'trazo'; this.pt = 0; this.sampleT = 0; this.accP = 0; this.accT = 0; this.samples = 0;
       this.teoU = 0; this.teoSelfie = this.r === 1 || Math.random() < 0.35; // selfie: se detiene y se acerca a cámara (su precisión cae)
-      this.p.x = -235; this.p.y = 196; this.teo.x = this.pts[0].x; this.teo.y = this.pts[0].y;
-      this.partners.forEach((a, i) => { a.x = -180 + i * 46; a.y = 208; a.tx = null; });
+      this.p.x = -169; this.p.y = 141; this.p.vx = 0; this.p.vy = 0; this.p.moving = false; this.teo.x = this.pts[0].x; this.teo.y = this.pts[0].y;
+      this.partners.forEach((a, i) => { a.x = -130 + i * 33; a.y = 150; a.tx = null; a.vx = 0; a.vy = 0; a.moving = false; });
     }
     distPath(o) { let m = 1e9; for (let i = 0; i < this.pts.length; i += 2) { const d = Math.hypot(o.x - this.pts[i].x, o.y - this.pts[i].y); if (d < m) m = d; } return m; }
-    moveActor(a, dt, sp) { const ax = G.input.axis(); a.x = clamp15(a.x + ax.x * sp * dt, -268, 268); a.y = clamp15(a.y + ax.y * sp * dt, -14, 222); if (ax.x) a.dir = ax.x < 0 ? 'left' : 'right'; else if (ax.y) a.dir = ax.y < 0 ? 'up' : 'down'; a.moving = !!(ax.x || ax.y); }
+    // Movimiento CON velocidad (vx/vy): la fase de zancada del Actor
+    // (this.step) avanza POR DISTANCIA recorrida usando a.spd — si la
+    // posición se mueve sin tocar vx/vy, spd queda en 0, el ciclo de
+    // caminata nunca avanza y el personaje se DESLIZA con la pose
+    // congelada (el bug que reportó Jose). Aquí la velocidad manda y
+    // la posición la sigue: los pies acompañan al desplazamiento.
+    moveActor(a, dt, sp) { const ax = G.input.axis(); a.vx = ax.x * sp; a.vy = ax.y * sp; a.x = clamp15(a.x + a.vx * dt, -193, 193); a.y = clamp15(a.y + a.vy * dt, -10, 160); if (ax.x) a.dir = ax.x < 0 ? 'left' : 'right'; else if (ax.y) a.dir = ax.y < 0 ? 'up' : 'down'; a.moving = a.spd > 12; }
     extra() { const avg = (arr) => (arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0); return { precP: avg(this.precP), precT: avg(this.precT), fallsP: this.fallsP, fallsT: this.fallsT }; }
     update(dt) {
       const p = this.p; p.update(dt); this.partners.forEach((a) => a.update(dt));
       if (!this.tick(dt)) return;
       this.pt += dt;
+      const teoPx = this.teo.x, teoPy = this.teo.y; // para medir su velocidad (inclinación del vuelo)
+      if (this.teoShockT > 0) this.teoShockT -= dt;
+      if (this.shakeT > 0) this.shakeT -= dt;
       if (this.phase === 'trazo') {
-        this.moveActor(p, dt, 158);
+        this.moveActor(p, dt, 114); // velocidades ×TRAZO_SCALE: el set se reescaló, los tiempos no
         // Teodora recorre la línea con ruido lateral; en su selfie se
         // detiene a mitad de camino y deriva hacia la cámara.
         const selfieNow = this.teoSelfie && this.teoU > 0.38 && this.teoU < 0.6;
+        this.teoSelfieNow = selfieNow;
         if (!selfieNow) this.teoU = Math.min(1, this.teoU + dt / this.tTrazo);
         const idx = Math.min(this.pts.length - 1, Math.floor(this.teoU * (this.pts.length - 1))), base = this.pts[idx];
-        const lat = Math.sin(this.teoU * 22 + this.r * 2) * (7 + this.r * 3.5);
-        this.teo.x = base.x + lat * 0.4; this.teo.y = base.y + lat + (selfieNow ? -52 : 0);
+        const lat = Math.sin(this.teoU * 22 + this.r * 2) * (7 + this.r * 3.5) * TRAZO_SCALE;
+        this.teo.x = base.x + lat * 0.4; this.teo.y = base.y + lat + (selfieNow ? -37 : 0);
         this.sampleT += dt;
-        if (this.sampleT >= 0.12) { this.sampleT = 0; this.samples++; this.accP += clamp15(1 - this.distPath(p) / 62, 0, 1); this.accT += clamp15(1 - this.distPath(this.teo) / 62, 0, 1); }
+        if (this.sampleT >= 0.12) { this.sampleT = 0; this.samples++; this.accP += clamp15(1 - this.distPath(p) / 45, 0, 1); this.accT += clamp15(1 - this.distPath(this.teo) / 45, 0, 1); }
         if (this.pt >= this.tTrazo) {
           this.precP.push(this.samples ? (this.accP / this.samples) * 100 : 0); this.precT.push(this.samples ? (this.accT / this.samples) * 100 : 0);
           this.phase = 'aviso'; this.pt = 0; G.sfx('msg'); this.say(`¡Al color ${HEX_NAMES[this.safeColor]}!`, '#ffd7f0', 1.3);
           this.partners.forEach((a) => { const pool = Math.random() < 0.62 ? this.hexes.filter((h) => h.safe) : this.hexes; a.tx = pool[(Math.random() * pool.length) | 0]; });
         }
-      } else if (this.phase === 'aviso') { if (this.pt >= this.tAviso) { this.phase = 'corre'; this.pt = 0; } }
+      } else if (this.phase === 'aviso') {
+        // Nadie se mueve en el aviso: velocidades a cero, o la
+        // caminata seguiría sonando con el personaje quieto.
+        p.vx = 0; p.vy = 0; p.moving = false;
+        this.partners.forEach((a) => { a.vx = 0; a.vy = 0; a.moving = false; });
+        if (this.pt >= this.tAviso) { this.phase = 'corre'; this.pt = 0; }
+      }
       else if (this.phase === 'corre' || this.phase === 'cae') {
-        this.moveActor(p, dt, 218);
+        this.moveActor(p, dt, 157);
         // Teodora FLOTA: tarda ~0.9 s en "pisar" (su gracia), luego va al seguro más cercano
-        if (this.pt > 0.9 || this.phase === 'cae') { const tgt = this.hexes.filter((h) => h.safe).sort((a, b) => Math.hypot(a.x - this.teo.x, a.y - this.teo.y) - Math.hypot(b.x - this.teo.x, b.y - this.teo.y))[0]; if (tgt) { const d = Math.hypot(tgt.x - this.teo.x, tgt.y - this.teo.y), step = 165 * dt; if (d > 4) { this.teo.x += ((tgt.x - this.teo.x) / d) * Math.min(step, d); this.teo.y += ((tgt.y - this.teo.y) / d) * Math.min(step, d); } } }
-        this.partners.forEach((a) => { if (a.tx) { const d = Math.hypot(a.tx.x - a.x, a.tx.y - a.y); if (d > 5) { a.x += ((a.tx.x - a.x) / d) * 175 * dt; a.y += ((a.tx.y - a.y) / d) * 175 * dt; a.moving = true; a.dir = a.tx.x < a.x ? 'left' : 'right'; } else a.moving = false; } });
-        if (this.phase === 'corre' && this.pt >= this.tCorre) { this.phase = 'cae'; this.pt = 0; G.sfx('bad'); }
+        if (this.pt > 0.9 || this.phase === 'cae') { const tgt = this.hexes.filter((h) => h.safe).sort((a, b) => Math.hypot(a.x - this.teo.x, a.y - this.teo.y) - Math.hypot(b.x - this.teo.x, b.y - this.teo.y))[0]; if (tgt) { const d = Math.hypot(tgt.x - this.teo.x, tgt.y - this.teo.y), step = 119 * dt; if (d > 4) { this.teo.x += ((tgt.x - this.teo.x) / d) * Math.min(step, d); this.teo.y += ((tgt.y - this.teo.y) / d) * Math.min(step, d); } } }
+        // Partners CON velocidad (misma corrección que moveActor:
+        // sin vx/vy su caminata no avanza y se deslizan).
+        this.partners.forEach((a) => { if (a.tx) { const d = Math.hypot(a.tx.x - a.x, a.tx.y - a.y); if (d > 5) { a.vx = ((a.tx.x - a.x) / d) * 126; a.vy = ((a.tx.y - a.y) / d) * 126; a.x += a.vx * dt; a.y += a.vy * dt; a.moving = true; a.dir = a.tx.x < a.x ? 'left' : 'right'; } else { a.vx = 0; a.vy = 0; a.moving = false; } } });
+        if (this.phase === 'corre' && this.pt >= this.tCorre) { this.phase = 'cae'; this.pt = 0; this.shook = false; G.sfx('bad'); }
         else if (this.phase === 'cae') {
-          this.hexes.forEach((h) => { if (!h.safe && h.sink < 1) h.sink = Math.min(1, h.sink + dt / 0.55); });
+          // Hundimiento en FASES: aviso (warn: parpadeo rojo y
+          // tembleque en draw) y luego caída con easing cuadrático
+          // (acelera), polvo al desprenderse y sacudida de cámara.
+          const wp = clamp15(this.pt / SINK_WARN_T, 0, 1), sp = clamp15((this.pt - SINK_WARN_T) / SINK_FALL_T, 0, 1);
+          this.hexes.forEach((h) => { if (!h.safe) { h.warn = wp; if (sp > 0) { if (!h.puffed) { h.puffed = true; W.puff(h.x, h.y, 3, true); } h.sink = sp * sp; } } });
+          if (sp > 0 && !this.shook) { this.shook = true; this.shakeT = 0.28; }
           if (this.pt >= this.tCae) { // resolución de la caída (con la gracia de flotación de Teodora ya corrida)
-            const onSafe = (o) => { const h = this.hexes.reduce((m, hh) => (Math.hypot(o.x - hh.x, o.y - hh.y) < Math.hypot(o.x - m.x, o.y - m.y) ? hh : m), this.hexes[0]); return Math.hypot(o.x - h.x, o.y - h.y) < 34 && h.safe; };
-            if (!onSafe(p)) { this.fallsP++; p.emo('💦', 1); W.puff(p.x, p.y, 8, true); this.say('¡Te hundiste!', '#ff6b7a', 1); }
-            if (!onSafe(this.teo)) { this.fallsT++; this.say('¡Teodora también cayó!', '#7dff8a', 1); }
+            const onSafe = (o) => { const h = this.hexes.reduce((m, hh) => (Math.hypot(o.x - hh.x, o.y - hh.y) < Math.hypot(o.x - m.x, o.y - m.y) ? hh : m), this.hexes[0]); return Math.hypot(o.x - h.x, o.y - h.y) < 28 && h.safe; };
+            if (!onSafe(p)) { this.fallsP++; p.emo('💦', 1); W.puff(p.x, p.y, 8, true); this.say('¡Te hundiste!', '#ff6b7a', 1); this.teoShock = 'sorprendida'; this.teoShockT = 0.9; this.shakeT = 0.3; }
+            if (!onSafe(this.teo)) { this.fallsT++; this.say('¡Teodora también cayó!', '#7dff8a', 1); this.teoShock = 'derrotada'; this.teoShockT = 0.9; this.shakeT = 0.3; }
             if (this.fallsP >= 2) return this.endRound('b', 'Caíste dos veces: fuera de la escena.');
             if (this.fallsT >= 2) return this.endRound('p', 'Teodora cayó dos veces: ¡prueba superada!');
             if (this.r >= 2) { const e = this.extra(); return this.endRound(e.precP > e.precT ? 'p' : e.precP < e.precT ? 'b' : 'tie', `Precisión — Tú: ${e.precP}% · Teodora: ${e.precT}%`); }
@@ -4273,21 +4361,70 @@
           }
         }
       }
+      // Velocidad de Teodora en este frame: de ahí salen su
+      // inclinación de vuelo y si va en «dash» o flotando.
+      if (dt > 0) { this.teoVx = (this.teo.x - teoPx) / dt; this.teoVy = (this.teo.y - teoPy) / dt; }
+      this.teoMoving = Math.hypot(this.teoVx, this.teoVy) > 26;
+    }
+    teoPose() {
+      if (this.teoShockT > 0 && this.teoShock) return this.teoShock; // derrotada / sorprendida
+      if (this.phase === 'trazo') return this.teoSelfieNow ? 'selfie' : 'trazo';
+      if (this.phase === 'corre' || this.phase === 'cae') {
+        if (this.teoVx > 12) return 'dash'; // el dash mira a la derecha, como está dibujado
+        if (this.teoMoving) return 'idle'; // hacia la izquierda va frontal inclinada (a Teodora NO se la espeja: su moño manda)
+        return 'idle';
+      }
+      return 'idle'; // aviso: flotando, presentando el color
     }
     draw(dt) {
       const t = performance.now() / 1000, p = this.p;
+      // Sacudida de cámara del hundimiento (desplome y caídas).
+      const sh = this.shakeT > 0 ? Math.sin(t * 70) * 3 * (this.shakeT / 0.3) : 0;
+      const cam = sh ? { ...this.cam, x: this.cam.x + sh, z: this.cam.z + sh * 0.6 } : this.cam;
+      // Inclinación de vuelo de Teodora: persigue su velocidad lateral.
+      const rollTgt = clamp15(this.teoVx * 0.0011, -0.2, 0.2);
+      this.teoRoll += (rollTgt - this.teoRoll) * Math.min(1, dt * 10);
       W.render({
-        cam: this.cam, dt, light: W.LIGHT.fiesta, noApartment: true, actors: [p, ...this.partners], focusZ: 0,
+        cam, dt, light: TRAZO_LIGHT, noApartment: true, actors: [p, ...this.partners], focusZ: 0,
         boxes: (mb) => {
-          mb.box(0, -5, 96, 620, 10, 330, '#5d4037'); // piso del patio de la casona
-          mb.box(0, 55, -64, 640, 130, 12, '#7a4a3a'); mb.box(0, 118, -64, 640, 16, 14, '#5d3427'); // fachada con cornisas
-          [-220, 0, 220].forEach((ax) => mb.box(ax, 42, -56, 64, 84, 6, '#4a2e22')); // arcos oscuros
+          // El patio AHORA sí bajo la arena (las cajas anteriores
+          // quedaban desplazadas fuera de ella) y vestido de set de
+          // cine: fachada con cornisa y arcos, dos torres de focos en
+          // las esquinas traseras y una cámara de utilería a la
+          // derecha, sin tapar la arena.
+          mb.box(-330, -10, -52, 700, 10, 300, '#5d4037'); // piso del patio de la casona
+          mb.box(-330, 0, -66, 700, 118, 12, '#7a4a3a'); mb.box(-330, 118, -70, 700, 14, 16, '#5d3427'); // fachada con cornisa
+          [-220, 0, 220].forEach((ax) => mb.box(ax - 32, 8, -53.5, 64, 84, 2, '#4a2e22')); // arcos oscuros
+          [-300, 306].forEach((ax) => { mb.box(ax, 0, -44, 7, 96, 7, '#2c2733'); mb.box(ax - 9, 96, -48, 26, 15, 12, '#ffd98a', { emit: true }); }); // torres de focos
+          mb.box(292, 0, 120, 10, 34, 10, '#2c2733'); mb.box(282, 34, 112, 30, 20, 26, '#3a3444'); mb.box(276, 40, 120, 8, 9, 10, '#191522'); // cámara de cine
         },
         sprites: () => {
-          for (const h of this.hexes) R.flat(hexCv(h.color), h.x, 1 - h.sink * 26, h.y, 60, 60, { lit: 0.25, alpha: h.safe && this.phase !== 'trazo' ? 1 : 0.55 + 0.2 * Math.sin(t * 3 + h.x) });
-          if (this.phase === 'trazo' || this.phase === 'aviso') for (let i = 0; i < this.pts.length; i += 2) R.flat(R.glowTex, this.pts[i].x, 1.6, this.pts[i].y, 15, 15, { color: [1, 0.85, 0.35], alpha: 0.5 + 0.3 * Math.sin(t * 5 + i) });
-          R.flat(R.glowTex, this.teo.x, 0.8, this.teo.y, 44, 30, { color: [0.1, 0.05, 0.16], alpha: 0.5 }); // sombra suave de fantasma
-          R.sprite(teoCv(this.phase === 'aviso' ? 'selfie' : 'trazo'), this.teo.x, 13 + Math.sin(t * 2.2) * 3, this.teo.y, { w: 56, h: 70, feet: 0, lit: 0.2, nostretch: true });
+          R.flat(R.glowTex, -297, 0.5, -28, 95, { tint: [1, 0.85, 0.55], alpha: 0.10 }); // charcos de luz de los focos
+          R.flat(R.glowTex, 309, 0.5, -28, 95, { tint: [1, 0.85, 0.55], alpha: 0.10 });
+          for (const h of this.hexes) {
+            const e = h.sink; // 0..1, ya con easing desde update()
+            if (!h.safe && (this.phase === 'cae' || e > 0)) {
+              // El hueco: vacío oscuro con un resplandor tenue debajo
+              // (el «fuera del set»), visible al desprenderse la loseta.
+              R.flat(hexHoleCv(), h.x, 0.55, h.y, HEX_R, { ry: HEX_RY, alpha: 0.95 });
+              R.flat(R.glowTex, h.x, 0.4, h.y, HEX_R * 1.15, { tint: [1, 0.45, 0.2], alpha: 0.10 + 0.05 * Math.sin(t * 3 + h.x) });
+            }
+            // Tembleque del aviso y deriva+aplastado al caer (la
+            // «inclinación» de una loseta plana: se desplaza y se
+            // acorta en z mientras se hunde acelerando).
+            const jx = (this.phase === 'cae' && !h.safe && h.warn > 0 && e <= 0) ? Math.sin(t * 40 + h.x * 3) * 1.6 : 0;
+            R.flat(hexCv(h.color), h.x + jx + e * 6, 1 - e * 34, h.y, HEX_R, { ry: HEX_RY * (1 - 0.38 * e), alpha: h.safe && this.phase !== 'trazo' ? 1 : 0.55 + 0.2 * Math.sin(t * 3 + h.x) });
+            if (this.phase === 'cae' && !h.safe && h.warn > 0 && e <= 0) R.flat(hexWarnCv(), h.x + jx, 1.4, h.y, HEX_R, { ry: HEX_RY, alpha: 0.3 + 0.4 * Math.abs(Math.sin(t * 10)) }); // parpadeo rojo del aviso
+          }
+          if (this.phase === 'trazo' || this.phase === 'aviso') for (let i = 0; i < this.pts.length; i += 2) R.flat(R.glowTex, this.pts[i].x, 1.6, this.pts[i].y, 11, { tint: [1, 0.85, 0.35], alpha: 0.5 + 0.3 * Math.sin(t * 5 + i) });
+          R.flat(R.glowTex, this.teo.x, 0.8, this.teo.y, 30, { tint: [0.1, 0.05, 0.16], alpha: 0.5 }); // sombra suave de fantasma (ella flota: la sombra va en el suelo)
+          // Teodora DISEÑADA como billboard, con la pose de su estado
+          // y SIEMPRE flotando (línea de dibujo elevada con bob).
+          const tim = teoImg('teodora-' + this.teoPose());
+          if (rocketReady(tim)) {
+            const asp = (tim.naturalWidth && tim.naturalHeight) ? tim.naturalWidth / tim.naturalHeight : 0.6;
+            R.sprite(tim, this.teo.x, 15 + Math.sin(t * 2.2) * 3, this.teo.y, { w: TEO_H * asp, h: TEO_H, feet: 0, lit: 0.2, nostretch: true, roll: this.teoRoll });
+          }
         },
         over: (c) => {
           const e = this.extra();
@@ -4308,6 +4445,12 @@
       G.text(c, 'Prueba 2A de la boss final de Leyendas', 320, 208, { size: 11.5 });
     }
   }
+
+  TrazoDuel.LIGHT = TRAZO_LIGHT;
+  TrazoDuel.CAM = TRAZO_CAM;
+  TrazoDuel.SINK = { warn: SINK_WARN_T, fall: SINK_FALL_T };
+  TrazoDuel.SCALE = TRAZO_SCALE;
+  TrazoDuel.TEO = { h: TEO_H, files: TEODORA_FILES };
 
   // ----- Boss 2B: «La soga de fuego» (Hot Rope Jump) -----
   class SogaDuel extends Duel {

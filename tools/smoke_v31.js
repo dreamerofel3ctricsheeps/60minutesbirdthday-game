@@ -179,6 +179,7 @@ load('defined-sheets.js');
 load('rocket-sheets.js');
 load('belt-sheets.js');
 load('alebrije-sheets.js');
+load('teodora-sheets.js');
 load('sprites.js');
 load('data.js');
 load('gl3d.js');
@@ -1660,6 +1661,50 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('2A trazo: precisión alta y sin caídas → win contra Teodora', !!res && res.win === 'win', JSON.stringify(res));
       const res2 = driveTrazo(false);
       check('2A trazo: sin trazar y cayendo dos veces → lose', !!res2 && res2.win === 'lose', JSON.stringify(res2));
+    }
+    // --- Corrección de Jose (2026-11-21): Teodora diseñada, luz
+    // neutra, cámara que encuadra la arena, caminata sin deslizar y
+    // hundimiento en fases ---
+    {
+      const teoFiles = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada'];
+      const imgDirT = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+      check('trazo: las 6 poses de Teodora existen en application/src/assets/img/',
+        teoFiles.every((n) => fs.existsSync(path.join(imgDirT, n + '.png'))));
+      check('trazo: G.TEODORA_DATA trae las 6 poses como data URIs PNG',
+        !!G.TEODORA_DATA && teoFiles.every((n) => typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
+        G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
+      const htmlTxtT = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+      check('trazo: index.html incluye js/teodora-sheets.js ANTES que js/scenes.js',
+        htmlTxtT.includes('js/teodora-sheets.js') && htmlTxtT.indexOf('js/teodora-sheets.js') < htmlTxtT.indexOf('js/scenes.js'));
+      const scenesTxtT = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const trazoSrc = scenesTxtT.slice(scenesTxtT.indexOf('class TrazoDuel'), scenesTxtT.indexOf('class SogaDuel'));
+      check('trazo: la clase ya no dibuja a Teodora por código (sin teoCv) y sí usa sus sprites diseñados',
+        !trazoSrc.includes('teoCv(') && trazoSrc.includes("teoImg('teodora-' + this.teoPose())") && trazoSrc.includes('teoPreload()'), '');
+      check('trazo: la figura por código de Teodora sigue viva SOLO para la soga y el final (teoCv selfie/idle fuera de esta clase)',
+        scenesTxtT.includes("teoCv(this.teoSelfieT > 0 ? 'selfie' : 'idle')"), '');
+      check('trazo: luz NEUTRA propia (amb/sun blancos equilibrados, sin puntos de color, sin W.LIGHT.fiesta)',
+        !!Sc.TrazoDuel.LIGHT && Sc.TrazoDuel.LIGHT.amb[0] === Sc.TrazoDuel.LIGHT.amb[1] && Sc.TrazoDuel.LIGHT.amb[1] === Sc.TrazoDuel.LIGHT.amb[2]
+        && Sc.TrazoDuel.LIGHT.sun[0] === Sc.TrazoDuel.LIGHT.sun[1] && Sc.TrazoDuel.LIGHT.sun[1] === Sc.TrazoDuel.LIGHT.sun[2]
+        && Sc.TrazoDuel.LIGHT.points.length === 0 && trazoSrc.includes('light: TRAZO_LIGHT') && !trazoSrc.includes('W.LIGHT.fiesta'),
+        JSON.stringify(Sc.TrazoDuel.LIGHT));
+      check('trazo: cámara del set reescalado (dist 550, pitch 0,56, objetivo centrado en la arena)',
+        !!Sc.TrazoDuel.CAM && Sc.TrazoDuel.CAM.dist === 550 && Sc.TrazoDuel.CAM.pitch === 0.56 && Sc.TrazoDuel.CAM.x === 18 && Sc.TrazoDuel.CAM.z === 70 && Sc.TrazoDuel.SCALE === 0.72,
+        JSON.stringify(Sc.TrazoDuel.CAM));
+      check('trazo: hundimiento en fases (aviso 0,5 s + caída 0,9 s) con hueco, velo de aviso y polvo',
+        !!Sc.TrazoDuel.SINK && Sc.TrazoDuel.SINK.warn === 0.5 && Sc.TrazoDuel.SINK.fall === 0.9
+        && trazoSrc.includes('hexHoleCv()') && trazoSrc.includes('hexWarnCv()') && trazoSrc.includes('h.puffed'), '');
+      check('trazo: el tránsito activa la caminata de verdad (moveActor y partners fijan vx/vy, no solo la posición)',
+        trazoSrc.includes('a.vx = ax.x * sp') && trazoSrc.includes('a.vx = ((a.tx.x - a.x) / d) * 126') && trazoSrc.includes('a.moving = a.spd > 12'), '');
+      // Comportamiento: con el eje forzado a la derecha, la fase de
+      // zancada del jugador AVANZA al moverse (antes, sin vx/vy,
+      // quedaba congelada en 0 y el personaje se deslizaba).
+      const dw = new Sc.TrazoDuel('natalia', () => {});
+      G.input.touchDown('right', 99);
+      const step0 = dw.p.step;
+      for (let i = 0; i < 10; i++) { dw.moveActor(dw.p, 0.05, 157); dw.p.update(0.05); }
+      G.input.touchUp('right', 99);
+      check('trazo: al moverse con velocidad real, la fase de zancada AVANZA (no desliza)',
+        dw.p.step > step0 + 3 && dw.p.spd > 100, `step ${step0}→${dw.p.step.toFixed(1)}, spd ${dw.p.spd}`);
     }
     // 2B Soga: sin saltar te quemas; saltando a tiempo, Teodora cae en su selfie (~vuelta 10)
     {
