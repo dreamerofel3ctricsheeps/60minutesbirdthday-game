@@ -254,6 +254,39 @@
     ctx.putImageData(im, 0, 0);
   }
 
+  // ---------- Normalización de celdas (CELL_FIT) ----------
+  // Corrección por celda de la ALTURA DE CONTENIDO al construir el
+  // frame: iguala las celdas cuya figura se sale de la altura de
+  // referencia del personaje, para que el ciclo no «pulse» de
+  // tamaño. Medido con PIL (caja alfa del contenido) sobre la hoja
+  // definida de Ximena (celdas 200×244, fondo del contenido en la
+  // fila 238 en TODAS las celdas):
+  //   idle 202–206 · walk_up 202–203 · walk_right 202 → referencia 204
+  //   walk_down (celdas 4–7):   221, 202, 217, 223  (poses con el
+  //     pelo y la bata volando: más altas y mucho más anchas)
+  //   run_down  (celdas 14–17): 202, 204, 216, 215
+  // Solo llevan factor las celdas que se salen (4, 6, 7, 16, 17);
+  // el factor es referencia/medida y el escalado se ancla en los
+  // pies (fw/2, base) para que el apoyo no se mueva. Se aplica al
+  // canvas COMPLETO ya construido (recorte + expresión repintada +
+  // flip), así los ojos repintados se escalan con el contenido.
+  const CELL_FIT = {
+    ximena: {
+      base: 238,
+      cells: { 4: 204 / 221, 6: 204 / 217, 7: 204 / 223, 16: 204 / 216, 17: 204 / 215 },
+    },
+  };
+  function fitCanvas(id, cell, src, meta) {
+    const fit = CELL_FIT[id], f = fit && fit.cells[cell];
+    if (!f) return src;
+    const c = document.createElement('canvas'); c.width = meta.fw; c.height = meta.fh; c._scale = meta.scale;
+    const x = c.getContext('2d');
+    const cx = meta.fw / 2, base = fit.base;
+    x.translate(cx, base); x.scale(f, f); x.translate(-cx, -base);
+    x.drawImage(src, 0, 0);
+    return c;
+  }
+
   const cache = {};
   // Canvas de UNA celda de la hoja definida, con expresión repintada si el
   // frame tiene ojos registrados. flip espeja la celda: lo usan los humanos
@@ -272,12 +305,12 @@
       const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
       if (imgs[id]) x.drawImage(imgs[id], (cell % meta.cols) * meta.fw, Math.floor(cell / meta.cols) * meta.fh, meta.fw, meta.fh, 0, 0, meta.fw, meta.fh);
       if (expr) paintExpr(x, meta, cell, expr);
-      cache[key] = flip ? flipCanvas(c) : c;
+      cache[key] = fitCanvas(id, cell, flip ? flipCanvas(c) : c, meta);
     }
     return cache[key];
   }
   const Sprites = {
-    Buf, drawItem, ready, CHAR_SCALE, META: M,
+    Buf, drawItem, ready, CHAR_SCALE, META: M, CELL_FIT,
     frameCanvas,
     hasAnim(id, anim) { const m = M.chars[id]; return !!(m && m.anims[anim] && m.anims[anim].length); },
     animLen(id, anim) { const m = M.chars[id]; return m && m.anims[anim] ? m.anims[anim].length : 0; },

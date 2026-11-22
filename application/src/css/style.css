@@ -271,3 +271,19 @@ button.big::after { content: ''; position: absolute; top: 0; left: -60%; width: 
 .pcard { background: linear-gradient(180deg, #3a3156, #2c2542); box-shadow: 0 6px 0 #120f1b; }
 .pcard:hover { box-shadow: 0 10px 0 #120f1b, 0 0 24px rgba(255, 210, 63, .35); }
 .vs > span { animation: vs 0.9s ease-in-out infinite alternate; } @keyframes vs { to { transform: scale(1.18) rotate(-4deg); } }
+
+/* Easter egg «La Cita»: panel del código (entrada «???») y modo
+   sin HUD — durante la cita no existen medidores ni teléfono. */
+.codeinput { display: block; margin: 10px auto 4px; width: min(320px, 80%); background: #171226; color: #ffd23f; border: 3px solid #120f1b; border-radius: 10px; padding: 12px 10px; font: bold 22px var(--font); letter-spacing: 6px; text-align: center; text-transform: uppercase; outline: none; }
+.codeinput:focus { border-color: #ffd23f; }
+body.date-mode #hud, body.date-mode #phone, body.date-mode #inv { display: none; }
+/* Botón de silencio de la cita (#dateMuteBtn, lo crea date.js):
+   esquina superior derecha de la pantalla de caminata, visible
+   SOLO durante el modo cita; su pictograma es SVG (ondas con
+   sonido, aspa en silencio), nada de emojis. */
+#dateMuteBtn { display: none; position: absolute; top: 10px; right: 10px; z-index: 5; width: 42px; height: 42px; padding: 0; align-items: center; justify-content: center; background: rgba(23, 18, 38, .72); color: var(--ink); border: 2px solid rgba(255, 255, 255, .28); border-radius: 10px; cursor: pointer; touch-action: manipulation; }
+body.date-mode #dateMuteBtn { display: flex; }
+#dateMuteBtn:hover { border-color: var(--yellow); }
+#dateMuteBtn .sl { display: none; }
+#dateMuteBtn.muted .sl { display: block; }
+#dateMuteBtn.muted .wv { display: none; }

@@ -331,6 +331,12 @@
       // rendija entreabierta. closetPeek = ids en orden de guardado
       // (se apilan de abajo arriba en la rendija); null = nadie mira.
       this.closetPeek = null;
+      // Gancho OPCIONAL de props 3D extra para escenas que
+      // reusan la casa con utilería propia (hoy: solo la
+      // escena final de «La Cita», que monta su mesa puesta
+      // sobre la mesa de fiesta). En null — el juego principal
+      // y la apertura de la cita — el dibujo es el de siempre.
+      this.extraBoxes = null; // (mb) => void, corre en el pase de props
       W.closet.k = 0; W.closet.target = 0; W.closet.wobble = 0;
       this.cam = { ...VIEWS.todo, y: 0, fov: 34 }; this.view = VIEWS.todo; this.followA = null; this.T = Math.random() * 9;
       this.lightA = W.LIGHT.noche; this.lightB = W.LIGHT.noche; this.lk = 1; this.lightKey = 'noche';
@@ -361,7 +367,17 @@
       });
       this.cat.update(dt); this.cat.follow(dt);
       if (this.wander && (this.catT -= dt) <= 0 && this.cat.arrived) { this.catT = 4 + Math.random() * 6; const pt = W.randomFreePoint(['sala', 'cocina', 'pasillo'][(Math.random() * 3) | 0]); this.cat.goTo(pt[0], pt[1], 85); }
-      this.xi.update(dt); this.xi.follow(dt); this.jose.update(dt); this.jose.follow(dt);
+      this.xi.update(dt); this.jose.update(dt);
+      // follow() SOLO con ruta activa. Sin ruta, follow() es el
+      // estado "arrived" y pone vx=vy=0 y moving=false. En el juego
+      // normal Ximena y Jose solo se mueven por rutas, así que el
+      // guard no cambia nada ahí; pero con control directo (el modo
+      // cita mueve a Ximena con walk(), sin rutas) ese borrado le
+      // anulaba la velocidad cada frame: caminaba a ≈28 u/s y la
+      // fase de zancada casi no avanzaba → se deslizaba sin
+      // animación de caminar (reporte de playtest, 2026-11-21).
+      if (this.xi.route && this.xi.route.length) this.xi.follow(dt);
+      if (this.jose.route && this.jose.route.length) this.jose.follow(dt);
       if (this.confetti) this.confetti.forEach((p) => { p.vy += 60 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += dt * 6; if (p.y > 370) { p.y = -10; p.vy = 20 + Math.random() * 40; p.x = Math.random() * 640; } });
       if (this.title && (this.title.t -= dt) <= 0) this.title = null;
     }
@@ -415,7 +431,7 @@
       const sleeping = this.xState === 'sleeping';
       W.render({
         cam: this.cam, dt, light, actors: [...this.roomies, this.cat, this.xi, this.jose], focusZ: this.followA ? this.followA.y : this.view.z < 300 || this.view === VIEWS.todo ? 0 : 400,
-        boxes: (mb) => { if (sleeping) { mb.box(876, 27, 384, 58, 7, 72, '#b48cf0', { top: '#c9a9f7' }); mb.box(884, 33, 392, 42, 4, 54, '#c9a9f7'); } },
+        boxes: (mb) => { if (sleeping) { mb.box(876, 27, 384, 58, 7, 72, '#b48cf0', { top: '#c9a9f7' }); mb.box(884, 33, 392, 42, 4, 54, '#c9a9f7'); } if (this.extraBoxes) this.extraBoxes(mb); },
         sprites: () => { if (sleeping) R.sprite(Sp.headC('ximena', 'sleep'), 905, 20, 366, { roll: 0.16 }); },
         over: (c, t) => {
           if (this.closetPeek) this.drawClosetEyes(c, t);
