@@ -326,7 +326,8 @@
   };
   // Jefes especiales (Alebrije/Teodora): NO están en G.CHARS (no tienen
   // hoja definida y check_defined la exigiría); sus datos salen de
-  // G.SPECIALS y su imagen, del retrato dibujado por código.
+  // G.SPECIALS y su imagen, del retrato dibujado por código — salvo el
+  // Alebrije, cuyo retrato es su sprite real (ver G.specialURL).
   function bossChar(ev) { return G.CHARS[ev.boss] || (G.SPECIALS && G.SPECIALS[ev.boss]) || { name: ev.boss, color: '#fff' }; }
   function bossImgOf(ev) { return G.CHARS[ev.boss] ? Sp.full(ev.boss) : G.specialURL(ev.boss); }
   function menuShow(html) { G.menuOpen = true; overlay.innerHTML = `<div class="modal wide">${html}</div>`; overlay.classList.add('show'); }

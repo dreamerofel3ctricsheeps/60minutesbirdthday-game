@@ -1622,6 +1622,28 @@ const tick = () => new Promise((r) => setImmediate(r));
         JSON.stringify(Sc.PatronDuel.LIGHT));
       check('patrón: el sprite ocupa el mismo alto que la figura por código (ALB_H = 130) y el ancho sale del aspect del master',
         Sc.PatronDuel.ALB.h === 130 && Sc.PatronDuel.ALB.w === 96 && Sc.PatronDuel.ALB.files.length === 7, JSON.stringify(Sc.PatronDuel.ALB));
+      // --- Corrección de Jose (2026-11-21, 2ª ronda): el retrato VS
+      // salía como un zoom roto de la figura por código; el resplandor
+      // blanco-dorado no se distinguía; el sprite estaba tieso ---
+      check('patrón: el retrato VS/chat del Alebrije sale de su sprite real (specialURL → ALEBRIJE_DATA)',
+        typeof G.specialURL === 'function' && G.specialURL('alebrije') === G.ALEBRIJE_DATA['alebrije-frente'],
+        typeof G.specialURL === 'function' ? String(G.specialURL('alebrije')).slice(0, 40) : 'sin specialURL');
+      check('patrón: cada zona tiene su COLOR VIVO (la paleta del duelo es la de mkalebrije.py)',
+        !!Sc.PatronDuel.ZONE_COLORS && Sc.PatronDuel.ZONE_COLORS.cabeza === '#ff4fd8' && Sc.PatronDuel.ZONE_COLORS.crines === '#22d3ee'
+        && Sc.PatronDuel.ZONE_COLORS.antenas === '#ff5252' && Sc.PatronDuel.ZONE_COLORS.aleta === '#4f8dff'
+        && Sc.PatronDuel.ZONE_COLORS.panza === '#7dff57' && Sc.PatronDuel.ZONE_COLORS.cola === '#ffb020'
+        && fs.readFileSync(path.join(__dirname, 'mkalebrije.py'), 'utf8').includes('0xFF, 0x4F, 0xD8'),
+        JSON.stringify(Sc.PatronDuel.ZONE_COLORS));
+      check('patrón: el resplandor de la muestra va a plena fuerza (pulso 0,85–1, sin el pulso tenue 0,2–1 anterior)',
+        patronSrc.includes('alpha: 0.925 + 0.075 * Math.sin') && !patronSrc.includes('0.6 + 0.4 * Math.sin'), '');
+      check('patrón: el nombre de la zona alumbrada se anuncia en pantalla, en su color vivo',
+        patronSrc.includes('label.toUpperCase()') && patronSrc.includes('ALB_ZONE_COLORS[z.id]'), '');
+      check('patrón: ritmo de muestra legible (0,6 s encendido / 0,25 s de pausa; antes 0,55/0,30)',
+        !!Sc.PatronDuel.TIMING && Sc.PatronDuel.TIMING.on === 0.6 && Sc.PatronDuel.TIMING.off === 0.25,
+        JSON.stringify(Sc.PatronDuel.TIMING));
+      check('patrón: el billboard tiene vida (idle con bob/roll, pop al alumbrar, saltito, sacudida y brinco)',
+        patronSrc.includes('this.popT') && patronSrc.includes('this.hopT') && patronSrc.includes('this.shakeT') && patronSrc.includes('this.celeT')
+        && patronSrc.includes('this.albDraw') && patronSrc.includes('Math.sin(t * 1.7)'), '');
     }
     // 2A Trazo: siguiendo la línea y corriendo al seguro se gana; quieto en una esquina se pierde
     const driveTrazo = (win) => {

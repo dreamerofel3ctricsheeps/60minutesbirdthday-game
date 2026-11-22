@@ -3870,7 +3870,25 @@
     return albCvCache[key];
   }
   function albFaceCv() {
-    if (!albCvCache.face) albCvCache.face = codeCv(96, 96, (x) => { x.scale(2.4, 2.4); x.translate(-52, -14); drawAlbFigure(x, {}); });
+    // Respaldo mientras la imagen real no cargó: la figura por código
+    // con la cabeza centrada de verdad (el encuadre anterior,
+    // scale 2.4 + translate(-52,-14), dejaba el centro de la cabeza
+    // FUERA del lienzo 96×96 y el retrato salía como un zoom roto).
+    if (!albCvCache.face) albCvCache.face = codeCv(96, 96, (x) => { x.scale(1.5, 1.5); x.translate(-68, -29); drawAlbFigure(x, {}); });
+    // Retrato desde el SPRITE REAL (corrección de Jose, 2026-11-21):
+    // recorte de cabeza calculado de la anatomía del sprite (antenas
+    // en fy≈0, barbilla en fy≈0,50, crines a todo el ancho), ajustado
+    // al lienzo. Se redibuja en cada llamada si la imagen ya cargó,
+    // así el HUD se corrige solo en cuanto el sprite está listo.
+    const im = typeof Image !== 'undefined' ? albImg('alebrije-frente') : null;
+    if (im && im.complete && im.naturalWidth) {
+      const cv = albCvCache.face, x = cv.getContext('2d');
+      const iw = im.naturalWidth, ih = im.naturalHeight;
+      const sx = iw * 0.02, sy = 0, sw = iw * 0.96, sh = ih * 0.52;
+      const sc = Math.min(96 / sw, 96 / sh), dw = sw * sc, dh = sh * sc;
+      x.clearRect(0, 0, 96, 96);
+      x.drawImage(im, sx, sy, sw, sh, (96 - dw) / 2, (96 - dh) / 2, dw, dh);
+    }
     return albCvCache.face;
   }
 
@@ -3934,7 +3952,16 @@
   }
   G.specialFace = (id) => (id === 'alebrije' ? albFaceCv() : teoFaceCv());
   const specialURLs = {};
-  G.specialURL = (id) => { if (!specialURLs[id]) specialURLs[id] = G.specialFace(id).toDataURL(); return specialURLs[id]; };
+  // El retrato del Alebrije (pantalla VS y avatar del chat) sale de
+  // su SPRITE REAL completo, como el Sp.full del jugador — nada de
+  // recortes de «cara» de la figura por código (corrección de Jose,
+  // 2026-11-21: salía un zoom roto, un arco amarillo con un ojo).
+  // Teodora sigue con su retrato por código (teoFaceCv), sin tocar.
+  G.specialURL = (id) => {
+    if (id === 'alebrije' && G.ALEBRIJE_DATA && G.ALEBRIJE_DATA['alebrije-frente']) return G.ALEBRIJE_DATA['alebrije-frente'];
+    if (!specialURLs[id]) specialURLs[id] = G.specialFace(id).toDataURL();
+    return specialURLs[id];
+  };
   // HUD propio de los duelos de Leyendas (el hud() base usa face(),
   // que exige hoja definida; aquí el retrato sale del dibujo por código)
   function legendsHud(d, c, title, lines) {
@@ -3971,6 +3998,16 @@
   // base del sprite se ven fieles y el resplandor destaca por
   // contraste. Solo este duelo la usa.
   const PATRON_LIGHT = { amb: [0.74, 0.74, 0.74], sun: [0.34, 0.34, 0.34], sky: '#231c2e', points: [] };
+  // RITMO DE LA MUESTRA (corrección de Jose, 2026-11-21): antes cada
+  // paso duraba 0,55 s encendido y 0,30 s de pausa, y sumado al
+  // resplandor tenue el patrón no se alcanzaba a fijar. Ahora
+  // 0,6 s encendido a plena fuerza y 0,25 s de pausa entre pasos.
+  const PATRON_T_ON = 0.6, PATRON_T_OFF = 0.25;
+  // COLOR VIVO de cada zona al alumbrarse: la MISMA paleta con la que
+  // tools/mkalebrije.py genera las variantes (ZONE_COLORS allí);
+  // aquí se usa para el nombre de la zona en pantalla. Cada color es
+  // el complementario del color base de esa parte del sprite.
+  const ALB_ZONE_COLORS = { cabeza: '#ff4fd8', crines: '#22d3ee', antenas: '#ff5252', aleta: '#4f8dff', panza: '#7dff57', cola: '#ffb020' };
 
   // ----- Minijuego de casting: «El patrón del Alebrije» -----
   class PatronDuel extends Duel {
@@ -4000,7 +4037,15 @@
       this.begin();
     }
     finish(res) { if (this.tapCv && this.tapH && this.tapCv.removeEventListener) this.tapCv.removeEventListener('pointerdown', this.tapH); super.finish(res); }
-    setup() { this.r = 0; this.lost = 0; this.doneR = 0; this.tOn = 0.55; this.tOff = 0.3; this.newRound(); }
+    setup() {
+      this.r = 0; this.lost = 0; this.doneR = 0; this.tOn = PATRON_T_ON; this.tOff = PATRON_T_OFF;
+      // Animación del billboard (el sprite base es la pose T del
+      // master de Jose y NO se redibuja: la vida se la da el código
+      // moviéndolo — ver draw()): pop al alumbrarse una zona, saltito
+      // al acierto, sacudida al fallo, brinco al completar la ronda.
+      this.popT = 0; this.hopT = 0; this.shakeT = 0; this.celeT = 0; this.lastGlow = -1; this.albDraw = null;
+      this.newRound();
+    }
     newRound() {
       this.seq = Array.from({ length: 3 + this.r }, () => (Math.random() * 6) | 0);
       this.phase = 'show'; this.showT = 0; this.prog = 0; this.sel = 0; this.flash = null;
@@ -4012,11 +4057,13 @@
     }
     pickZone(i) {
       if (this.st !== 'play' || this.phase !== 'input') return;
+      this.popT = 0.18; // la zona marcada también hace «pop»
       if (i === this.seq[this.prog]) {
         this.prog++; this.flash = { i, ok: true, t: 0.35 }; G.sfx('ok');
-        if (this.prog >= this.seq.length) { this.doneR++; this.say('¡Secuencia completa!', '#7dff8a', 1); this.phase = 'between'; this.bt = 1.0; }
+        if (this.prog >= this.seq.length) { this.doneR++; this.celeT = 0.55; this.say('¡Secuencia completa!', '#7dff8a', 1); this.phase = 'between'; this.bt = 1.0; }
+        else this.hopT = 0.35;
       } else {
-        this.flash = { i, ok: false, t: 0.5 }; G.sfx('bad'); this.lost++;
+        this.flash = { i, ok: false, t: 0.5 }; G.sfx('bad'); this.lost++; this.shakeT = 0.35;
         this.say('¡Esa zona no era!', '#ff6b7a', 1.1); this.phase = 'between'; this.bt = 1.2;
       }
     }
@@ -4025,9 +4072,16 @@
       this.p.update(dt);
       if (!this.tick(dt)) return;
       if (this.flash && (this.flash.t -= dt) <= 0) this.flash = null;
+      // Decaimiento de las reacciones del billboard (ver draw()).
+      this.popT = Math.max(0, this.popT - dt); this.hopT = Math.max(0, this.hopT - dt);
+      this.shakeT = Math.max(0, this.shakeT - dt); this.celeT = Math.max(0, this.celeT - dt);
       if (this.phase === 'show') {
         this.showT += dt;
         const per = this.tOn + this.tOff;
+        // «Pop» de escala cada vez que se alumbra una zona nueva.
+        const idx = Math.floor(this.showT / per), g = (idx < this.seq.length && this.showT - idx * per < this.tOn) ? this.seq[idx] : -1;
+        if (g >= 0 && g !== this.lastGlow) this.popT = 0.18;
+        this.lastGlow = g;
         if (this.showT >= this.seq.length * per + 0.35) { this.phase = 'input'; this.prog = 0; this.say('¡Tu turno!', '#ffd23f', 0.9); }
       } else if (this.phase === 'input') {
         if (G.input.hit('left')) this.sel = (this.sel + 5) % 6;
@@ -4042,34 +4096,62 @@
       if (this.flash) { glow = this.flash.i; glowColor = this.flash.ok ? '#7dff8a' : '#ff6b7a'; }
       if (this.phase === 'input' && !this.flash) { glow = this.sel; glowColor = 'rgba(120,200,255,0.9)'; }
       const alb = { x: this.albPos.x, y: this.albPos.y };
+      // Transformación viva del billboard (corrección de Jose: el
+      // Alebrije «estaba tieso en pose T y no hacía nada»). El sprite
+      // NO se redibuja — es el master de Jose —: el código lo mueve.
+      // Idle: bob vertical suave + inclinación leve, como si flotara
+      // en el set. Pop ×1,06 al alumbrarse una zona; saltito al
+      // acierto; sacudida lateral al fallo; brinco al completar.
+      let elev = 2.2 + Math.sin(t * 1.7) * 2.2;
+      let scale = 1;
+      if (this.popT > 0) scale += 0.06 * (this.popT / 0.18);
+      if (this.hopT > 0) elev += Math.sin(Math.PI * (1 - this.hopT / 0.35)) * 11;
+      if (this.celeT > 0) { const cp = 1 - this.celeT / 0.55; elev += Math.sin(Math.PI * cp) * 16; scale += 0.03 * Math.sin(Math.PI * cp); }
+      const shakeDx = this.shakeT > 0 ? Math.sin(t * 46) * 4.5 * (this.shakeT / 0.35) : 0;
+      const d = { x: alb.x + shakeDx, elev, w: ALB_W * scale, h: ALB_H * scale, roll: Math.sin(t * 1.25) * 0.045 };
+      this.albDraw = d; // over() calcula los puntos de toque con ESTA misma transformación
       W.render({
         cam: this.cam, dt, light: PATRON_LIGHT, actors: [this.p], focusZ: 0,
         sprites: () => {
           // El sprite REAL de Jose como billboard, al mismo alto que
           // ocupaba la figura por código (130 u ⇒ misma proyección).
           const base = albImg('alebrije-frente');
-          if (rocketReady(base)) R.sprite(base, alb.x, 0, alb.y, { w: ALB_W, h: ALB_H, feet: 0, lit: 0.25, nostretch: true });
-          // Resplandor: la variante de la zona SOBRE la base con alfa
-          // pulsante (fuera de la máscara la variante es idéntica a
-          // la base, así que la sobreimpresión solo suma el brillo de
-          // la zona). Al acertar/fallar, un flash verde/rojo tiñe la
-          // variante; en selección, alfa fijo más suave.
+          if (rocketReady(base)) R.sprite(base, d.x, d.elev, alb.y, { w: d.w, h: d.h, feet: 0, lit: 0.25, nostretch: true, roll: d.roll });
+          // Resplandor: la variante de COLOR VIVO de la zona SOBRE
+          // la base a plena fuerza (pulso suave 0,85–1; antes el
+          // pulso bajaba a 0,2 con brillo blanco-dorado y no se
+          // distinguía qué parte se alumbraba). Fuera de la máscara
+          // la variante es idéntica a la base, así que la
+          // sobreimpresión solo suma el color de la zona y su halo.
+          // Al acertar/fallar, un flash verde/rojo tiñe la variante;
+          // en selección (cursor), alfa fijo más suave.
           if (glow >= 0) {
             const zv = albImg('alebrije-zona-' + ALB_ZONES[glow].id);
             if (rocketReady(zv)) {
-              const o = { w: ALB_W, h: ALB_H, feet: 0, lit: 0.25, nostretch: true, alpha: 0.6 + 0.4 * Math.sin(t * 9) };
-              if (this.flash) { o.alpha = 0.95; o.flash = this.flash.ok ? [0.15, 0.4, 0.15] : [0.4, 0.1, 0.1]; }
+              const o = { w: d.w, h: d.h, feet: 0, lit: 0.25, nostretch: true, roll: d.roll, alpha: 0.925 + 0.075 * Math.sin(t * 9) };
+              if (this.flash) { o.alpha = 1; o.flash = this.flash.ok ? [0.15, 0.4, 0.15] : [0.4, 0.1, 0.1]; }
               else if (this.phase === 'input') o.alpha = 0.5;
-              R.sprite(zv, alb.x, 0, alb.y, o);
+              R.sprite(zv, d.x, d.elev, alb.y, o);
             }
           }
         },
         over: (c) => {
-          const b = R.project(alb.x, 0, alb.y), tp = R.project(alb.x, ALB_H, alb.y), lf = R.project(alb.x - ALB_W / 2, 0, alb.y), rt = R.project(alb.x + ALB_W / 2, 0, alb.y);
+          // Puntos de toque desde la MISMA transformación que pinta
+          // el sprite (bob/pop/sacudida incluidos): las zonas caen
+          // sobre la anatomía real aunque el billboard se mueva. El
+          // roll (±0,045 rad ≈ ±3 px en las esquinas) no se modela
+          // en el toque: queda dentro del radio de acierto (30 px).
+          const b = R.project(d.x, d.elev, alb.y), tp = R.project(d.x, d.elev + d.h, alb.y), lf = R.project(d.x - d.w / 2, d.elev, alb.y), rt = R.project(d.x + d.w / 2, d.elev, alb.y);
           this.zonePts = ALB_ZONES.map((z) => ({ x: lf.x + z.fx * (rt.x - lf.x), y: tp.y + z.fy * (b.y - tp.y) }));
           legendsHud(this, c, 'EL PATRÓN DEL ALEBRIJE', `Ronda ${Math.min(this.r + 1, 5)}/5 · Completas: ${this.doneR} · Fallos: ${this.lost}/2`);
           if (this.phase === 'show') G.text(c, 'MIRA LA SECUENCIA…', 320, 84, { size: 15, color: '#ffe96a', lw: 6 });
           else if (this.phase === 'input') G.text(c, `REPITE: ${this.prog}/${this.seq.length} · zona: ${ALB_ZONES[this.sel].label}`, 320, 84, { size: 15, color: '#bfe2ff', lw: 6 });
+          // NOMBRE de la zona alumbrada, en su color vivo y sin tapar
+          // al Alebrije (corrección de Jose: «no sé qué partes está
+          // alumbrándose»): en la muestra mientras dura el encendido
+          // y, en la respuesta, un instante al marcar (flash).
+          const nameZone = this.phase === 'show' ? glow : (this.flash ? this.flash.i : -1);
+          if (nameZone >= 0) { const z = ALB_ZONES[nameZone]; G.text(c, `¡${z.label.toUpperCase()}!`, 320, 116, { size: 25, color: ALB_ZONE_COLORS[z.id], lw: 7 }); }
           this.chipRects = ALB_ZONES.map((z, i) => {
             const w = 98, x = 14 + i * 103, y = 322;
             panel(c, x, y, w, 26, i === this.sel && this.phase === 'input' ? '#3f6fb5' : 'rgba(20,16,32,.8)');
@@ -4092,6 +4174,8 @@
 
   PatronDuel.LIGHT = PATRON_LIGHT;
   PatronDuel.ALB = { w: ALB_W, h: ALB_H, files: ALB_FILES };
+  PatronDuel.TIMING = { on: PATRON_T_ON, off: PATRON_T_OFF };
+  PatronDuel.ZONE_COLORS = ALB_ZONE_COLORS;
 
   // ----- Boss 2A: «El set se hunde / Traza la leyenda» -----
   // Híbrido Hexagon Heat + Trace Race en UN minijuego con rondas
