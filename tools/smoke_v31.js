@@ -1293,6 +1293,33 @@ const tick = () => new Promise((r) => setImmediate(r));
     for (let i = 0; i < 300 && !speeder.change.done; i++) { race.update(0.05); if (speeder.warned) warnedSeen = true; }
     check('carrera: el cactus con cambio de velocidad AVISA antes (warned) y luego acelera ×1,5',
       warnedSeen && speeder.change.done && speeder.vx > 170, `vx=${speeder.vx.toFixed(0)} warned=${warnedSeen}`);
+    // --- Carrera: cámara alejada, rodadura verdadera y apoyo en el suelo (playtest de Jose, 2026-11-22) ---
+    check('carrera: la cámara va MÁS LEJOS (dist 500, no los 350 de antes: más pista visible por delante)',
+      race.cam.dist === 500, 'dist=' + race.cam.dist);
+    { // ω = v/r con el radio real de la bola: un paso de update con vx conocida
+      const roller = { x: -100, vx: 100, rot: 0, change: null, warned: false, hitP: false, hitC: false, catAct: true, react: 9, ignore: true };
+      race.cacti = [roller]; race.run.p.h = 500; race.run.c.h = 500; race.spawnT = 1e9; // nadie estorba: solo se mide la rotación
+      race.update(0.05); // la pista acelera antes de mover: vx pasa a 101,2 y con ella rueda
+      const wantRot = -(101.2 * 0.05) / 18.7;
+      check('carrera: la bola rueda SIN deslizar (Δrot = −v·dt/r con r = 18,7, su radio pintado; antes /13 patinaba)',
+        Math.abs(roller.rot - wantRot) < 0.005, `rot=${roller.rot.toFixed(4)} want=${wantRot.toFixed(4)}`);
+    }
+    { // el centro de la bola no se mueve al girar (nada de órbitas) y su base toca el suelo
+      const probe = { x: 30, vx: 0, rot: 0, change: null, warned: false, hitP: false, hitC: false, catAct: true, react: 9, ignore: true };
+      let okC = true, worst = 0;
+      for (const th of [0, 0.7, 1.9, 3.4, 5.9]) {
+        probe.rot = th;
+        const bd = race.ballDraw(probe);
+        // R.sprite gira sobre la base del cuadro (con feet 0, el pivote es (x, y)):
+        // el centro pintado es pivote + R(roll)·(0, dyC) y debe caer siempre en (c.x, cy)
+        const cx = bd.x - bd.dyC * Math.sin(bd.roll), cyy = bd.y + bd.dyC * Math.cos(bd.roll);
+        const err = Math.hypot(cx - probe.x, cyy - bd.cy);
+        worst = Math.max(worst, err); if (err > 0.01) okC = false;
+        if (Math.abs(bd.cy - bd.rv) > 0.01) okC = false; // centro a exactamente un radio del suelo: tangente, ni hundida ni flotando
+      }
+      check('carrera: la bola gira sobre SU CENTRO y queda TANGENTE al suelo en todo el giro',
+        okC, `peor error=${worst.toFixed(4)}`);
+    }
 
     // --- La imagen distinta: construcción, puntos y anulaciones ---
     const img = new Sc.ImageDuel('natalia', () => {});
