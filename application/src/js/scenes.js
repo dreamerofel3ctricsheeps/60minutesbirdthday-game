@@ -3773,7 +3773,12 @@
   //
   // Alebrije y Teodora NO tienen hoja definida en el repo: se
   // dibujan POR CÓDIGO (canvas) siguiendo el mapa de sprites
-  // aprobado (files/diseno-leyendas/mapa-sprites-teodora-alebrije-v1.md):
+  // aprobado (files/diseno-leyendas/mapa-sprites-teodora-alebrije-v1.md).
+  // EXCEPCIÓN (corrección de Jose, 2026-11-21): en «El patrón del
+  // Alebrije» el Alebrije es su sprite REAL (la adaptación de Jose
+  // como billboard + variantes de resplandor por zona derivadas de
+  // ese master, ver albImg/PATRON_LIGHT junto a PatronDuel); la
+  // figura por código queda para la escena del final y los retratos:
   //  · Alebrije = adaptación de Jose: cabeza amarilla, hocico
   //    naranja, ojos NEGROS enormes, lengua roja rizada fuera,
   //    antenas verdes, crines rojo/naranja, cuerpo morado con panza
@@ -3795,10 +3800,14 @@
   function circ(x, cx, cy, r, fill, stroke) { ell(x, cx, cy, r, r, fill, stroke); }
 
   // ----- El Alebrije (figura completa en un lienzo de 200×220) -----
+  // Zonas del patrón sobre el sprite REAL del Alebrije (la
+  // adaptación de Jose): fx/fy = centro de cada zona como fracción
+  // del rectángulo del sprite, para los puntos de toque de
+  // PatronDuel. El orden es el de las variantes alebrije-zona-<id>.
   const ALB_ZONES = [
-    { id: 'cabeza', label: 'Cabeza', fx: 0.50, fy: 0.26 }, { id: 'crines', label: 'Crines', fx: 0.27, fy: 0.20 },
-    { id: 'antenas', label: 'Antenas', fx: 0.65, fy: 0.05 }, { id: 'aleta', label: 'Aleta', fx: 0.84, fy: 0.42 },
-    { id: 'panza', label: 'Panza', fx: 0.52, fy: 0.69 }, { id: 'cola', label: 'Cola', fx: 0.16, fy: 0.58 },
+    { id: 'cabeza', label: 'Cabeza', fx: 0.50, fy: 0.30 }, { id: 'crines', label: 'Crines', fx: 0.115, fy: 0.32 },
+    { id: 'antenas', label: 'Antenas', fx: 0.51, fy: 0.065 }, { id: 'aleta', label: 'Aleta', fx: 0.668, fy: 0.60 },
+    { id: 'panza', label: 'Panza', fx: 0.47, fy: 0.75 }, { id: 'cola', label: 'Cola', fx: 0.83, fy: 0.80 },
   ];
   function drawAlbFigure(x, o) {
     o = o || {};
@@ -3929,6 +3938,32 @@
     if (d.bubble) { const bw = Math.min(430, 26 + d.bubble.text.length * 6.4); panel(c, 320 - bw / 2, 58, bw, 24, 'rgba(20,16,32,.85)'); G.text(c, d.bubble.text, 320, 71, { size: 12.5, color: d.bubble.color, lw: 4 }); }
   }
 
+  // El Alebrije de ESTE duelo es la IMAGEN REAL de Jose (corrección
+  // de Jose, 2026-11-21): su adaptación alebrije_frente_jose.png como
+  // billboard, no la figura por código (drawAlbFigure/albCv quedan
+  // para la escena del final y los retratos, que no son este duelo).
+  // Base + 6 variantes de resplandor por zona derivadas del master
+  // procesando la imagen (tools/mkalebrije.py → G.ALEBRIJE_DATA,
+  // data URIs como todo el arte WebGL del proyecto). Mientras una
+  // imagen no haya cargado NO se pinta (nada de sustituto).
+  const ALB_FILES = ['alebrije-frente', 'alebrije-zona-cabeza', 'alebrije-zona-crines', 'alebrije-zona-antenas', 'alebrije-zona-aleta', 'alebrije-zona-panza', 'alebrije-zona-cola'];
+  const ALB_W = 96, ALB_H = 130; // el alto que ocupaba la figura por código (130 u); el ancho sale del aspect real del master (626×849)
+  const albImgs = {};
+  function albImg(name) {
+    if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
+    if (!G.ALEBRIJE_DATA || !G.ALEBRIJE_DATA[name]) return null; // sin alebrije-sheets.js cargado: no reventar
+    if (!albImgs[name]) { const im = new Image(); im.src = G.ALEBRIJE_DATA[name]; albImgs[name] = im; }
+    return albImgs[name];
+  }
+  function albPreload() { for (const n of ALB_FILES) albImg(n); }
+  // LUZ NEUTRA de este duelo (corrección de Jose, 2026-11-21): con
+  // W.LIGHT.fiesta la sala salía con un lavado naranja/verde saturado
+  // y no se distinguían los colores que se alumbran. Blanco suave y
+  // sin puntos de color, como una escena normal del depa: los colores
+  // base del sprite se ven fieles y el resplandor destaca por
+  // contraste. Solo este duelo la usa.
+  const PATRON_LIGHT = { amb: [0.74, 0.74, 0.74], sun: [0.34, 0.34, 0.34], sky: '#231c2e', points: [] };
+
   // ----- Minijuego de casting: «El patrón del Alebrije» -----
   class PatronDuel extends Duel {
     constructor(who, done) {
@@ -3938,6 +3973,7 @@
       this.cam = CAM_SALA();
       this.albPos = { x: 655, y: 148 };
       this.chipRects = []; this.zonePts = [];
+      albPreload(); // el Alebrije de este duelo es imagen diseñada
       try { // toques: zonas del cuerpo y chips inferiores (se retira en finish)
         const cv = document.querySelector('#cv');
         if (cv && cv.addEventListener) {
@@ -3999,10 +4035,29 @@
       if (this.phase === 'input' && !this.flash) { glow = this.sel; glowColor = 'rgba(120,200,255,0.9)'; }
       const alb = { x: this.albPos.x, y: this.albPos.y };
       W.render({
-        cam: this.cam, dt, light: W.LIGHT.fiesta, actors: [this.p], focusZ: 0,
-        sprites: () => { R.sprite(albCv('idle', glow >= 0 ? glow : null, glowColor), alb.x, 0, alb.y, { w: 118, h: 130, feet: 0, lit: 0.25, nostretch: true }); },
+        cam: this.cam, dt, light: PATRON_LIGHT, actors: [this.p], focusZ: 0,
+        sprites: () => {
+          // El sprite REAL de Jose como billboard, al mismo alto que
+          // ocupaba la figura por código (130 u ⇒ misma proyección).
+          const base = albImg('alebrije-frente');
+          if (rocketReady(base)) R.sprite(base, alb.x, 0, alb.y, { w: ALB_W, h: ALB_H, feet: 0, lit: 0.25, nostretch: true });
+          // Resplandor: la variante de la zona SOBRE la base con alfa
+          // pulsante (fuera de la máscara la variante es idéntica a
+          // la base, así que la sobreimpresión solo suma el brillo de
+          // la zona). Al acertar/fallar, un flash verde/rojo tiñe la
+          // variante; en selección, alfa fijo más suave.
+          if (glow >= 0) {
+            const zv = albImg('alebrije-zona-' + ALB_ZONES[glow].id);
+            if (rocketReady(zv)) {
+              const o = { w: ALB_W, h: ALB_H, feet: 0, lit: 0.25, nostretch: true, alpha: 0.6 + 0.4 * Math.sin(t * 9) };
+              if (this.flash) { o.alpha = 0.95; o.flash = this.flash.ok ? [0.15, 0.4, 0.15] : [0.4, 0.1, 0.1]; }
+              else if (this.phase === 'input') o.alpha = 0.5;
+              R.sprite(zv, alb.x, 0, alb.y, o);
+            }
+          }
+        },
         over: (c) => {
-          const b = R.project(alb.x, 0, alb.y), tp = R.project(alb.x, 130, alb.y), lf = R.project(alb.x - 59, 0, alb.y), rt = R.project(alb.x + 59, 0, alb.y);
+          const b = R.project(alb.x, 0, alb.y), tp = R.project(alb.x, ALB_H, alb.y), lf = R.project(alb.x - ALB_W / 2, 0, alb.y), rt = R.project(alb.x + ALB_W / 2, 0, alb.y);
           this.zonePts = ALB_ZONES.map((z) => ({ x: lf.x + z.fx * (rt.x - lf.x), y: tp.y + z.fy * (b.y - tp.y) }));
           legendsHud(this, c, 'EL PATRÓN DEL ALEBRIJE', `Ronda ${Math.min(this.r + 1, 5)}/5 · Completas: ${this.doneR} · Fallos: ${this.lost}/2`);
           if (this.phase === 'show') G.text(c, 'MIRA LA SECUENCIA…', 320, 84, { size: 15, color: '#ffe96a', lw: 6 });
@@ -4026,6 +4081,9 @@
       G.text(c, w === 'win' ? 'El Alebrije te acepta en la película' : 'El Alebrije se esconde de nuevo entre la decoración', 320, 208, { size: 11.5 });
     }
   }
+
+  PatronDuel.LIGHT = PATRON_LIGHT;
+  PatronDuel.ALB = { w: ALB_W, h: ALB_H, files: ALB_FILES };
 
   // ----- Boss 2A: «El set se hunde / Traza la leyenda» -----
   // Híbrido Hexagon Heat + Trace Race en UN minijuego con rondas

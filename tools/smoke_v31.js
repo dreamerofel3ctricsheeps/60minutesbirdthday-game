@@ -1592,6 +1592,35 @@ const tick = () => new Promise((r) => setImmediate(r));
       const res2 = driveDuel(d2, (dd) => { if (dd.phase === 'input') dd.pickZone((dd.seq[dd.prog] + 1) % 6); });
       check('casting perdible: dos rondas falladas → lose', !!res2 && res2.win === 'lose', JSON.stringify(res2));
     }
+    // --- Corrección de Jose (2026-11-21): el Alebrije del patrón es
+    // su sprite REAL (billboard), el resplandor son variantes por
+    // zona derivadas del master, y la luz del duelo es NEUTRA ---
+    {
+      const albFiles = ['alebrije-frente', 'alebrije-zona-cabeza', 'alebrije-zona-crines', 'alebrije-zona-antenas', 'alebrije-zona-aleta', 'alebrije-zona-panza', 'alebrije-zona-cola'];
+      const imgDirM = path.join(__dirname, '..', 'application', 'src', 'assets', 'img');
+      check('patrón: la base y las 6 variantes de zona existen en application/src/assets/img/',
+        albFiles.every((n) => fs.existsSync(path.join(imgDirM, n + '.png'))));
+      check('patrón: G.ALEBRIJE_DATA trae base + 6 zonas como data URIs PNG',
+        !!G.ALEBRIJE_DATA && albFiles.every((n) => typeof G.ALEBRIJE_DATA[n] === 'string' && G.ALEBRIJE_DATA[n].startsWith('data:image/png;base64,')),
+        G.ALEBRIJE_DATA ? Object.keys(G.ALEBRIJE_DATA).join(',') : 'sin ALEBRIJE_DATA');
+      const htmlTxtM = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+      check('patrón: index.html incluye js/alebrije-sheets.js ANTES que js/scenes.js',
+        htmlTxtM.includes('js/alebrije-sheets.js') && htmlTxtM.indexOf('js/alebrije-sheets.js') < htmlTxtM.indexOf('js/scenes.js'));
+      const scenesTxtM = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+      const patronSrc = scenesTxtM.slice(scenesTxtM.indexOf('class PatronDuel'), scenesTxtM.indexOf('class TrazoDuel'));
+      check('patrón: el duelo ya no pinta al Alebrije por código (sin albCv() en la clase) y sí usa su imagen real',
+        !patronSrc.includes('albCv(') && patronSrc.includes("albImg('alebrije-frente')") && patronSrc.includes("albImg('alebrije-zona-'"),
+        '');
+      check('patrón: la figura por código sigue viva SOLO para la escena del final y los retratos (albCv director)',
+        scenesTxtM.includes("albCv('director')") && scenesTxtM.includes('drawAlbFigure'), '');
+      check('patrón: luz NEUTRA del duelo (amb y sun en blanco equilibrado, sin puntos de color, sin LIGHT.fiesta)',
+        !!Sc.PatronDuel.LIGHT && Sc.PatronDuel.LIGHT.amb[0] === Sc.PatronDuel.LIGHT.amb[1] && Sc.PatronDuel.LIGHT.amb[1] === Sc.PatronDuel.LIGHT.amb[2]
+        && Sc.PatronDuel.LIGHT.sun[0] === Sc.PatronDuel.LIGHT.sun[1] && Sc.PatronDuel.LIGHT.sun[1] === Sc.PatronDuel.LIGHT.sun[2]
+        && Sc.PatronDuel.LIGHT.points.length === 0 && patronSrc.includes('light: PATRON_LIGHT') && !patronSrc.includes('W.LIGHT.fiesta'),
+        JSON.stringify(Sc.PatronDuel.LIGHT));
+      check('patrón: el sprite ocupa el mismo alto que la figura por código (ALB_H = 130) y el ancho sale del aspect del master',
+        Sc.PatronDuel.ALB.h === 130 && Sc.PatronDuel.ALB.w === 96 && Sc.PatronDuel.ALB.files.length === 7, JSON.stringify(Sc.PatronDuel.ALB));
+    }
     // 2A Trazo: siguiendo la línea y corriendo al seguro se gana; quieto en una esquina se pierde
     const driveTrazo = (win) => {
       const d = new Sc.TrazoDuel('natalia', () => {});
