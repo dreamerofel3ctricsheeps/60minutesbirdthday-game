@@ -176,6 +176,7 @@ const load = (file, patch) => {
   vm.runInContext(code, sandbox, { filename: file });
 };
 load('defined-sheets.js');
+load('rocket-sheets.js');
 load('sprites.js');
 load('data.js');
 load('gl3d.js');
@@ -1394,6 +1395,24 @@ const tick = () => new Promise((r) => setImmediate(r));
     const dCam = new Sc.RingRaceDuel('natalia', () => {});
     check('J1407b cámara: dist 480 / pitch 0,34 — el cohete se ve entero (68 px de 360) y queda pista por delante',
       dCam.cam.dist === 480 && Math.abs(dCam.cam.pitch - 0.34) < 1e-9, JSON.stringify(dCam.cam));
+    // --- Bug del "contador 4" (playtest de Jose, 2026-11-21): los
+    // cohetes cargados como archivo (assets/img/*.png) son cross-origin
+    // desde file:// y texImage2D reventaba en draw(), matando el bucle.
+    // Corrección: data URIs en G.ROCKET_DATA + rAF agendado ANTES de
+    // update/draw en frame() ---
+    check('contador 4: G.ROCKET_DATA existe con las 6 claves y cada valor es una data URI PNG',
+      !!G.ROCKET_DATA && rocketFiles.every((n) => typeof G.ROCKET_DATA[n] === 'string' && G.ROCKET_DATA[n].startsWith('data:image/png;base64,')),
+      G.ROCKET_DATA ? Object.keys(G.ROCKET_DATA).join(',') : 'sin ROCKET_DATA');
+    check('contador 4: scenes.js carga los cohetes desde G.ROCKET_DATA, NO desde la ruta assets/img/',
+      scenesTxt2.includes('G.ROCKET_DATA[name]') && !scenesTxt2.includes("'assets/img/' +"));
+    const htmlTxt2 = fs.readFileSync(path.join(SRC, '..', 'index.html'), 'utf8');
+    check('contador 4: index.html incluye js/rocket-sheets.js ANTES que js/scenes.js',
+      htmlTxt2.includes('js/rocket-sheets.js') && htmlTxt2.indexOf('js/rocket-sheets.js') < htmlTxt2.indexOf('js/scenes.js'));
+    const gameTxt2 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const frameBody = gameTxt2.slice(gameTxt2.indexOf('function frame(now)'), gameTxt2.indexOf('function frame(now)') + 1600);
+    check('contador 4: frame() agenda requestAnimationFrame(frame) ANTES de update/draw (blindaje del bucle)',
+      frameBody.indexOf('requestAnimationFrame(frame)') > -1 && frameBody.indexOf('requestAnimationFrame(frame)') < frameBody.indexOf('G.scene.update(dt)'),
+      'rAF@' + frameBody.indexOf('requestAnimationFrame(frame)') + ' update@' + frameBody.indexOf('G.scene.update(dt)'));
   }
 
   // ================= M) Final LEYENDAS (LEYENDAS_MOVIE_ENDING) =============

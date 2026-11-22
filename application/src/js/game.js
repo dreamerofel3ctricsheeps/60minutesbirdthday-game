@@ -72,6 +72,14 @@
   G.setScene = (sc) => { G.scene = sc; G.input.flush(); const f = $('#fade'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
   let last = performance.now();
   function frame(now) {
+    // BLINDAJE (bug del "contador 4", 2026-11-21): el siguiente frame
+    // se agenda ANTES de update/draw. Antes se agendaba al final, y una
+    // excepción dentro de draw() (esa vez: texImage2D con una imagen
+    // file:// cross-origin al subir los cohetes de «Anillos de
+    // J1407b» a WebGL) impedía agendarlo: el bucle moría y el juego
+    // quedaba congelado en el último frame bueno, con la cuenta en 4.
+    // Agendando primero, un error en un frame ya no mata el bucle.
+    requestAnimationFrame(frame);
     // `last` avanza SIEMPRE, también en pausa: al reanudar, el dt es el de
     // un frame normal y el juego continúa exactamente donde estaba.
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -80,7 +88,6 @@
       if (G.scene) { G.scene.update(dt); G.scene.draw(dt); }
     }
     updatePauseBtn();
-    requestAnimationFrame(frame);
   }
 
   // ---------- Interfaz ----------
