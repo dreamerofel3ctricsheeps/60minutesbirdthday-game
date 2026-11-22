@@ -146,6 +146,14 @@
   // por mensajes ni por decisión pendiente) y NUNCA se
   // auto-oculta — lo abre y lo cierra ÉL con el botón del
   // teléfono (que por eso crece en horizontal, ver style.css).
+  // Única excepción de CIERRE a esa regla (también de Jose,
+  // 2026-11-22): cuando la cuenta atrás de un minijuego/duelo
+  // entra en su último segundo, el chat abierto se cierra solo
+  // — en móvil estorba para jugar — (phone.duelClose, llamado
+  // desde la cuenta compartida de los duelos). Nada se ABRE
+  // solo jamás: la excepción es solo de cierre, y Jose puede
+  // reabrir el panel con el botón cuando quiera, incluso a
+  // mitad del minijuego.
   // Lo que llega con el panel cerrado se acumula en la INSIGNIA
   // del botón: contador de no leídos, y si hay una DECISIÓN
   // pendiente la insignia pasa a «!» en alerta (pulso suave),
@@ -245,6 +253,10 @@
     toggle() { // apertura/cierre manual (botón del HUD o ×)
       if (this.visible) { this.pinned = false; this.muted = true; this.hide(); }
       else { this.muted = false; this.pinned = true; this.show(); }
+    },
+    duelClose() { // cierre al «1» de la cuenta atrás de un minijuego/duelo (pedido de Jose): lo llaman la base Duel y Velas al entrar su cuenta en el último segundo
+      if (!this.visible || !this.manual()) return; // solo móvil (manual: flotante o retrato) y solo si está abierto; en escritorio el panel lateral no estorba y NO se cierra solo
+      this.pinned = false; this.hide(); // hide() no toca el contador de no leídos: la insignia queda como estaba (cerrar no marca leído) y no hay decisión pendiente posible a estas alturas (la cuenta solo corre tras elegir)
     },
     reset() { this.pending = false; this.pinned = false; this.muted = false; this.unread = 0; clearTimeout(this.pingT); this.hide(); },
   };

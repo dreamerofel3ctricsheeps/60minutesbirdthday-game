@@ -3250,6 +3250,85 @@ const tick = () => new Promise((r) => setImmediate(r));
     ph3.reset();
   }
 
+  // --- Sección W4: el chat se cierra al «1» de la cuenta atrás
+  // de los minijuegos (pedido de Jose, 2026-11-22) ---
+  // «En dispositivos móviles el chat debe cerrarse justo cuando
+  // el contador del minijuego esté en 1 segundo, porque no tiene
+  // sentido tener el chat abierto cuando se esté por jugar.»
+  // La cuenta de TODOS los duelos vive en la base Duel (tick):
+  // cuando el número mostrado pasa a 1, la base llama a
+  // phone.duelClose(), que solo actúa en modo manual (flotante
+  // o retrato) y solo si el panel está abierto; en escritorio
+  // NO se cierra. Velas (CandleGame) no usa la base: su cuenta
+  // es la fase de memoria («La luz se corta en N s») y su «1»
+  // es el último segundo de esa fase. Es la única excepción de
+  // CIERRE a la regla manual: nada se abre solo jamás, cerrar
+  // no marca nada leído y Jose puede reabrirlo cuando quiera.
+  {
+    console.log('\nW4) El chat se cierra al «1» de la cuenta atrás del minijuego (solo móvil)');
+    const gameW4 = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const scenesW4 = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+
+    // --- Fuente: el método y los dos enganches ---
+    check('cuenta atrás: la máquina del teléfono expone duelClose y SOLO actúa con el panel abierto y en modo manual (manual())',
+      gameW4.includes('duelClose()') && gameW4.includes('if (!this.visible || !this.manual()) return;'), '');
+    const iDuelW4 = scenesW4.indexOf('class Duel {');
+    const duelTxtW4 = iDuelW4 >= 0 ? scenesW4.slice(iDuelW4, scenesW4.indexOf('class DecoDuel')) : '';
+    check('cuenta atrás: el enganche vive en el tick COMPARTIDO de la base Duel (la cuenta de todos los duelos), al pasar el número mostrado a 1',
+      duelTxtW4.includes('G.ui.phone.duelClose()') && duelTxtW4.includes('b > 1 && n <= 1'), '');
+    check('cuenta atrás: Velas (sin base Duel) engancha el último segundo de su fase de memoria, su cuenta atrás equivalente',
+      scenesW4.includes('if (b > 1 && Math.ceil(this.stT) <= 1 && G.ui && G.ui.phone) G.ui.phone.duelClose();'), '');
+
+    // --- Comportamiento: duelo base en modo manual (retrato) ---
+    const ph4 = G.ui.phone, phoneEl4 = documentFake.querySelector('#phone'), badge4 = documentFake.querySelector('#phonebadge');
+    const decoSaveW4 = S.deco, invSaveW4 = S.inv;
+    ph4.portraitMode = true; ph4.floatMode = false; ph4.reset();
+    ph4.toggle(); // Jose lo abre a mano: queda visible y fijado
+    const openW4 = ph4.state().visible === true && ph4.state().pinned === true;
+    const dW4 = new Sc.DecoDuel('natalia', () => {}); // st='count', stT=3.6: la cuenta muestra 4·3·2·1
+    while (dW4.stT > 1.6) dW4.tick(0.25); // avanzar hasta mostrar el 2 (stT ∈ (1.4, 2.4])
+    const stillOpenW4 = ph4.state().visible === true;
+    dW4.tick(0.25); dW4.tick(0.25); // stT cruza a ≤1.4: el número mostrado pasa a 1
+    check('cuenta atrás: en móvil el chat sigue abierto durante el 4·3·2 y se CIERRA justo cuando el contador llega a 1',
+      openW4 && stillOpenW4 && dW4.st === 'count' && ph4.state().visible === false && phoneEl4.classList.contains('ph-off'),
+      JSON.stringify(ph4.state()) + ' stT=' + dW4.stT);
+    check('cuenta atrás: el cierre no marca nada leído ni deja residuo: contador e insignia como estaban, sin fijado y sin decisión pendiente',
+      ph4.state().unread === 0 && ph4.state().pending === false && ph4.state().pinned === false && badge4.style.display === 'none',
+      JSON.stringify(ph4.state()));
+    ph4.toggle(); // reabrir a mano: permitido siempre, incluso a mitad del minijuego
+    check('cuenta atrás: Jose puede REABRIR el chat con el botón cuando quiera (la regla es solo el cierre en el 1)',
+      ph4.state().visible === true, JSON.stringify(ph4.state()));
+    ph4.reset();
+
+    // --- Comportamiento: con el chat ya cerrado, el «1» no hace nada ---
+    const dW4b = new Sc.DecoDuel('alan', () => {});
+    while (dW4b.st === 'count') dW4b.tick(0.25);
+    check('cuenta atrás: con el chat ya cerrado, la cuenta entera pasa sin tocar el panel (ni errores ni aperturas)',
+      ph4.state().visible === false && dW4b.st === 'play', JSON.stringify(ph4.state()));
+
+    // --- Comportamiento: en escritorio NO se cierra ---
+    ph4.portraitMode = false; ph4.floatMode = false; ph4.reset();
+    ph4.toggle();
+    const dW4c = new Sc.DecoDuel('natalia', () => {});
+    while (dW4c.st === 'count') dW4c.tick(0.25);
+    check('cuenta atrás: en ESCRITORIO (ni flotante ni retrato) la cuenta llega a jugar y el panel lateral NO se cierra solo',
+      ph4.state().visible === true && dW4c.st === 'play', JSON.stringify(ph4.state()));
+    ph4.reset();
+    S.deco = decoSaveW4; S.inv = invSaveW4;
+
+    // --- Comportamiento: Velas y su «1» de memoria ---
+    ph4.portraitMode = true; ph4.reset(); ph4.toggle();
+    const cgW4 = new Sc.CandleGame('natalia', () => {});
+    cgW4.st = 'memory'; cgW4.stT = 1.3; // «La luz se corta en 2 s»
+    cgW4.update(0.2); // stT=1.1: aún muestra 2, el chat sigue abierto
+    const candlesOpenW4 = ph4.state().visible === true;
+    cgW4.update(0.2); // stT=0.9: la memoria entra en su último segundo (muestra 1)
+    check('cuenta atrás: en Velas el chat se cierra al entrar la fase de memoria en su último segundo (su «1» equivalente)',
+      candlesOpenW4 && ph4.state().visible === false && cgW4.st === 'memory', JSON.stringify(ph4.state()) + ' st=' + cgW4.st);
+    W.xDoorOpen = cgW4.prevDoor; // la casa queda como estaba (Velas abre la puerta de Ximena al construirse)
+    ph4.portraitMode = false; ph4.reset();
+  }
+
   // --- Sección X: botón de pruebas «Borrar caché y datos» ---
   // Pedido de Jose (2026-11-22): dejar de depender de la ventana
   // de incógnito para ver la versión fresca y para resetear el
