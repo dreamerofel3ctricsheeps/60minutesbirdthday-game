@@ -2353,10 +2353,37 @@
   // para acertar; si no, también se anula. Máximo 8 s por ronda:
   // rondas ágiles de ~4-8 s. Gana quien llegue a 5 puntos (tope de
   // 9 rondas: si se agotan, manda quien tenga más).
+  // FASE DE DESTAPE (pedido de Jose, estilo Mario Party): cada ronda
+  // arranca con los 3 paneles CUBIERTOS por una cubierta de rejilla
+  // 6×4 que se destapa poco a poco durante IMG_UNCOVER_T segundos,
+  // con su cuenta atrás visible: al inicio no se puede identificar
+  // ni la imagen completa ni la diferencia (duda y ansiedad), NADIE
+  // puede elegir durante el destape (ni el jugador ni José: su reloj
+  // de respuesta arranca recién en la elección) y SOLO al llegar la
+  // cuenta a cero la imagen se revela entera y se puede elegir.
+  // JUSTICIA DE LA MÁSCARA (regla dura): la progresión de la cubierta
+  // es IDÉNTICA en los 3 paneles en todo instante — el orden de
+  // destape es UNA sola permutación por ronda (maskPos) y la opacidad
+  // de cada celda es función solo de (celda, tiempo), compartida por
+  // los tres paneles: lo único distinto entre paneles es la imagen.
   const IMG_COLORS = ['#f48fb1', '#7fd3ff', '#ffd23f', '#b6f08a', '#b48cf0', '#ff9a5c'];
   const IMG_KINDS = ['pastel', 'globo', 'regalo', 'vela', 'gorro', 'corneta'];
   const IMG_PANELS = [{ x: 62, y: 122 }, { x: 245, y: 122 }, { x: 428, y: 122 }];
   const IMG_W = 150, IMG_H = 148;
+  const IMG_UNCOVER_T = 7; // duración de la fase de destape de cada ronda (s)
+  const IMG_GRID_C = 6, IMG_GRID_R = 4; // rejilla de la cubierta: 6×4 = 24 celdas por panel
+  const IMG_CELLS = IMG_GRID_C * IMG_GRID_R;
+  const IMG_CELL_FADE = 0.45; // fundido de cada celda al destaparse (s): las oleadas se solapan y la fracción visible crece sin escalones
+  // Orden de destape de la ronda: permutación pseudoaleatoria de las
+  // celdas, FIJA durante toda la ronda y ÚNICA para los 3 paneles.
+  // Devuelve pos[celda] = turno (0..23) en que esa celda se destapa.
+  function imgMaskPos() {
+    const order = [...Array(IMG_CELLS).keys()];
+    for (let i = order.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0;[order[i], order[j]] = [order[j], order[i]]; }
+    const pos = new Array(IMG_CELLS);
+    order.forEach((cell, k) => { pos[cell] = k; });
+    return pos;
+  }
   function imgBase(kind) { return { kind, color: (Math.random() * IMG_COLORS.length) | 0, n: 2 + ((Math.random() * 3) | 0), extra: Math.random() < 0.5, extra2: false, flip: false }; }
   function imgVariant(base, level) {
     const v = { ...base };
@@ -2441,7 +2468,7 @@
   }
   class ImageDuel extends Duel {
     constructor(who, done) {
-      super(who, 'jose', done, { rounds: 9, need: 5, label: 'PUNTO', title: 'LA IMAGEN DISTINTA', hint: '← ↓ → o clic en el panel: señala la imagen DISTINTA antes que José', rendT: 1.1 });
+      super(who, 'jose', done, { rounds: 9, need: 5, label: 'PUNTO', title: 'LA IMAGEN DISTINTA', hint: 'Las imágenes se destapan poco a poco… al revelarse, señala la DISTINTA con ← ↓ → o clic antes que José', rendT: 1.1 });
       this.isImage = true;
       this.p = new Actor(who, 190, 292); this.jose = new Actor('jose', 810, 292);
       this.p.dir = 'up'; this.jose.dir = 'up';
@@ -2470,11 +2497,28 @@
       this.diffIdx = (Math.random() * 3) | 0;
       this.panels = [base, base, base]; this.panels[this.diffIdx] = variant; // exactamente UNA distinta, por construcción
       this.diffType = type;
-      this.phase = 'show'; this.phaseT = 0; this.pPick = null; this.josePick = null; this.graceT = 0; this.revealT = 0; this.pendingEnd = null; this.clickIdx = -1;
+      // la ronda nace en DESTAPE: paneles cubiertos, nadie elige hasta
+      // que la cuenta atrás llegue a cero (ver la fase 'uncover')
+      this.phase = 'uncover'; this.uncoverT = 0; this.maskPos = imgMaskPos();
+      this.phaseT = 0; this.pPick = null; this.josePick = null; this.graceT = 0; this.revealT = 0; this.pendingEnd = null; this.clickIdx = -1;
       // IA de José: tarda más y acierta menos cuanto más sutil; tu Lógica lo frena un poco más
       this.joseAt = [rnd(1.5, 2.3), rnd(2.4, 3.4), rnd(3.6, 5.0)][lv] * (1 + (stat(this.who, 'logica') - 5) * 0.04);
       this.joseAcc = [0.95, 0.82, 0.6][lv];
       this.p.frameOverride = null; this.jose.frameOverride = null;
+    }
+    // Opacidad de la cubierta en una celda (1 = tapada, 0 = visible).
+    // Función SOLO de (celda, uncoverT): no recibe el panel, así que la
+    // máscara es idéntica en los 3 paneles por construcción. Las celdas
+    // arrancan repartidas por toda la fase y su fundido (IMG_CELL_FADE)
+    // es más largo que el paso entre arranques: las oleadas se solapan
+    // y la fracción visible crece de forma continua de 0 a 1.
+    cellCover(cell) {
+      const start = (this.maskPos[cell] / (IMG_CELLS - 1)) * (IMG_UNCOVER_T - IMG_CELL_FADE);
+      return Math.min(1, Math.max(0, 1 - (this.uncoverT - start) / IMG_CELL_FADE));
+    }
+    visibleFrac() { // fracción visible de las imágenes (la misma en los 3 paneles)
+      let s = 0; for (let i = 0; i < IMG_CELLS; i++) s += 1 - this.cellCover(i);
+      return s / IMG_CELLS;
     }
     choose(i) { // elección del jugador (teclado o clic)
       if (this.st !== 'play' || this.phase !== 'show' || this.pPick !== null) return;
@@ -2503,6 +2547,14 @@
       const p = this.p, j = this.jose; p.update(dt); j.update(dt);
       if (!this.tick(dt)) return;
       if (this.phase === 'reveal') { if ((this.revealT -= dt) <= 0 && this.pendingEnd) { const pe = this.pendingEnd; this.pendingEnd = null; this.endRound(pe.w, pe.text); } return; }
+      if (this.phase === 'uncover') { // DESTAPE: solo corre la cuenta atrás; la entrada se descarta, no se acumula
+        this.uncoverT += dt; this.clickIdx = -1;
+        if (this.uncoverT >= IMG_UNCOVER_T) { // cuenta a cero: imagen completa y a elegir
+          this.phase = 'show'; this.phaseT = 0; G.input.flush(); // ninguna tecla del destape se cuela como elección
+          G.sfx('ok'); this.say('¡Imagen completa! ¡A elegir!', '#ffd23f', 1.2);
+        }
+        return;
+      }
       this.phaseT += dt;
       if (this.clickIdx >= 0) { const i = this.clickIdx; this.clickIdx = -1; this.choose(i); if (this.phase !== 'show') return; }
       if (G.input.hit('left')) this.choose(0); else if (G.input.hit('down')) this.choose(1); else if (G.input.hit('right')) this.choose(2);
@@ -2527,12 +2579,38 @@
           if (this.pPick === i) cross(i !== this.diffIdx);
           if (this.josePick === i) cross(i !== this.diffIdx);
         }
+        if (this.phase === 'uncover') this.drawCover(c, pn); // la cubierta va ENCIMA de la imagen
       });
+      if (this.phase === 'uncover') { // cuenta atrás del destape + barra de lo ya revelado
+        G.text(c, `SE ESTÁ DESTAPANDO… ${Math.max(0, Math.ceil(IMG_UNCOVER_T - this.uncoverT))}`, 320, 104, { size: 13, color: '#b7a8e8', lw: 4 });
+        c.fillStyle = 'rgba(28,24,38,.8)'; c.fillRect(88, 288, 464, 5);
+        c.fillStyle = '#7fd3ff'; c.fillRect(88, 288, 464 * this.visibleFrac(), 5);
+      }
       if (this.phase === 'show') { // barra del tiempo de la ronda (8 s)
         c.fillStyle = 'rgba(28,24,38,.8)'; c.fillRect(88, 288, 464, 5);
         c.fillStyle = this.phaseT > 6 ? '#ff6b7a' : '#ffd23f'; c.fillRect(88, 288, 464 * Math.max(0, 1 - this.phaseT / 8), 5);
       }
       if (reveal) G.text(c, '¡ESA ERA LA DISTINTA!', 320, 104, { size: 13, color: '#ffd23f', lw: 4 });
+    }
+    // La cubierta de un panel: rejilla 6×4 de losetas oscuras a dos
+    // tonos (como un mantel a cuadros) con estrellitas y puntos tenues;
+    // cada loseta se desvanece en su turno de destape. Recortada al
+    // rectángulo redondeado del panel. La opacidad sale de cellCover:
+    // idéntica en los 3 paneles en todo instante.
+    drawCover(c, pn) {
+      const cw = IMG_W / IMG_GRID_C, ch = IMG_H / IMG_GRID_R;
+      c.save();
+      c.beginPath(); c.roundRect(pn.x, pn.y, IMG_W, IMG_H, 7); c.clip();
+      for (let cell = 0; cell < IMG_CELLS; cell++) {
+        const a = this.cellCover(cell); if (a <= 0) continue;
+        const col = cell % IMG_GRID_C, row = (cell / IMG_GRID_C) | 0, x = pn.x + col * cw, y = pn.y + row * ch;
+        c.globalAlpha = a;
+        c.fillStyle = (col + row) % 2 ? '#372c56' : '#2a2144'; c.fillRect(x, y, cw + 0.5, ch + 0.5);
+        if ((cell * 7) % 5 === 0) imgStar(c, x + cw / 2, y + ch / 2, 4.5, 'rgba(255,210,63,.45)');
+        else { c.fillStyle = 'rgba(183,168,232,.3)'; c.beginPath(); c.arc(x + cw / 2, y + ch / 2, 1.6, 0, 6.3); c.fill(); }
+        c.strokeStyle = 'rgba(10,6,22,.6)'; c.lineWidth = 1; c.beginPath(); c.rect(x + 0.5, y + 0.5, cw - 1, ch - 1); c.stroke();
+      }
+      c.restore(); c.globalAlpha = 1;
     }
     draw(dt) {
       W.render({
