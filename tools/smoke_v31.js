@@ -91,6 +91,15 @@
       chat del teléfono que aparece SOLO si tiene algo que
       mostrar (contenido nuevo o decisión pendiente) y se
       oculta solo cuando ya no hay nada pendiente.
+   Q) Música del juego principal (G.Music): la tabla MUSIC_CUES
+      reproduce el mapeo de Jose (menú Gold_Plated_Strut 0–16 en
+      loop, recolección Quarter_Slot_Swagger 25–86 en loop,
+      amenaza y victoria con Before_The_Strike — victoria desde
+      17 sin loop —, derrota con Controller_Down sin loop y la
+      gestión como PLAYLIST The_Last_Life + Gold_Plated_Strut),
+      la API existe, cambiar de cue y pausar/reanudar no lanzan
+      aunque los MP3 no existan, y el index.html carga music.js
+      entre data.js y game.js.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -204,6 +213,7 @@ load('teodora-sheets.js');
 load('jump-sheets.js');
 load('sprites.js');
 load('data.js');
+load('music.js');
 load('gl3d.js');
 load('world.js');
 load('scenes.js');
@@ -2447,6 +2457,67 @@ const tick = () => new Promise((r) => setImmediate(r));
     documentFake.querySelector('#mok').onclick(); await pEnd;
     check('candado: la pantalla del final se cierra con normalidad tras desbloquear',
       !overlayQ.classList.contains('show'), '');
+  }
+
+  // --- Sección R: música del juego principal (G.Music, 2026-11-22) ---
+  {
+    console.log('\nR) Música del juego principal — tabla de cues y API (sin MP3: silencio tolerante)');
+    const M = G.Music, C = M && M.CUES;
+    check('música: G.Music existe con su API (play/stop/setPaused/current/CUES)',
+      !!M && typeof M.play === 'function' && typeof M.stop === 'function' && typeof M.setPaused === 'function' && typeof M.current === 'function' && !!C);
+    check('música: menú = Gold_Plated_Strut.mp3, segmento 0–16, en loop',
+      !!C && C.menu.file === 'Gold_Plated_Strut.mp3' && C.menu.start === 0 && C.menu.end === 16 && C.menu.loop === true, C && JSON.stringify(C.menu));
+    check('música: recolección = Quarter_Slot_Swagger.mp3, segmento 25–86 (0:25–1:26), en loop',
+      !!C && C.collect.file === 'Quarter_Slot_Swagger.mp3' && C.collect.start === 25 && C.collect.end === 86 && C.collect.loop === true, C && JSON.stringify(C.collect));
+    check('música: amenaza = Before_The_Strike.mp3 desde el inicio, en loop',
+      !!C && C.threat.file === 'Before_The_Strike.mp3' && C.threat.start === 0 && C.threat.loop === true, C && JSON.stringify(C.threat));
+    check('música: victoria = Before_The_Strike.mp3 desde 17, SIN loop',
+      !!C && C.win.file === 'Before_The_Strike.mp3' && C.win.start === 17 && C.win.loop === false, C && JSON.stringify(C.win));
+    check('música: derrota = Controller_Down.mp3 completa, SIN loop',
+      !!C && C.lose.file === 'Controller_Down.mp3' && C.lose.start === 0 && C.lose.end === null && C.lose.loop === false, C && JSON.stringify(C.lose));
+    check('música: gestión = playlist en rotación [The_Last_Life, Gold_Plated_Strut], pistas completas, en loop',
+      !!C && Array.isArray(C.gestion.tracks) && C.gestion.tracks.length === 2
+      && C.gestion.tracks[0].file === 'The_Last_Life.mp3' && C.gestion.tracks[1].file === 'Gold_Plated_Strut.mp3'
+      && C.gestion.tracks.every((t) => t.start === 0 && t.end === null) && C.gestion.loop === true,
+      C && JSON.stringify(C.gestion));
+    check('música: todos los cues traen volumen moderado (0 < v ≤ 0.6, no tapa los sfx)',
+      !!C && Object.values(C).every((c) => typeof c.volume === 'number' && c.volume > 0 && c.volume <= 0.6));
+    let threw = null;
+    try {
+      M.play('menu'); const afterMenu = M.current();
+      M.play('collect'); const afterCollect = M.current();
+      M.play('cue-que-no-existe'); const afterBad = M.current();
+      M.setPaused(true); M.setPaused(false);
+      M.play('gestion'); const afterGestion = M.current();
+      M.stop();
+      check('música: play cambia el cue, un cue desconocido se ignora, pausa/reanuda y stop no lanzan sin archivos',
+        afterMenu === 'menu' && afterCollect === 'collect' && afterBad === 'collect' && afterGestion === 'gestion' && M.current() === null,
+        [afterMenu, afterCollect, afterBad, afterGestion, M.current()].join(','));
+    } catch (e) { threw = e; check('música: play/pausa/stop no lanzan sin archivos', false, String(e && e.message)); }
+    const htmlQ = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'index.html'), 'utf8');
+    const iData = htmlQ.indexOf('js/data.js'), iMusic = htmlQ.indexOf('js/music.js'), iGame = htmlQ.indexOf('js/game.js');
+    check('música: index.html carga js/music.js DESPUÉS de data.js y ANTES de game.js',
+      iData >= 0 && iMusic > iData && iGame > iMusic, `data=${iData} music=${iMusic} game=${iGame}`);
+    // Corrección de Jose (2026-11-22): la gestión suena SOLO en la
+    // escena de casa/chat; los minijuegos/duelos sueltos (historia y
+    // práctica) suenan con el cue de la recolección y al salir se
+    // repone el cue anterior. Las cadenas de finales alternativos
+    // (finalj1407b/finalleyendas) quedan fuera del gancho.
+    const gameQ = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'js', 'game.js'), 'utf8');
+    const iEnter = gameQ.indexOf('function enterMinigameMusic'), iExit = gameQ.indexOf('function exitMinigameMusic');
+    const enterBody = iEnter >= 0 ? gameQ.slice(iEnter, iExit > iEnter ? iExit : iEnter + 600) : '';
+    const exitBody = iExit >= 0 ? gameQ.slice(iExit, iExit + 400) : '';
+    check('música: enterMinigameMusic recuerda el cue activo y dispara collect, salvo en las cadenas de finales alternativos',
+      iEnter >= 0 && enterBody.includes("ENDING_CHAIN_GAMES.includes(gameId)") && enterBody.includes('G.Music.current()')
+      && enterBody.includes("G.Music.play('collect')") && gameQ.includes("const ENDING_CHAIN_GAMES = ['finalj1407b', 'finalleyendas']"), enterBody.slice(0, 140));
+    check('música: exitMinigameMusic repone el cue anterior (o detiene si no sonaba nada) y no toca las cadenas (undefined)',
+      iExit >= 0 && exitBody.includes('prev === undefined') && exitBody.includes('G.Music.play(prev)') && exitBody.includes('G.Music.stop()'), exitBody.slice(0, 140));
+    const countCalls = (needle) => gameQ.split(needle).length - 1;
+    check('música: AMBOS runners de minijuegos (historia y práctica) entran con enterMinigameMusic y salen con exitMinigameMusic',
+      countCalls('enterMinigameMusic(ev.game)') === 2 && countCalls('exitMinigameMusic(prevMusic)') === 2,
+      `enter=${countCalls('enterMinigameMusic(ev.game)')} exit=${countCalls('exitMinigameMusic(prevMusic)')}`);
+    check('música: ya NO queda la vieja reafirmación de gestión al volver de un duelo (la gestión es solo casa/chat)',
+      !gameQ.includes("G.Music.current() === 'gestion'"), '');
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

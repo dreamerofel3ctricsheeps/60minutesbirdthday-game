@@ -278,6 +278,7 @@
     // el reloj maestro es su currentTime (o el respaldo, que se
     // congela igual), así que al reanudar todo se rederiva exacto.
     if (S.phase === 'date' && G.DateMode) G.DateMode.setPaused(v);
+    if (G.Music) G.Music.setPaused(v); // la música del juego principal sigue la pausa global (en la cita ya está detenida)
     G.input.flush(); // que no quede una tecla/acción "cargada" al reanudar
     if (v) showPauseMenu(); else { pauseOv.classList.remove('show'); pauseOv.innerHTML = ''; }
   };
@@ -543,6 +544,7 @@
       G.paused = false; document.body.classList.remove('paused');
       pauseOv.classList.remove('show'); pauseOv.innerHTML = '';
       S.phase = 'date';
+      if (G.Music) G.Music.stop(); // la cita tiene SU canción (date.js): la del juego principal se detiene y no se toca
       G.DateMode.start(() => { location.href = location.pathname; }); // al terminar: título, limpio
       f.style.opacity = '0';
       setTimeout(() => { f.style.opacity = ''; f.style.transition = ''; }, 700);
@@ -644,6 +646,33 @@
       $('#mexit').onclick = () => res('exit');
     });
   }
+  // ---------- Música de los minijuegos (corrección de Jose, 2026-11-22) ----------
+  // La GESTIÓN (playlist The_Last_Life + Gold_Plated_Strut) suena SOLO
+  // en la escena de gestión/casa: la interacción con el chat entre
+  // duelos. TODOS los minijuegos y duelos sueltos — de la historia y
+  // del menú de práctica — suenan con el cue de la RECOLECCIÓN
+  // (Quarter_Slot_Swagger 0:25–1:26, en loop). Al entrar se recuerda
+  // el cue activo y al salir se repone: en la historia vuelve la
+  // gestión; en práctica vuelve el cue del contexto (menú/título o
+  // gestión). Si el cue anterior ya era 'collect', G.Music.play lo
+  // deja seguir sin reiniciar la pista.
+  // EXCEPCIÓN: las cadenas de finales alternativos (finalj1407b /
+  // finalleyendas → SpaceEndingScene / LegendsEndingScene) NO son
+  // minijuegos sueltos: su música no se toca aquí (devuelven
+  // undefined = «sin gancho»). Y «La Cita» va aparte: date.js intacto.
+  const ENDING_CHAIN_GAMES = ['finalj1407b', 'finalleyendas'];
+  function enterMinigameMusic(gameId) {
+    if (!G.Music || ENDING_CHAIN_GAMES.includes(gameId)) return undefined;
+    const prev = G.Music.current();
+    G.Music.play('collect');
+    return prev; // puede ser null: al salir se detiene la música
+  }
+  function exitMinigameMusic(prev) {
+    if (prev === undefined || !G.Music) return; // cadena de final: no tocar
+    if (prev) G.Music.play(prev);
+    else G.Music.stop();
+  }
+
   async function practiceDuel(id) {
     const ev = G.EVENTS[id], mg = MG[ev.game];
     const who = await pickCharScreen(ev);
@@ -654,9 +683,11 @@
       mg.setup();
       menuHide();
       G.captureKeys = true; $('#phone').classList.add('dim');
+      const prevMusic = enterMinigameMusic(ev.game); // el duelo suena a recolección
       const res = await new Promise((r) => G.setScene(new (mg.Scene())(who, r)));
       G.captureKeys = false; $('#phone').classList.remove('dim');
       G.setScene(G.home);
+      exitMinigameMusic(prevMusic); // vuelve el cue del contexto (menú/gestión)
       const act = await resultScreen(ev, res);
       if (act === 'again') continue;
       if (act === 'exit') { location.href = location.pathname; return; }
@@ -882,9 +913,14 @@
     await ui.modal(`<div class="vs"><div><img class="hero" src="${Sp.full(who)}" alt=""><b style="color:${c.color}">${c.name}</b></div><span>VS</span><div class="boss"><img class="hero" src="${bossImg}" alt=""><b style="color:${boss.color}">${boss.name}</b><small>JEFE</small></div></div>
       <h2>${evShow.title}</h2>${variant ? '<p class="goal">Sorteo de cactus: esta partida toca la variante «' + (variant === 'cactus2' ? 'Cactus en carrera' : 'Cactus rodantes') + '».</p>' : ''}<p>${evShow.intro}</p><p class="goal"><img class="inl-ico" src="assets/icons/trofeo.png" alt=""> ${evShow.goal}</p>`, '¡EMPEZAR!');
     G.captureKeys = true; $('#phone').classList.add('dim');
+    const prevMusic = enterMinigameMusic(ev.game); // el duelo suena a recolección
     const res = await new Promise((r) => G.setScene(new (mg.Scene())(who, r)));
     G.captureKeys = false; $('#phone').classList.remove('dim');
     G.setScene(G.home);
+    // Al volver a casa tras un duelo de la HISTORIA se repone el cue
+    // que sonaba antes del duelo: la gestión (la playlist queda solo
+    // para la escena de casa/chat, entre duelos).
+    exitMinigameMusic(prevMusic);
     S.duels.push({ game: ev.game, boss: ev.boss, win: res.win, ...(variant ? { variant } : {}) });
     ui.raw(`<div class="roll ${res.win === 'win' ? 'good' : res.win === 'tie' ? 'mid' : 'bad'}">${`<img class="res-ico" src="assets/icons/${res.win === 'win' ? 'trofeo' : res.win === 'tie' ? 'empate' : 'derrota'}.png" alt="">`} ${res.win === 'win' ? `VENCISTE A ${boss.name.toUpperCase()}` : res.win === 'tie' ? 'EMPATE' : `GANÓ ${boss.name.toUpperCase()}`}</div>`);
     const actor = G.home.actor(who); if (actor) { actor.expr = res.win === 'win' ? 'happy' : 'surprised'; actor.hop(160); G.after(4, () => (actor.expr = null)); }
@@ -914,7 +950,7 @@
 
   // ---------- Actos ----------
   async function actCollect() {
-    S.phase = 'collect'; ui.refreshHUD(); msgs.innerHTML = '';
+    S.phase = 'collect'; if (G.Music) G.Music.play('collect'); ui.refreshHUD(); msgs.innerHTML = '';
     ui.header('Acto 0', '1 minuto para la fiesta');
     ['majo|Ximena sale de guardia y viene para acá. Tenemos UN minuto.', 'fatima|El pastel quedó en algún lado. No me miren así.', 'majo|Agarren todo lo que sirva y guárdenlo en el armario del pasillo. Lo que no esté guardado cuando llegue, lo va a ver.', 'saulo|Y cuidado con Pollito y con José. Presiento que hoy van a ser nuestros jefes finales.'].forEach((l) => { const [w, t] = l.split('|'); ui.raw(`<div class="msg"><img class="av" src="${Sp.portrait(w)}" alt=""><div class="bubble"><b style="color:${G.CHARS[w].color}">${G.CHARS[w].name}</b>${t}</div></div>`); });
     G.captureKeys = true; $('#phone').classList.add('dim');
@@ -925,7 +961,7 @@
   }
 
   async function actArrival(res) {
-    S.phase = 'arrival'; S.sus = 5; S.sleep = 1;
+    S.phase = 'arrival'; if (G.Music) G.Music.play('threat'); S.sus = 5; S.sleep = 1; // Ximena entra: ella es la amenaza
     // La llegada se juega con los 7 roomies presentes; al terminar la
     // huida, la escena se queda solo con la party (removeRoomie).
     const home = (G.home = new Sc.HomeScene(G.PLAYABLE));
@@ -1033,6 +1069,7 @@
       W.closet.target = 0; G.sfx('door');
       outs.forEach((a) => (a.expr = null));
     }
+    if (G.Music) G.Music.play('gestion'); // arranca la noche: playlist de gestión (The_Last_Life + Gold_Plated_Strut)
     S.phase = 'act2'; home.setLight('noche'); home.setView('todo'); home.wander = true; recalc();
     await G.wait(1.2);
     home.showTitle('ACTO 2', 'OPERACIÓN: NO LA DESPIERTEN', 3.6);
@@ -1151,7 +1188,7 @@
   }
 
   async function actReveal(ruina) {
-    const home = G.home, xi = home.xi; S.phase = 'reveal'; home.wander = false;
+    const home = G.home, xi = home.xi; S.phase = 'reveal'; if (G.Music) G.Music.play('threat'); home.wander = false; // Ximena entra despierta: amenaza hasta que showEnding pone el remate
     const spots = [[470, 150], [560, 250], [420, 240], [648, 186]];
     const jw = S.duels.filter((d) => d.boss === 'jose' && d.win === 'win').length;
     if (ruina) {
@@ -1193,6 +1230,11 @@
     // guard deja constancia de que ni la práctica ni la cita
     // (fase 'date') pueden abrir el candado por esta vía.
     if (!G.practiceMode && S.phase !== 'date') G.unlockMinigames();
+    // Remate musical: 'ruina' (único final de derrota, tone 'bad') →
+    // Controller_Down completa; cualquier final NO ruina (sorpresa,
+    // caos y los alternativos espacio/leyendas, que no traen cierre
+    // musical propio) → Before_The_Strike desde 0:17, sin loop.
+    if (G.Music) G.Music.play(key === 'ruina' ? 'lose' : 'win');
     const e = G.ENDINGS[key], text = typeof e.text === 'function' ? e.text(S) : e.text;
     const lvl = Math.min(4, Math.floor(S.quality / 20));
     const extras = [];
@@ -1276,6 +1318,7 @@
     if (!hasGL) { overlay.innerHTML = '<div class="modal"><h2>Tu navegador no tiene WebGL activo</h2><p>El juego necesita WebGL para dibujar el departamento en 3D. Prueba con Chrome, Edge o Firefox actualizados.</p></div>'; overlay.classList.add('show'); return; }
     const bg = new Sc.HomeScene(); bg.wander = true; G.setScene(bg);
     requestAnimationFrame(frame);
+    if (G.Music) G.Music.play('menu'); // tema del título: Gold_Plated_Strut 0:00–0:16 en loop (si el autoplay lo frena, arranca al primer gesto)
     await titleScreen();
     // modo práctica: index.html?duelo=decoracion | pollito | mensajes | apagon | pizza | sonambula | memoria | cactus | repisas | pisoton | azotea
     const pr = /[?&]duelo=(\w+)/.exec(location.search);
