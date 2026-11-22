@@ -20,10 +20,14 @@
   function fromPad(m) {
     if (!G.input) return;
     if (m.t === 'joy') G.input.joySet(+m.x || 0, +m.y || 0);
-    else if (m.t === 'act') m.down ? G.input.touchDown('action', PID) : G.input.touchUp('action', PID);
+    else if (m.t === 'act') {
+      // flanco limpio en cada 'down' (si se perdió un 'up', no queda pegado)
+      if (m.down) { G.input.touchUp('action', PID); G.input.touchDown('action', PID); }
+      else G.input.touchUp('action', PID);
+    }
     else if (m.t === 'menu') { if (G.setPaused && G.canPause && G.canPause() || (G.setPaused && G.paused)) G.setPaused(!G.paused); scheduleScan(); }
     else if (m.t === 'pick') { const bs = curBox && curBox.querySelectorAll('button'); const b = bs && bs[m.i | 0]; if (b && !b.disabled) b.click(); scheduleScan(); }
-    if (m.t === 'hello' || m.t === 'joy' || m.t === 'act' || m.t === 'menu' || m.t === 'pick') setStatus(true);
+    if (m.t === 'hello' || m.t === 'joy' || m.t === 'act' || m.t === 'menu' || m.t === 'pick') setConn(true);
   }
 
   // ---- reflejar UI clic-only (pausa / overlay / decisión) ----
@@ -63,9 +67,14 @@
     scheduleScan();
   }
   function hide() { if (panel) panel.style.display = 'none'; }   // mantiene la conexión viva
-  function disconnect() { if (es) { es.close(); es = null; } if (mo) { mo.disconnect(); mo = null; } try { G.input.joySet(0, 0); G.input.touchUp('action', PID); } catch (e) {} hide(); }
+  function disconnect() { setConn(false); if (es) { es.close(); es = null; } if (mo) { mo.disconnect(); mo = null; } try { G.input.joySet(0, 0); G.input.touchUp('action', PID); } catch (e) {} hide(); }
 
   function setStatus(on) { if (panel) { const s = panel.querySelector('.rp-status'); if (s) s.textContent = on ? 'Teléfono conectado ✓' : 'Esperando teléfono…'; } }
+  let padOn = false;
+  function pinChat(on) { // fija el chat abierto en escritorio mientras el mando está conectado (usa el mismo 'pinned' del juego)
+    try { const ph = G.ui && G.ui.phone; if (!ph) return; ph.pinned = on; if (on) { if (ph.show) ph.show(); } else if (ph.paint) ph.paint(); } catch (e) {}
+  }
+  function setConn(on) { setStatus(on); if (on !== padOn) { padOn = on; pinChat(on); } }
   function build(url) {
     styles();
     panel = document.createElement('div'); panel.className = 'rp-panel';
