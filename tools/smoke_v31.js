@@ -91,6 +91,15 @@
       chat del teléfono que aparece SOLO si tiene algo que
       mostrar (contenido nuevo o decisión pendiente) y se
       oculta solo cuando ya no hay nada pendiente.
+   Q) Música del juego principal (G.Music): la tabla MUSIC_CUES
+      reproduce el mapeo de Jose (menú Gold_Plated_Strut 0–16 en
+      loop, recolección Quarter_Slot_Swagger 25–86 en loop,
+      amenaza y victoria con Before_The_Strike — victoria desde
+      17 sin loop —, derrota con Controller_Down sin loop y la
+      gestión como PLAYLIST The_Last_Life + Gold_Plated_Strut),
+      la API existe, cambiar de cue y pausar/reanudar no lanzan
+      aunque los MP3 no existan, y el index.html carga music.js
+      entre data.js y game.js.
    Uso: node tools/smoke_v31.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -192,6 +201,7 @@ load('teodora-sheets.js');
 load('jump-sheets.js');
 load('sprites.js');
 load('data.js');
+load('music.js');
 load('gl3d.js');
 load('world.js');
 load('scenes.js');
@@ -2305,6 +2315,47 @@ const tick = () => new Promise((r) => setImmediate(r));
       !cssP.includes('@media (max-width: 900px) {') && cssP.includes('@media (max-width: 900px) and (max-aspect-ratio: 4/5)'), '');
     check('encuadre: la tarjeta del título escala con el alto del escenario (clamp con cqh, no solo con vw)',
       cssP.includes('clamp(26px, 9.5cqh, 50px)') && cssP.includes('clamp(12px, 3.3cqh, 14px)'), '');
+  }
+
+  // --- Sección Q: música del juego principal (G.Music, 2026-11-22) ---
+  {
+    console.log('\nQ) Música del juego principal — tabla de cues y API (sin MP3: silencio tolerante)');
+    const M = G.Music, C = M && M.CUES;
+    check('música: G.Music existe con su API (play/stop/setPaused/current/CUES)',
+      !!M && typeof M.play === 'function' && typeof M.stop === 'function' && typeof M.setPaused === 'function' && typeof M.current === 'function' && !!C);
+    check('música: menú = Gold_Plated_Strut.mp3, segmento 0–16, en loop',
+      !!C && C.menu.file === 'Gold_Plated_Strut.mp3' && C.menu.start === 0 && C.menu.end === 16 && C.menu.loop === true, C && JSON.stringify(C.menu));
+    check('música: recolección = Quarter_Slot_Swagger.mp3, segmento 25–86 (0:25–1:26), en loop',
+      !!C && C.collect.file === 'Quarter_Slot_Swagger.mp3' && C.collect.start === 25 && C.collect.end === 86 && C.collect.loop === true, C && JSON.stringify(C.collect));
+    check('música: amenaza = Before_The_Strike.mp3 desde el inicio, en loop',
+      !!C && C.threat.file === 'Before_The_Strike.mp3' && C.threat.start === 0 && C.threat.loop === true, C && JSON.stringify(C.threat));
+    check('música: victoria = Before_The_Strike.mp3 desde 17, SIN loop',
+      !!C && C.win.file === 'Before_The_Strike.mp3' && C.win.start === 17 && C.win.loop === false, C && JSON.stringify(C.win));
+    check('música: derrota = Controller_Down.mp3 completa, SIN loop',
+      !!C && C.lose.file === 'Controller_Down.mp3' && C.lose.start === 0 && C.lose.end === null && C.lose.loop === false, C && JSON.stringify(C.lose));
+    check('música: gestión = playlist en rotación [The_Last_Life, Gold_Plated_Strut], pistas completas, en loop',
+      !!C && Array.isArray(C.gestion.tracks) && C.gestion.tracks.length === 2
+      && C.gestion.tracks[0].file === 'The_Last_Life.mp3' && C.gestion.tracks[1].file === 'Gold_Plated_Strut.mp3'
+      && C.gestion.tracks.every((t) => t.start === 0 && t.end === null) && C.gestion.loop === true,
+      C && JSON.stringify(C.gestion));
+    check('música: todos los cues traen volumen moderado (0 < v ≤ 0.6, no tapa los sfx)',
+      !!C && Object.values(C).every((c) => typeof c.volume === 'number' && c.volume > 0 && c.volume <= 0.6));
+    let threw = null;
+    try {
+      M.play('menu'); const afterMenu = M.current();
+      M.play('collect'); const afterCollect = M.current();
+      M.play('cue-que-no-existe'); const afterBad = M.current();
+      M.setPaused(true); M.setPaused(false);
+      M.play('gestion'); const afterGestion = M.current();
+      M.stop();
+      check('música: play cambia el cue, un cue desconocido se ignora, pausa/reanuda y stop no lanzan sin archivos',
+        afterMenu === 'menu' && afterCollect === 'collect' && afterBad === 'collect' && afterGestion === 'gestion' && M.current() === null,
+        [afterMenu, afterCollect, afterBad, afterGestion, M.current()].join(','));
+    } catch (e) { threw = e; check('música: play/pausa/stop no lanzan sin archivos', false, String(e && e.message)); }
+    const htmlQ = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'index.html'), 'utf8');
+    const iData = htmlQ.indexOf('js/data.js'), iMusic = htmlQ.indexOf('js/music.js'), iGame = htmlQ.indexOf('js/game.js');
+    check('música: index.html carga js/music.js DESPUÉS de data.js y ANTES de game.js',
+      iData >= 0 && iMusic > iData && iGame > iMusic, `data=${iData} music=${iMusic} game=${iGame}`);
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
