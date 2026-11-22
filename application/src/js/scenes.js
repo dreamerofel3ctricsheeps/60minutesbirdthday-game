@@ -4311,7 +4311,7 @@
   // La lista suma las poses de la cinemática del final (altiva y
   // presentadora) y las de «La soga de fuego» (salto de su hoja de
   // poses de boss y quemada cómica de la de faltantes).
-  const TEODORA_FILES = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada', 'teodora-idle2', 'teodora-side', 'teodora-side-izq', 'teodora-altiva', 'teodora-presentadora', 'teodora-salto', 'teodora-quemada'];
+  const TEODORA_FILES = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada', 'teodora-idle2', 'teodora-side', 'teodora-side-izq', 'teodora-altiva', 'teodora-presentadora', 'teodora-salto', 'teodora-quemada', 'teodora-side2', 'teodora-side-izq2'];
   // Alto en mundo del billboard. Desde la 3ª ronda los PNG de
   // Teodora llevan MARGEN transparente (la figura mide 440 de los
   // 468 px del lienzo): 80 × 468/440 ≈ 85 para que su tamaño en
@@ -4349,10 +4349,15 @@
       // la estela, anticipación antes de despegar hacia el hexágono,
       // asentamiento al llegar y estela de chispas en desplazamiento.
       this.teoSpeed = 0; this.teoAnticip = 0; this.teoSettleT = 0; this.teoWasMoving = false;
-      // Reloj PROPIO de la alternancia de frames del vuelo (~7 fps):
-      // solo avanza en draw(), así la pose es estable entre frames
-      // y determinista fuera de pantalla (teoPose devuelve el frame
-      // principal si nadie ha dibujado todavía).
+      // Trayecto de vuelo en curso (4ª ronda): origen, destino y
+      // distancia inicial del viaje al hexágono seguro; de ahí sale
+      // el ARCO de su elevación en draw (sube al despegar, baja al
+      // llegar). Sin trayecto, teoArc = 0.
+      this.teoTrip = null; this.teoArc = 0;
+      // Reloj PROPIO de la alternancia de frames HERMANOS del vuelo
+      // (~5 fps): solo avanza en draw(), así la pose es estable
+      // entre frames y determinista fuera de pantalla (teoPose
+      // devuelve el frame principal si nadie ha dibujado todavía).
       this.teoAnimT = 0;
       this.teoTrail = []; this.teoTrailAcc = 0;
       teoPreload(); // Teodora de este duelo es imagen diseñada
@@ -4398,6 +4403,7 @@
       if (this.teoShockT > 0) this.teoShockT -= dt;
       if (this.shakeT > 0) this.shakeT -= dt;
       if (this.phase === 'trazo') {
+        this.teoTrip = null; this.teoArc = 0; // trazando no hay trayecto de vuelo ni arco
         this.moveActor(p, dt, 114); // velocidades ×TRAZO_SCALE: el set se reescaló, los tiempos no
         // Teodora recorre la línea con ruido lateral; en su selfie se
         // detiene a mitad de camino y deriva hacia la cámara.
@@ -4436,8 +4442,15 @@
       }
       else if (this.phase === 'corre' || this.phase === 'cae') {
         this.moveActor(p, dt, 157);
-        // Teodora FLOTA: tarda ~0.9 s en "pisar" (su gracia), luego va al seguro más cercano
-        if (this.pt > 0.9 || this.phase === 'cae') { const tgt = this.hexes.filter((h) => h.safe).sort((a, b) => Math.hypot(a.x - this.teo.x, a.y - this.teo.y) - Math.hypot(b.x - this.teo.x, b.y - this.teo.y))[0]; if (tgt) { const d = Math.hypot(tgt.x - this.teo.x, tgt.y - this.teo.y), step = 119 * dt; if (d > 4) { this.teo.x += ((tgt.x - this.teo.x) / d) * Math.min(step, d); this.teo.y += ((tgt.y - this.teo.y) / d) * Math.min(step, d); } } }
+        // Teodora FLOTA: tarda ~0.9 s en "pisar" (su gracia), luego va al seguro más cercano.
+        // El viaje se registra como TRAYECTO (teoTrip) para que draw
+        // le ponga el arco de elevación: la velocidad en línea recta
+        // es constante, así que el progreso (1 − d/d0) describe un
+        // arco limpio de despegue a aterrizaje (4ª ronda: la
+        // traslación lineal con el bob senoidal desfasado se leía
+        // como «saltos» — el vuelo ahora respira con el trayecto).
+        if (this.pt > 0.9 || this.phase === 'cae') { const tgt = this.hexes.filter((h) => h.safe).sort((a, b) => Math.hypot(a.x - this.teo.x, a.y - this.teo.y) - Math.hypot(b.x - this.teo.x, b.y - this.teo.y))[0]; if (tgt) { const d = Math.hypot(tgt.x - this.teo.x, tgt.y - this.teo.y), step = 119 * dt; if (!this.teoTrip || this.teoTrip.tx !== tgt.x || this.teoTrip.ty !== tgt.y) this.teoTrip = { sx: this.teo.x, sy: this.teo.y, tx: tgt.x, ty: tgt.y, d0: Math.max(1, d) }; if (d > 4) { this.teo.x += ((tgt.x - this.teo.x) / d) * Math.min(step, d); this.teo.y += ((tgt.y - this.teo.y) / d) * Math.min(step, d); this.teoArc = Math.sin(Math.PI * clamp15(1 - d / this.teoTrip.d0, 0, 1)); } else { this.teoTrip = null; this.teoArc = 0; } } }
+        else { this.teoTrip = null; this.teoArc = 0; } // aún en su gracia de flotación: sin arco
         // Partners CON velocidad (misma corrección que moveActor:
         // sin vx/vy su caminata no avanza y se deslizan).
         this.partners.forEach((a) => { if (a.tx) { const d = Math.hypot(a.tx.x - a.x, a.tx.y - a.y); if (d > 5) { a.vx = ((a.tx.x - a.x) / d) * 126; a.vy = ((a.tx.y - a.y) / d) * 126; a.x += a.vx * dt; a.y += a.vy * dt; a.moving = true; a.dir = a.tx.x < a.x ? 'left' : 'right'; } else { a.vx = 0; a.vy = 0; a.moving = false; } } });
@@ -4491,14 +4504,19 @@
         // diseño; las hojas solo traían el derecho); a la derecha,
         // ráfaga «dash» si va lanzada en horizontal y perfil de su
         // hoja si va en diagonal; casi vertical, frontal flotando.
-        // ALTERNANCIA de frames a ~7 fps (3ª ronda: Jose la seguía
-        // viendo deslizarse como un cartón): la pose direccional
-        // alterna con el otro punto de flotación según el reloj
-        // propio teoAnimT — el vuelo se lee vivo, con aleteo.
-        const alt = Math.floor(this.teoAnimT / 0.143) % 2 === 1;
-        if (this.teoVx < -14) return alt ? 'idle2' : 'side-izq';
-        if (this.teoVx > 60) return alt ? 'side' : 'dash';
-        if (this.teoVx > 14) return alt ? 'idle2' : 'side';
+        // POSE CONSTANTE por trayecto (4ª ronda, diagnóstico de
+        // Jose: «se mueve como saltando»): la velocidad hacia el
+        // hexágono es constante en línea recta, así que la pose que
+        // sale de (vx, vy) NO cambia a mitad de camino. Lo único que
+        // alterna, a ~5 fps, es el frame HERMANO de la MISMA pose
+        // de perfil (side↔side2, side-izq↔side-izq2: pelo y vestido
+        // desplazados) — la alternancia anterior mezclaba perfil
+        // con el FRONTAL idle2 cada ~0,14 s y eso se leía como
+        // brincos/teletransporte entre siluetas incompatibles.
+        const alt = Math.floor(this.teoAnimT / 0.2) % 2 === 1;
+        if (this.teoVx < -14) return alt ? 'side-izq2' : 'side-izq';
+        if (this.teoVx > 60) return 'dash';
+        if (this.teoVx > 14) return alt ? 'side2' : 'side';
         return 'idle'; // casi vertical: frontal (draw alterna idle/idle2 con el bob)
       }
       // ESPERA (la pausa «pre», el aviso y la gracia de flotación
@@ -4513,9 +4531,11 @@
       // Sacudida de cámara del hundimiento (desplome y caídas).
       const sh = this.shakeT > 0 ? Math.sin(t * 70) * 3 * (this.shakeT / 0.3) : 0;
       const cam = sh ? { ...this.cam, x: this.cam.x + sh, z: this.cam.z + sh * 0.6 } : this.cam;
-      // Inclinación de vuelo de Teodora: persigue su velocidad lateral.
-      const rollTgt = clamp15(this.teoVx * 0.0011, -0.2, 0.2);
-      this.teoRoll += (rollTgt - this.teoRoll) * Math.min(1, dt * 10);
+      // Inclinación de vuelo de Teodora: persigue su velocidad
+      // lateral con una persecución LENTA (4ª ronda: balanceo
+      // suave, no un tirón por frame).
+      const rollTgt = clamp15(this.teoVx * 0.0011, -0.18, 0.18);
+      this.teoRoll += (rollTgt - this.teoRoll) * Math.min(1, dt * 5);
       W.render({
         cam, dt, light: TRAZO_LIGHT, noApartment: true, actors: [p, ...this.partners], focusZ: 0,
         boxes: (mb) => {
@@ -4559,18 +4579,26 @@
           // apagan tras ella (la emite update() al desplazarse).
           for (const tp of this.teoTrail) { const lf = Math.max(0, tp.life / tp.max), ss = tp.s * (0.5 + lf); R.sprite(R.glowTex, tp.x, 30 + Math.sin(t * 5 + tp.x) * 2, tp.y, { w: ss, h: ss, lit: 0, alpha: 0.38 * lf }); }
           // Teodora DISEÑADA como billboard, con la pose de su estado
-          // y SIEMPRE flotando. El bob ya no es un vaivén fijo: su
-          // amplitud y frecuencia crecen con su velocidad, quieta
-          // alterna los DOS puntos del bob de su hoja (idle/idle2),
+          // y SIEMPRE flotando. Su elevación combina el ARCO del
+          // trayecto con un bob continuo de baja frecuencia (abajo),
           // antes de despegar se agacha (anticipación) y al llegar
           // se asienta con un respiro.
           let teoPoseName = this.teoPose();
           if (teoPoseName === 'idle' && Math.sin(t * 2.2) > 0) teoPoseName = 'idle2';
-          const tim = teoImg('teodora-' + teoPoseName);
+          let tim = teoImg('teodora-' + teoPoseName);
+          // Si el frame HERMANO de vuelo aún no cargó, se pinta la
+          // pose base: nunca un hueco en mitad del trayecto.
+          if (!rocketReady(tim) && (teoPoseName === 'side2' || teoPoseName === 'side-izq2')) { teoPoseName = teoPoseName.slice(0, -1); tim = teoImg('teodora-' + teoPoseName); }
           if (rocketReady(tim)) {
             const asp = (tim.naturalWidth && tim.naturalHeight) ? tim.naturalWidth / tim.naturalHeight : 0.6;
-            const spd = this.teoSpeed || 0;
-            let teoElevY = 15 + Math.sin(t * (2.2 + Math.min(3.2, spd * 0.026))) * (3 + Math.min(5, spd * 0.045));
+            // Elevación (4ª ronda): base + ARCO del trayecto
+            // (teoArc: 0 al despegar, 1 a mitad de camino, 0 al
+            // llegar; la sube ~11 u en el aire) + bob senoidal
+            // CONTINUO de ~1,5 Hz y ±3,5 u, en fase con el arco.
+            // El bob anterior crecía en frecuencia/amplitud con la
+            // velocidad y, sumado a la traslación lineal, producía
+            // el «se mueve como saltando» que reportó Jose.
+            let teoElevY = 15 + (this.teoArc || 0) * 11 + Math.sin(t * 9.42) * 3.5;
             // TECLEO en el celular (pose selfie = sus esperas): bob
             // CORTO y RÁPIDO (~2 Hz, 1,6 u) y un balanceo leve del
             // roll — está escribiendo en el teléfono, no posando

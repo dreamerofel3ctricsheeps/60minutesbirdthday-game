@@ -119,6 +119,15 @@ CUTS = [
     # y el dash), para su momento de la selfie quemada del guion.
     ("salto", "teodora-poses-boss-v1.webp", (610, 0, 1330, 912), False),
     ("quemada", "teodora-sprites-faltantes-v1.webp", (490, 0, 998, 992), False),
+    # Cuarta ronda (2026-11-21): frames HERMANOS de vuelo, GENERADOS
+    # con la herramienta de imágenes desde side / side-izq (misma
+    # pose de perfil, pelo y vestido desplazados): el vuelo del
+    # Trazo alterna SOLO entre hermanos de la misma pose (~5 fps);
+    # la alternancia anterior (perfil ↔ frontal idle2) se leía como
+    # saltos/teletransporte. side-izq2 se dibujó nativamente hacia
+    # la izquierda, con su moño en su lado: NO es un espejo.
+    ("side2", "teodora-float-derecha-frame2-generada-v1.png", (0, 0, 1280, 1856), False),
+    ("side-izq2", "teodora-float-izquierda-frame2-generada-v1.png", (0, 0, 1680, 1392), False),
 ]
 NAMES = [f"teodora-{pose}" for pose, _sheet, _cell, _sh in CUTS]
 TARGET_H = 440

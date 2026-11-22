@@ -1869,8 +1869,8 @@ const tick = () => new Promise((r) => setImmediate(r));
       const frameA = dw2.teoPose();
       dw2.teoAnimT = 0.2; // ~7 fps: el segundo frame del vuelo
       const frameB = dw2.teoPose();
-      check('trazo: en espera Teodora está con el celular (selfie) y en vuelo alterna frames (side-izq ↔ idle2)',
-        poseEspera === 'selfie' && frameA === 'side-izq' && frameB === 'idle2', `${poseEspera}/${frameA}/${frameB}`);
+      check('trazo: en espera Teodora está con el celular (selfie) y en vuelo la pose es CONSTANTE por trayecto, alternando solo su frame HERMANO (side-izq ↔ side-izq2; 4ª ronda: fuera el frontal idle2 que se leía como brinco)',
+        poseEspera === 'selfie' && frameA === 'side-izq' && frameB === 'side-izq2', `${poseEspera}/${frameA}/${frameB}`);
       check('trazo: el tecleo tiene su micro-animación (bob ~2 Hz de 1,6 u y balanceo) en draw',
         trazoSrcV.includes('Math.sin(t * 12.6) * 1.6') && trazoSrcV.includes('Math.sin(t * 6.3) * 0.03') && trazoSrcV.includes('this.teoAnimT += dt'), '');
     }
