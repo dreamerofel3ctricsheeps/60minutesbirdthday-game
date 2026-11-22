@@ -59,6 +59,16 @@
       re-salta al reanudar. Y el botón de silencio #dateMuteBtn:
       existe con el modo activo, clic y tecla M alternan
       song.muted/D.muted, y desaparece con body.date-mode.
+   M) Las bolas de paja de San Ángel (pedido de Jose): foto
+      real CC versionada (bola-paja.png, Noah Wulf, CC BY-SA
+      4.0) que el viento arrastra de derecha a izquierda por
+      la calle: nacen a la derecha de la pantalla SOLO con el
+      controlado en la zona de la calle (x < 2500; en la del
+      árbol no nace ninguna), ruedan con ángulo = distancia/
+      radio, respetan la cadencia (3,5–6,5 s) y el tope de
+      vivas (3), y al chocar SOLO con el controlado estallan
+      en pajitas y lo frenan de verdad (×0,4 por 0,7 s, medido
+      en desplazamiento); el seguidor las atraviesa.
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -895,6 +905,105 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (let i = 0; i < 15; i++) sc2.update(0.05);
   check('al llegar a la plaza del reingreso, la canción arranca de nuevo',
     sc2.phase === 'plaza' && DM.state.clockRunning === true && DM.state.clockStarted === true, 'phase=' + sc2.phase);
+  DM.stop();
+
+  console.log('\nM) Escena 2 «San Ángel»: las bolas de paja del viento (obstáculos de foto real)');
+  // El asset: foto real CC versionada en el repo (no es de la
+  // película) y registrada en el manifiesto como las demás.
+  const bolaVersionada = (() => {
+    try {
+      const out = require('child_process').execSync(
+        'git ls-files application/src/assets/date/',
+        { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+      return out.includes('bola-paja.png');
+    } catch (e) { return false; }
+  })();
+  check('bola-paja.png existe, está versionada y FUENTES.md la registra (Noah Wulf, CC BY-SA 4.0, Wikimedia Commons)',
+    fs.existsSync(path.join(DATE_DIR, 'bola-paja.png')) && bolaVersionada &&
+    fuentes.includes('bola-paja.png') && fuentes.includes('Noah Wulf') && fuentes.includes('Tumbleweed_on_W_Lone_Mtn_Rd'));
+  check('date.js carga la bola de paja y expone sus parámetros (SA_BOLAS: freno ×0,4 por 0,7 s, zona de calle < 2500)',
+    dateSrc.includes('bola-paja.png') && !!DM.debug.SA_BOLAS &&
+    DM.debug.SA_BOLAS.frenoK === 0.4 && DM.debug.SA_BOLAS.frenoT === 0.7 && DM.debug.SA_BOLAS.zonaX === 2500 &&
+    DM.debug.SA_BOLAS.maxVivas === 3 && DM.debug.SA_BOLAS.cadMin === 3.5 && DM.debug.SA_BOLAS.cadMax === 6.5);
+  check('el freno es opt-in de San Ángel: la plaza no define speedK (el motor compartido no cambia para las demás escenas)',
+    sc.speedK === undefined);
+  // Se re-entra a la cita y se cruza a San Ángel en modo libre.
+  DM.start(() => {});
+  DM.debug.travelTo('sanangel');
+  const sa2 = G.scene;
+  for (let i = 0; i < 25 && sa2.phase !== 'free'; i++) sa2.update(0.05);
+  check('se vuelve a San Ángel en modo libre para ejercitar las bolas', sa2.id === 'sanangel' && sa2.phase === 'free', 'phase=' + sa2.phase);
+  const SF = sa2.free, SA = SF.chars[SF.active];
+  const SB = SF.chars[SF.active === 'ximena' ? 'jose' : 'ximena'];
+  // Nacimiento y rodadura: la bola entra por la derecha de la
+  // pantalla y rueda a la izquierda con su velocidad de viento.
+  SA.x = 600; SA.y = sa2.groundY; SB.x = SA.x - 70; SB.y = sa2.groundY; sa2.pan = 280;
+  sa2.bolas.length = 0; sa2.bolaTimer = 0; // forzar la primera aparición
+  sa2.update(0.05);
+  check('con el controlado en la calle, el viento trae una bola que nace a la derecha de la pantalla',
+    sa2.bolas.length === 1 && sa2.bolas[0].x > sa2.pan + 620,
+    sa2.bolas.length ? `x=${sa2.bolas[0].x.toFixed(0)}, pan=${sa2.pan.toFixed(0)}` : 'sin bolas');
+  check('tras nacer, la cadencia siguiente queda en el rango 3,5–6,5 s',
+    sa2.bolaTimer >= 3.5 && sa2.bolaTimer <= 6.5, 'timer=' + sa2.bolaTimer.toFixed(2));
+  const b0 = sa2.bolas[0], bx0 = b0.x;
+  for (let i = 0; i < 20; i++) sa2.update(0.05); // 1 s de rodadura
+  check('la bola rueda hacia la izquierda a su velocidad de viento (120–180 px/s)',
+    bx0 - b0.x >= 115 && bx0 - b0.x <= 185, `Δx=${(bx0 - b0.x).toFixed(0)}`);
+  check('su rotación es la de rodadura: |ángulo| = distancia/radio y crece al rodar',
+    Math.abs(Math.abs(b0.ang) - b0.dist / b0.r) < 0.01 && Math.abs(b0.ang) > 2,
+    `|ang|=${Math.abs(b0.ang).toFixed(2)}, dist/r=${(b0.dist / b0.r).toFixed(2)}`);
+  check('los tamaños de bola quedan en el rango 34–58 px de diámetro',
+    b0.r * 2 >= 34 && b0.r * 2 <= 58, 'd=' + (b0.r * 2).toFixed(0));
+  // Tope de vivas: con 3 rodando no nace una cuarta.
+  sa2.bolas.length = 0;
+  for (let i = 0; i < 3; i++) sa2.bolas.push({ x: sa2.pan + 3000 + i * 300, y: sa2.groundY, r: 22, vel: 130, dist: 0, ang: 0, ph: 0 });
+  sa2.bolaTimer = 0;
+  sa2.update(0.05);
+  check('con 3 bolas vivas no nace una cuarta (tope de vivas)', sa2.bolas.length === 3, 'vivas=' + sa2.bolas.length);
+  // Puerta de zona: en la zona del árbol no nace ninguna.
+  sa2.bolas.length = 0; sa2.bolaTimer = 0;
+  SA.x = 3000; SA.y = sa2.groundY;
+  for (let i = 0; i < 10; i++) sa2.update(0.05);
+  check('en la zona del árbol (controlado en x ≥ 2500) NO nace ninguna bola', sa2.bolas.length === 0, 'vivas=' + sa2.bolas.length);
+  // Choque con el controlado: estalla en pajitas y frena.
+  SA.x = 800; SA.y = sa2.groundY; sa2.pan = 480;
+  sa2.bolas.length = 0; sa2.bolaTimer = 999; sa2.pajitas.length = 0;
+  sa2.bolas.push({ x: SA.x + 30, y: SA.y, r: 24, vel: 150, dist: 0, ang: 0, ph: 0 });
+  sa2.update(0.05);
+  check('al chocar con el controlado, la bola estalla en pajitas y desaparece',
+    sa2.bolas.length === 0 && sa2.pajitas.length >= 5, `pajitas=${sa2.pajitas.length}`);
+  check('el choque arma el trastabilleo (frenoT ≈ 0,7 s)', sa2.frenoT > 0.5, 'frenoT=' + sa2.frenoT.toFixed(2));
+  sa2.update(0.016);
+  check('durante el trastabilleo el motor mueve al activo con speedK ×0,4', sa2.speedK === 0.4, 'speedK=' + sa2.speedK);
+  // El freno se mide en desplazamiento: 0,5 s con la flecha.
+  sa2.bolas.length = 0; sa2.pajitas.length = 0;
+  SA.x = 800; SA.y = sa2.groundY; sa2.frenoT = 0; sa2.speedK = 1;
+  key('ArrowRight', true);
+  for (let i = 0; i < 10; i++) sa2.update(0.05);
+  key('ArrowRight', false);
+  const dispLibre = SA.x - 800;
+  SA.x = 800; sa2.frenoT = 0.7;
+  key('ArrowRight', true);
+  for (let i = 0; i < 10; i++) sa2.update(0.05);
+  key('ArrowRight', false);
+  const dispFreno = SA.x - 800;
+  check('el trastabilleo frena de verdad: en 0,5 s se avanza ~×0,4 del paso libre',
+    dispLibre > 60 && dispFreno > 15 && dispFreno < dispLibre * 0.55,
+    `libre=${dispLibre.toFixed(0)} px, freno=${dispFreno.toFixed(0)} px`);
+  for (let i = 0; i < 20; i++) sa2.update(0.05);
+  check('pasado el trastabilleo (~0,7 s) la velocidad vuelve a la normal (frenoT 0, speedK 1)',
+    sa2.frenoT === 0 && sa2.speedK === 1, `frenoT=${sa2.frenoT}, speedK=${sa2.speedK}`);
+  // El seguidor no choca: la bola lo atraviesa.
+  sa2.bolas.length = 0; sa2.bolaTimer = 999; sa2.frenoT = 0;
+  SA.x = 500; SA.y = sa2.groundY; SB.x = 1200; SB.y = sa2.groundY;
+  sa2.bolas.push({ x: SB.x, y: SB.y, r: 24, vel: 150, dist: 0, ang: 0, ph: 0 });
+  sa2.update(0.05); sa2.update(0.05);
+  check('las bolas atraviesan al SEGUIDOR sin chocar ni frenar a nadie',
+    sa2.bolas.length === 1 && sa2.frenoT === 0, `vivas=${sa2.bolas.length}, frenoT=${sa2.frenoT}`);
+  // Dibujo con bolas vivas en varios puntos del paseo.
+  let sa2DrawOk = true;
+  for (const p of [0, 1200, 3260]) { sa2.pan = p; try { sa2.draw(0.016); } catch (e) { sa2DrawOk = false; } }
+  check('draw() de San Ángel con bolas vivas no explota en ningún punto del paseo (pan 0/1200/3260)', sa2DrawOk);
   DM.stop();
 
   DM.debug.setHash(realHash); // el hash real queda como estaba

@@ -140,3 +140,17 @@
 - Si la carpeta no está en la copia local, la escena de San Ángel
   se juega igual: cada elemento se dibuja solo si su imagen
   cargó, y el cielo y el piso se dibujan por código.
+
+## bola-paja.png — La bola de paja que rueda por San Ángel
+- **Foto original:** «Tumbleweed on W Lone Mtn Rd.jpg» (4272 × 2848)
+- **Autor:** Noah Wulf
+- **Fuente:** Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Tumbleweed_on_W_Lone_Mtn_Rd.jpg
+- **Licencia:** CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+- **Descargada:** 2026-11-21 (versión de 1920 px)
+- **Procesado:** `tools/mkcutout.py` (rembg) con recorte
+  x 0,36–0,63 / y 0,16–0,52 sobre la versión de 1920 px,
+  borde blanco horneado y sombra suave, verificado sobre
+  fondo magenta. Salida: 370 × 259. En la escena 2 es el
+  obstáculo de la calle: el viento la arrastra de derecha a
+  izquierda rodando, y al chocar con el personaje controlado
+  estalla en pajitas y lo frena un instante (×0,4 por 0,7 s).

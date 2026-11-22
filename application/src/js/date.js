@@ -413,6 +413,12 @@
   const saArbol = loadDateImg('assets/date/sanangel/arbol.png');
   const saVelaA = loadDateImg('assets/date/sanangel/vela-a.png');
   const saVelaB = loadDateImg('assets/date/sanangel/vela-b.png');
+  // La bola de paja de San Ángel: foto real CC (NO es de la
+  // película: está versionada en el repo como los demás
+  // recortes CC; procedencia en FUENTES.md). Rueda por la
+  // calle arrastrada por el viento como obstáculo (ver
+  // SA_BOLAS y SanAngelScene.updateBolas).
+  const bolaPajaImg = loadDateImg('assets/date/bola-paja.png');
   // Geometría de la franja de San Ángel: 3900 px de mundo (el
   // w de su bloque en la tabla maestra: 26 s × PACE), la Puerta
   // de entrada a la izquierda (x=90) y la de salida junto al
@@ -443,6 +449,19 @@
   function candleGlow(t, i) {
     return 0.72 + 0.28 * Math.sin(t * 6.3 + i * 1.93) * Math.sin(t * 2.7 + i * 0.71);
   }
+  // Las bolas de paja de San Ángel (pedido de Jose): obstáculos
+  // de foto real que el viento arrastra de derecha a izquierda
+  // por la calle. Nacen solo mientras el personaje CONTROLADO
+  // está en la zona de la calle (x < zonaX: antes del velo de
+  // anochecer y del árbol, donde no nace ninguna), ruedan con
+  // velocidad propia por bola y, al chocar SOLO con el
+  // controlado, estallan en pajitas y lo dejan trastabillando
+  // (su velocidad ×frenoK durante frenoT). Sin daño ni derrota:
+  // en la cita chocar solo frena, como en el resto del paseo.
+  const SA_BOLAS = {
+    maxVivas: 3, cadMin: 3.5, cadMax: 6.5, velMin: 120, velMax: 180,
+    dMin: 34, dMax: 58, zonaX: 2500, frenoK: 0.4, frenoT: 0.7,
+  };
 
   // ---------- Escena 3: AEROPUERTO (interior dibujado) ----------
   // Terminal de mañana fría, sin assets nuevos: el interior se
@@ -513,8 +532,13 @@
     const ix = ax.x || (touchVec ? touchVec.x : 0), iy = ax.y || (touchVec ? touchVec.y : 0);
     const ox = A.x, oy = A.y;
     if (ix || iy) {
-      A.x = clampX(A.x + ix * 150 * dt);
-      A.y = clampY(A.y + iy * 150 * dt);
+      // sc.speedK (opcional): factor de velocidad del activo que
+      // una escena puede imponer por un rato (San Ángel lo usa
+      // para el trastabilleo al chocar con una bola de paja).
+      // Sin el campo, el motor se comporta como siempre.
+      const spd = 150 * (sc.speedK || 1);
+      A.x = clampX(A.x + ix * spd * dt);
+      A.y = clampY(A.y + iy * spd * dt);
     }
     const dA = Math.hypot(A.x - ox, A.y - oy);
     A.moving = dA > 0.01;
@@ -1123,6 +1147,16 @@
         this.candles.push({ x: this.exitDoorX + Math.cos(a) * 48, y: 330 + Math.sin(a) * 15, size: 10 + (j % 3) * 2, v: j % 2 });
       }
       this.resetCameo();
+      this.resetBolas();
+    }
+    resetBolas() {
+      // Las bolas de paja y las pajitas de los estallidos, y el
+      // trastabilleo del controlado: cada llegada por una
+      // Puerta empieza la calle limpia, y la primera bola
+      // tarda un poco en llegar (sin ser inmediata).
+      this.bolas = []; this.pajitas = [];
+      this.bolaTimer = 2.2;
+      this.frenoT = 0; this.speedK = 1;
     }
     resetCameo() {
       // Manolo y María vienen del lado del árbol caminando
@@ -1147,6 +1181,7 @@
       B.x = this.entryDoorX + 190; B.y = this.groundY; B.follow = false;
       this.pan = 0; this.nearDoor = false;
       this.resetCameo();
+      this.resetBolas();
     }
     // Llegada desde el aeropuerto: se reaparece junto a la
     // Puerta del árbol (la del fondo de la franja), tras el
@@ -1159,6 +1194,7 @@
       B.x = this.exitDoorX - 140; B.y = this.groundY; B.follow = false;
       this.pan = Math.max(0, Math.min(this.worldW - 640, A.x - 320));
       this.nearDoor = false;
+      this.resetBolas();
     }
     beginExit() {
       if (this.phase !== 'free') return;
@@ -1195,7 +1231,57 @@
       this.nearDoor = Math.min(dE, dX) < 58 && Math.abs(A.y - this.groundY) < 40;
       this.nearDoorX = dE <= dX ? this.entryDoorX : this.exitDoorX;
       if (this.nearDoor && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
+      // El trastabilleo por bola de paja: mientras dura, el
+      // motor compartido mueve al activo con speedK (×0,4).
+      if (this.frenoT > 0) this.frenoT = Math.max(0, this.frenoT - dt);
+      this.speedK = this.frenoT > 0 ? SA_BOLAS.frenoK : 1;
       updateStripFree(this, dt);
+      this.updateBolas(dt);
+    }
+    // Las bolas de paja: aparición por viento (solo con el
+    // controlado en la zona de la calle), rodadura real hacia
+    // la izquierda (ángulo = distancia/radio, con su bote) y
+    // choque SOLO contra el controlado — el seguidor las
+    // atraviesa sin enterarse. Al chocar, la bola estalla en
+    // pajitas dibujadas por código y el controlado trastabillea.
+    updateBolas(dt) {
+      const F = this.free, A = F.chars[F.active];
+      this.bolaTimer -= dt;
+      if (this.bolaTimer <= 0) {
+        if (this.bolas.length < SA_BOLAS.maxVivas && A.x < SA_BOLAS.zonaX) {
+          const d = SA_BOLAS.dMin + Math.random() * (SA_BOLAS.dMax - SA_BOLAS.dMin), r = d / 2;
+          this.bolas.push({
+            x: this.pan + 640 + 40 + r, y: this.groundY + (Math.random() * 44 - 22),
+            r, vel: SA_BOLAS.velMin + Math.random() * (SA_BOLAS.velMax - SA_BOLAS.velMin),
+            dist: 0, ang: 0, ph: Math.random() * 6.28,
+          });
+        }
+        this.bolaTimer = SA_BOLAS.cadMin + Math.random() * (SA_BOLAS.cadMax - SA_BOLAS.cadMin);
+      }
+      const keep = [];
+      for (const b of this.bolas) {
+        b.x -= b.vel * dt; b.dist += b.vel * dt;
+        b.ang = -b.dist / b.r; // rodadura: al ir a la izquierda gira en sentido antihorario
+        if (b.x < this.pan - 100 || b.x + b.r < 0) continue; // salió del encuadre o del mundo
+        const dx = b.x - A.x, dy = (b.y - b.r) - (A.y - 44);
+        if (dx * dx + dy * dy < Math.pow(b.r * 0.85 + 26, 2)) {
+          for (let i = 0; i < 9; i++) {
+            const a = Math.random() * 6.28, s = 30 + Math.random() * 70;
+            this.pajitas.push({ x: b.x, y: b.y - b.r, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 25, t: 0, life: 0.45 + Math.random() * 0.2, rot: Math.random() * 6.28 });
+          }
+          this.frenoT = SA_BOLAS.frenoT;
+          continue; // la bola estalló: no sigue rodando
+        }
+        keep.push(b);
+      }
+      this.bolas = keep;
+      const pk = [];
+      for (const p of this.pajitas) {
+        p.t += dt; if (p.t >= p.life) continue;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 130 * dt; p.rot += dt * 7;
+        pk.push(p);
+      }
+      this.pajitas = pk;
     }
     updateCameo(dt) {
       const cm = this.cameo;
@@ -1295,6 +1381,10 @@
         },
       });
       if (this.cameo.triggered && !this.cameo.done) items.push({ y: this.cameo.y, fn: () => this.drawCameo(c, pan) });
+      // las bolas de paja son objetos de la calle: se ordenan
+      // por Y con los personajes (pasan por delante o por
+      // detrás según su línea de rodadura)
+      for (const b of this.bolas) items.push({ y: b.y, fn: () => this.drawBola(c, pan, b) });
       const chars = [this.free.chars.ximena, this.free.chars.jose].slice().sort((a, b) => a.y - b.y);
       for (const ch of chars) {
         items.push({
@@ -1307,12 +1397,52 @@
       }
       items.sort((a, b) => a.y - b.y);
       for (const it of items) it.fn();
+      // las pajitas de los estallidos, sobre la calle
+      for (const p of this.pajitas) {
+        const sx = p.x - pan;
+        if (sx < -20 || sx > 660) continue;
+        const k = 1 - p.t / p.life;
+        c.save(); c.translate(sx, p.y); c.rotate(p.rot);
+        c.strokeStyle = `rgba(190,150,80,${(0.85 * k).toFixed(3)})`; c.lineWidth = 1.6;
+        c.beginPath(); c.moveTo(-4, 0); c.lineTo(4, 0); c.stroke();
+        c.restore();
+      }
       // velas del suelo, fila delantera (sobre los pies)
       this.drawCandles(c, pan, true);
       if (this.phase === 'free' && this.nearDoor) G.prompt(c, 'ESPACIO: cruzar la Puerta', this.nearDoorX - pan, groundY - 96);
       // luz de la Puerta: se disipa al llegar, crece al salir
       if (this.phase === 'light') { c.fillStyle = `rgba(255,244,214,${(1 - Math.min(1, this.phaseT)).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+    }
+    // Una bola de paja rodando: el recorte de foto gira sobre
+    // el centro de la bola (en el PNG de 370×259 la bola ocupa
+    // x 6–362 y su centro cae a la fracción ~0,497/0,44) con el
+    // ángulo de rodadura y un bote leve por distancia. Sin la
+    // imagen (no debería pasar: es un asset del repo), se
+    // dibuja una bola de paja por código para que el obstáculo
+    // nunca sea invisible.
+    drawBola(c, pan, b) {
+      const bob = -Math.abs(Math.sin(b.dist * 0.055 + b.ph)) * b.r * 0.16;
+      const cx = b.x - pan, cy = b.y - b.r + bob;
+      if (cx < -80 || cx > 720) return;
+      c.fillStyle = 'rgba(60,32,10,0.22)';
+      c.beginPath(); c.ellipse(cx, b.y + 3, b.r * 0.9, 3.5, 0, 0, 6.3); c.fill();
+      if (imgOk(bolaPajaImg)) {
+        const W = b.r * 2 * (370 / 356), H = W * 259 / 370;
+        c.save(); c.translate(cx, cy); c.rotate(b.ang);
+        c.drawImage(bolaPajaImg, -0.497 * W, -0.44 * H, W, H);
+        c.restore();
+      } else {
+        c.save(); c.translate(cx, cy); c.rotate(b.ang);
+        c.fillStyle = '#b98d4f'; c.beginPath(); c.arc(0, 0, b.r, 0, 6.3); c.fill();
+        c.strokeStyle = 'rgba(90,60,20,0.55)'; c.lineWidth = 1.4;
+        for (let i = 0; i < 5; i++) {
+          const a = i * 1.256;
+          c.beginPath(); c.moveTo(Math.cos(a) * b.r * 0.3, Math.sin(a) * b.r * 0.3);
+          c.lineTo(Math.cos(a + 0.7) * b.r * 0.95, Math.sin(a + 0.7) * b.r * 0.95); c.stroke();
+        }
+        c.restore();
+      }
     }
     // Las velas del suelo (recortes con su halo por código):
     // `front` separa la fila trasera (y<330) de la delantera.
@@ -1674,7 +1804,7 @@
     // Gancho SOLO para el humo (tools/check_date.js): permite
     // ejercitar verify() con un código de prueba sin conocer el
     // real, y validar el SHA-256 contra vectores conocidos.
-    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt,
+    debug: { sha256hex, setHash(h) { CODE_HASH = h; }, getHash() { return CODE_HASH; }, PLAZA_FX, avionXAt, vochoXAt, SANANGEL, SA_HOUSES, SA_BOLAS, candleGlow, travelTo, PACE, AERO, aeroPlaneXAt,
       // Ganchos del audio para el humo (sección K): permiten
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.
