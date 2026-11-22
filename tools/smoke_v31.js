@@ -1413,6 +1413,74 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('contador 4: frame() agenda requestAnimationFrame(frame) ANTES de update/draw (blindaje del bucle)',
       frameBody.indexOf('requestAnimationFrame(frame)') > -1 && frameBody.indexOf('requestAnimationFrame(frame)') < frameBody.indexOf('G.scene.update(dt)'),
       'rAF@' + frameBody.indexOf('requestAnimationFrame(frame)') + ' update@' + frameBody.indexOf('G.scene.update(dt)'));
+    // --- Ajustes del playtest de Jose (2026-11-21, segunda ronda):
+    // los meteoritos VUELAN hacia el jugador (velocidad propia con
+    // rampa) y hay una estrella de IMPULSO para recuperarse tras un
+    // choque (solo la recoge el jugador) ---
+    const mkPlay = (d) => { d.st = 'play'; d.meteors = []; d.nextMet = 1e9; d.boosts = []; d.nextBoost = 1e9; return d; };
+    // (a) velocidad propia de los meteoritos y su rampa
+    const dMv = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dMv.spawnMeteor(3000);
+    const mMov = dMv.meteors[0];
+    check('J1407b meteoritos móviles: al nacer vuelan hacia el jugador a 26–40 u/s',
+      dMv.meteorSpeed(mMov) >= Sc.RingRaceDuel.METEOR_V.min && dMv.meteorSpeed(mMov) <= Sc.RingRaceDuel.METEOR_V.max, 'v=' + dMv.meteorSpeed(mMov));
+    const mp0 = mMov.prog;
+    for (let i = 0; i < 20; i++) dMv.update(0.05); // 1 s de carrera
+    check('J1407b meteoritos móviles: su prog baja POR SÍ SOLO (velocidad propia, no espera al jugador)',
+      mMov.prog < mp0 - 20, `de ${mp0} a ${mMov.prog.toFixed(1)}`);
+    dMv.elapsed = 200;
+    check('J1407b meteoritos móviles: la rampa acelera con el tiempo de carrera y topa en 65 u/s',
+      dMv.meteorSpeed(mMov) === 65, 'v=' + dMv.meteorSpeed(mMov));
+    // (b) el choque con un meteorito en movimiento se detecta UNA sola vez
+    const dHit = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dHit.meteors.push({ prog: dHit.prog + 40, lanes: [1], hitP: false, hitB: false, rDodge: false, rot: 0, seed: 0, mv: 30 });
+    dHit.lane = 1; dHit.laneX = 0;
+    for (let i = 0; i < 100; i++) dHit.update(0.05); // cruza la roca y la deja bien atrás
+    check('J1407b meteoritos móviles: el choque al cruzarse se detecta UNA sola vez (sin duplicados)',
+      dHit.crashesP === 1, 'crashesP=' + dHit.crashesP);
+    // (c) la estrella de impulso: nace, se recoge en su carril, acelera
+    // por encima del cruise y al expirar la velocidad vuelve al cruise
+    const dBo = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dBo.spawnBoost(dBo.prog + 50, 1); dBo.lane = 1; dBo.laneX = 0;
+    check('J1407b impulso: la estrella nace en la pista, en el carril pedido',
+      dBo.boosts.length === 1 && dBo.boosts[0].lane === 1 && Sc.RingRaceDuel.BOOST.dur === 2.8 && Sc.RingRaceDuel.BOOST.mult === 1.5,
+      JSON.stringify(dBo.boosts.map((b) => [b.prog, b.lane])));
+    for (let i = 0; i < 200 && dBo.boostT <= 0; i++) dBo.update(0.05);
+    check('J1407b impulso: al cruzar la estrella en su carril el impulso se ACTIVA', dBo.boostT > 0, 'boostT=' + dBo.boostT);
+    let sawAbove = false;
+    for (let i = 0; i < 30; i++) { dBo.update(0.05); if (dBo.v > dBo.cruise) sawAbove = true; }
+    check('J1407b impulso: durante el impulso la velocidad SUPERA el cruise (objetivo 1,5×)',
+      sawAbove && dBo.v > dBo.cruise, `v=${dBo.v.toFixed(1)} cruise=${dBo.cruise}`);
+    dBo.boostT = 0.01; // casi agotado: expira y la velocidad debe volver
+    for (let i = 0; i < 120; i++) dBo.update(0.05);
+    check('J1407b impulso: al expirar, la velocidad vuelve al cruise (no se queda arriba)',
+      dBo.boostT <= 0 && dBo.v <= dBo.cruise * 1.05, `v=${dBo.v.toFixed(1)} cruise=${dBo.cruise}`);
+    // (d) el caso de Jose: chocar y recoger el impulso = recuperarse
+    const dRec = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dRec.v = dRec.cruise; dRec.crashP();
+    const vPost = dRec.v;
+    dRec.startBoost();
+    for (let i = 0; i < 20; i++) dRec.update(0.05); // 1 s de impulso
+    check('J1407b impulso tras choque: lo perdido se recupera y se supera el cruise en ~1 s',
+      dRec.v > vPost && dRec.v > dRec.cruise, `vPost=${vPost.toFixed(1)} v=${dRec.v.toFixed(1)} cruise=${dRec.cruise}`);
+    const dCut = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dCut.startBoost(); dCut.crashP();
+    check('J1407b impulso: chocar DURANTE el impulso lo corta (sin invulnerabilidad)', dCut.boostT === 0, 'boostT=' + dCut.boostT);
+    // (e) el rival NO recoge la estrella (es solo del jugador) y la
+    // estrella nunca nace pegada a un meteorito (≥140 u en prog)
+    const dRiv = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dRiv.prog = -400; // el jugador va muy por detrás: aún no cruza la estrella
+    dRiv.spawnBoost(dRiv.rprog + 45, 2); dRiv.rlane = 2; dRiv.rlaneX = 52;
+    let gRiv = 0;
+    while (dRiv.rprog < 45 && gRiv++ < 200) dRiv.update(0.05);
+    check('J1407b impulso: el RIVAL cruza la estrella y NO la recoge (solo es del jugador)',
+      dRiv.rprog >= 45 && dRiv.boostT === 0 && dRiv.boosts.length === 1 && !dRiv.boosts[0].done,
+      `rprog=${dRiv.rprog.toFixed(1)} boostT=${dRiv.boostT} boosts=${dRiv.boosts.length}`);
+    const dSep = mkPlay(new Sc.RingRaceDuel('natalia', () => {}));
+    dSep.meteors.push({ prog: 1000, lanes: [0], hitP: false, hitB: false, rDodge: false, rot: 0, seed: 0, mv: 30 });
+    dSep.spawnBoost(1000, 1); // pedida EXACTAMENTE sobre la roca
+    check('J1407b impulso: la estrella nunca nace pegada a un meteorito (≥140 u en prog)',
+      dSep.boosts.every((b) => Math.abs(b.prog - 1000) >= Sc.RingRaceDuel.BOOST.sep), JSON.stringify(dSep.boosts.map((b) => b.prog)));
   }
 
   // ================= M) Final LEYENDAS (LEYENDAS_MOVIE_ENDING) =============
