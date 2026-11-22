@@ -4007,13 +4007,15 @@
 
   // El Alebrije de ESTE duelo es la IMAGEN REAL de Jose (corrección
   // de Jose, 2026-11-21): su adaptación alebrije_frente_jose.png como
-  // billboard, no la figura por código (drawAlbFigure/albCv quedan
-  // para la escena del final y los retratos, que no son este duelo).
-  // Base + 6 variantes de resplandor por zona derivadas del master
-  // procesando la imagen (tools/mkalebrije.py → G.ALEBRIJE_DATA,
-  // data URIs como todo el arte WebGL del proyecto). Mientras una
-  // imagen no haya cargado NO se pinta (nada de sustituto).
-  const ALB_FILES = ['alebrije-frente', 'alebrije-zona-cabeza', 'alebrije-zona-crines', 'alebrije-zona-antenas', 'alebrije-zona-aleta', 'alebrije-zona-panza', 'alebrije-zona-cola'];
+  // billboard, no la figura por código. Base + 6 variantes de
+  // resplandor por zona derivadas del master procesando la imagen
+  // (tools/mkalebrije.py → G.ALEBRIJE_DATA, data URIs como todo el
+  // arte WebGL del proyecto). La lista incluye además las poses de
+  // la cinemática del final (director con su claqueta y aceptado/
+  // feliz), recortadas de su hoja de poses con el mismo script.
+  // Mientras una imagen no haya cargado NO se pinta (nada de
+  // sustituto).
+  const ALB_FILES = ['alebrije-frente', 'alebrije-zona-cabeza', 'alebrije-zona-crines', 'alebrije-zona-antenas', 'alebrije-zona-aleta', 'alebrije-zona-panza', 'alebrije-zona-cola', 'alebrije-director', 'alebrije-feliz'];
   const ALB_W = 96, ALB_H = 130; // el alto que ocupaba la figura por código (130 u); el ancho sale del aspect real del master (626×849)
   const albImgs = {};
   function albImg(name) {
@@ -4280,16 +4282,17 @@
   }
   // Teodora en ESTE duelo es su sprite DISEÑADO (corrección de Jose):
   // poses recortadas de sus hojas aprobadas (tools/mkteodora.py →
-  // G.TEODORA_DATA, data URIs). drawTeoFigure/teoCv dejan de usarse
-  // en esta clase; siguen vivos para «La soga de fuego» y la escena
-  // del final, que no son este duelo.
+  // G.TEODORA_DATA, data URIs), nunca la figura por código.
   // Segunda ronda (2026-11-21): poses de MOVIMIENTO — idle2 (el otro
   // punto del bob de su hoja de flotación), side (perfil flotando a
   // la derecha, de la misma hoja) y side-izq (perfil a la izquierda
   // GENERADO desde su diseño: las hojas no lo traían y a Teodora no
   // se la espeja jamás). Con ellas su desplazamiento se lee como
   // VUELO por estados, no como una traslación tiesa.
-  const TEODORA_FILES = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada', 'teodora-idle2', 'teodora-side', 'teodora-side-izq'];
+  // La lista suma las poses de la cinemática del final (altiva y
+  // presentadora) y las de «La soga de fuego» (salto de su hoja de
+  // poses de boss y quemada cómica de la de faltantes).
+  const TEODORA_FILES = ['teodora-idle', 'teodora-trazo', 'teodora-selfie', 'teodora-dash', 'teodora-sorprendida', 'teodora-derrotada', 'teodora-idle2', 'teodora-side', 'teodora-side-izq', 'teodora-altiva', 'teodora-presentadora', 'teodora-salto', 'teodora-quemada'];
   const TEO_H = 80; // alto en mundo del billboard (≈74 px en pantalla con TRAZO_CAM)
   const teoImgs = {};
   function teoImg(name) {
@@ -4667,8 +4670,18 @@
   // cortos, y saltable con la acción desde 0,4 s, como las demás
   // cinemáticas del juego. Corrección de Jose, 2026-11-21.
   const REVEAL_DUR = 3.4;
+  // LUZ NEUTRA de la cinemática del final de Leyendas (corrección
+  // de Jose, 2026-11-21): las dos escenas usaban W.LIGHT.fiesta y el
+  // set salía con el lavado saturado de la fiesta (magenta/cyan por
+  // los puntos de color). Luz propia equilibrada, patrón de
+  // PATRON_LIGHT/TRAZO_LIGHT: amb/sun en blanco balanceado y sin
+  // puntos de color, sobre el mismo cielo del set. La presentación
+  // conserva su beat de apagón inicial (W.LIGHT.oscuro parpadeando
+  // antes de 0,7 s); la calidez de los créditos la ponen los textos
+  // y los reflectores 2D, no un filtro sobre el 3D.
+  const FINALE_LIGHT = { amb: [0.74, 0.74, 0.74], sun: [0.34, 0.34, 0.34], sky: '#231c2e', points: [] };
   class LegendsRevealScene {
-    constructor(done) { this.done = done; this.t = 0; this.who = (G.S && G.S.protagonist) || 'natalia'; G.captureKeys = true; }
+    constructor(done) { this.done = done; this.t = 0; this.who = (G.S && G.S.protagonist) || 'natalia'; G.captureKeys = true; albPreload(); teoPreload(); }
     cast() {
       if (!this._cast) {
         this._cast = {
@@ -4691,10 +4704,16 @@
       const albX = t < 0.9 ? 380 : 380 + Math.min(1, (t - 0.9) / 0.8) * 120; // el Alebrije sale de su escondite entre la decoración
       const teoElev = t < 1.7 ? 150 : Math.max(24, 150 - (t - 1.7) * 115); // Teodora desciende flotando
       W.render({
-        cam: CAM_SALA(), dt, light: t < 0.7 && (t % 0.3) < 0.15 ? W.LIGHT.oscuro : W.LIGHT.fiesta, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
+        cam: CAM_SALA(), dt, light: t < 0.7 && (t % 0.3) < 0.15 ? W.LIGHT.oscuro : FINALE_LIGHT, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
         sprites: () => {
-          if (t > 0.7) R.sprite(albCv('director'), albX, 0, 168, { w: 104, h: 115, feet: 0, lit: 0.25, nostretch: true });
-          if (t > 1.6) { R.flat(R.glowTex, 772, 0.8, 168, 46, 30, { color: [0.1, 0.05, 0.16], alpha: 0.5 }); R.sprite(teoCv('altiva'), 772, teoElev, 168, { w: 62, h: 77, feet: 0, lit: 0.2, nostretch: true }); }
+          // Personajes DISEÑADOS, no por código (corrección de
+          // Jose): el Alebrije director con su claqueta, recortado
+          // de su hoja de poses, y Teodora altiva de su hoja de
+          // poses de boss — billboards con el alto que ocupaban las
+          // figuras por código (115 y 77 u) y el ancho de su
+          // aspecto real. Sin imagen cargada, no se pinta nada.
+          if (t > 0.7) { const im = albImg('alebrije-director'); if (rocketReady(im)) R.sprite(im, albX, 0, 168, { w: 115 * (im.naturalWidth / im.naturalHeight), h: 115, feet: 0, lit: 0.25, nostretch: true }); }
+          if (t > 1.6) { R.flat(R.glowTex, 772, 0.8, 168, 23, { ry: 0.65, tint: [0.1, 0.05, 0.16], alpha: 0.5 }); const im = teoImg('teodora-altiva'); if (rocketReady(im)) R.sprite(im, 772, teoElev + Math.sin(t * 2.2) * 2, 168, { w: 77 * (im.naturalWidth / im.naturalHeight), h: 77, feet: 0, lit: 0.2, nostretch: true }); }
         },
         over: (c) => {
           if (t > 0.8) { // reflectores del set apuntando a la sala
@@ -4709,8 +4728,9 @@
     }
   }
   LegendsRevealScene.DUR = REVEAL_DUR;
+  LegendsRevealScene.LIGHT = FINALE_LIGHT;
   class LegendsFinaleScene {
-    constructor(results, who, done) { this.results = results; this.who = who; this.done = done; this.t = 0; G.captureKeys = true; }
+    constructor(results, who, done) { this.results = results; this.who = who; this.done = done; this.t = 0; G.captureKeys = true; albPreload(); teoPreload(); }
     wins() { return (this.results.trazo && this.results.trazo.win === 'win' ? 1 : 0) + (this.results.soga && this.results.soga.win === 'win' ? 1 : 0); }
     cast() {
       if (!this._cast) {
@@ -4734,11 +4754,21 @@
     draw(dt) {
       const t = this.t, cs = this.cast(), w = this.wins();
       W.render({
-        cam: CAM_SALA(), dt, light: W.LIGHT.fiesta, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
+        cam: CAM_SALA(), dt, light: FINALE_LIGHT, actors: [cs.p, ...cs.party, cs.xim, cs.jose, cs.cat], focusZ: 0,
         sprites: () => {
-          R.sprite(albCv('feliz'), 500, 0, 168, { w: 104, h: 115, feet: 0, lit: 0.25, nostretch: true });
-          R.flat(R.glowTex, 772, 0.8, 168, 46, 30, { color: [0.1, 0.05, 0.16], alpha: 0.5 });
-          R.sprite(teoCv(w === 2 ? 'selfie' : w === 1 ? 'altiva' : 'idle'), 772, 24 + Math.sin(t * 2.2) * 3, 168, { w: 62, h: 77, feet: 0, lit: 0.2, nostretch: true });
+          // Personajes DISEÑADOS, no por código (corrección de
+          // Jose): el Alebrije aceptado/feliz de su hoja de poses,
+          // celebrando con un brinco por código, y Teodora según el
+          // resultado — versión plena: presenta y al flash de los
+          // créditos (t = 12,6, el mismo instante del destello 2D)
+          // se toma la selfie con su sprite; 1/2: altiva, la
+          // protagonista invitada; 0/2: su idle flotando. Alturas
+          // las de las figuras por código (115 y 77 u), ancho por
+          // el aspecto real de cada sprite.
+          const alb = albImg('alebrije-feliz'); if (rocketReady(alb)) R.sprite(alb, 500, Math.abs(Math.sin(t * 3.2)) * 5, 168, { w: 115 * (alb.naturalWidth / alb.naturalHeight), h: 115, feet: 0, lit: 0.25, nostretch: true });
+          R.flat(R.glowTex, 772, 0.8, 168, 23, { ry: 0.65, tint: [0.1, 0.05, 0.16], alpha: 0.5 });
+          const teoName = w === 2 ? (t >= 12.6 ? 'teodora-selfie' : 'teodora-presentadora') : w === 1 ? 'teodora-altiva' : 'teodora-idle';
+          const teo = teoImg(teoName); if (rocketReady(teo)) R.sprite(teo, 772, 24 + Math.sin(t * 2.2) * 3, 168, { w: 77 * (teo.naturalWidth / teo.naturalHeight), h: 77, feet: 0, lit: 0.2, nostretch: true });
         },
         over: (c) => {
           if (w === 0) { legendsSubtitle(c, t < 2.6 ? 'TEODORA: «No apta para cine. Su fiesta, no mi película.»' : 'El set se apaga. La fiesta sigue… como fiesta.', '#ffd7f0'); return; }
@@ -4768,6 +4798,7 @@
       });
     }
   }
+  LegendsFinaleScene.LIGHT = FINALE_LIGHT;
   class LegendsEndingScene {
     // Escena-orquesta (mismo patrón que SpaceEndingScene de J1407b):
     // ES una escena que delega update/draw en la subescena actual y
@@ -4786,5 +4817,5 @@
     draw(dt) { if (this.cur) this.cur.draw(dt); }
   }
 
-  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, CactusRaceDuel, ImageDuel, BalloonDuel, RingRaceDuel, AsteroidBeltDuel, SpaceLaunchScene, SpaceTransitionScene, SpacePartyScene, SpaceEndingScene, buildDecoSet, CandleGame, PatronDuel, TrazoDuel, SogaDuel, LegendsEndingScene };
+  G.Scenes = { CollectScene, HomeScene, DecoDuel, ChaseDuel, MessageDuel, PizzaRace, SleepwalkDuel, MemoryDuel, SpikeDuel, StompDuel, DroneDuel, ClimbDuel, CactusRaceDuel, ImageDuel, BalloonDuel, RingRaceDuel, AsteroidBeltDuel, SpaceLaunchScene, SpaceTransitionScene, SpacePartyScene, SpaceEndingScene, buildDecoSet, CandleGame, PatronDuel, TrazoDuel, SogaDuel, LegendsRevealScene, LegendsFinaleScene, LegendsEndingScene };
 })();

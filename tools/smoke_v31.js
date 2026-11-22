@@ -1614,15 +1614,39 @@ const tick = () => new Promise((r) => setImmediate(r));
       check('patrón: el duelo ya no pinta al Alebrije por código (sin albCv() en la clase) y sí usa su imagen real',
         !patronSrc.includes('albCv(') && patronSrc.includes("albImg('alebrije-frente')") && patronSrc.includes("albImg('alebrije-zona-'"),
         '');
-      check('patrón: la figura por código sigue viva SOLO para la escena del final y los retratos (albCv director)',
-        scenesTxtM.includes("albCv('director')") && scenesTxtM.includes('drawAlbFigure'), '');
+      check('patrón: la figura por código del Alebrije sigue definida (respaldo de cara del HUD en albFaceCv)',
+        scenesTxtM.includes('function drawAlbFigure'), '');
+      // --- Corrección de Jose (2026-11-21, tarea adicional): la
+      // cinemática del final de Leyendas también deja el dibujo por
+      // código y la luz de fiesta ---
+      const finaleSrc = scenesTxtM.slice(scenesTxtM.indexOf('class LegendsRevealScene'), scenesTxtM.indexOf('class LegendsEndingScene'));
+      check('final Leyendas: ni la presentación ni el cierre llaman a las figuras por código de ninguno de los dos',
+        !finaleSrc.includes('albCv(') && !finaleSrc.includes('teoCv(') && !finaleSrc.includes('drawAlbFigure') && !finaleSrc.includes('drawTeoFigure'), '');
+      check('final Leyendas: las escenas usan los sprites reales (director/feliz del Alebrije; altiva/presentadora/selfie/idle de Teodora)',
+        finaleSrc.includes("albImg('alebrije-director')") && finaleSrc.includes("albImg('alebrije-feliz')")
+        && finaleSrc.includes("teoImg('teodora-altiva')") && finaleSrc.includes("'teodora-presentadora'") && finaleSrc.includes("'teodora-selfie'") && finaleSrc.includes("'teodora-idle'"), '');
+      const finaleLight = Sc.LegendsRevealScene && Sc.LegendsRevealScene.LIGHT;
+      check('final Leyendas: fuera la luz de fiesta — FINALE_LIGHT neutra y compartida por ambas escenas (el apagón inicial se conserva)',
+        !finaleSrc.includes('W.LIGHT.fiesta') && finaleSrc.includes('W.LIGHT.oscuro')
+        && !!finaleLight && finaleLight === Sc.LegendsFinaleScene.LIGHT
+        && finaleLight.amb[0] === finaleLight.amb[1] && finaleLight.amb[1] === finaleLight.amb[2]
+        && finaleLight.sun[0] === finaleLight.sun[1] && finaleLight.sun[1] === finaleLight.sun[2]
+        && finaleLight.points.length === 0, JSON.stringify(finaleLight));
+      check('final Leyendas: las poses del Alebrije (director/feliz) existen como PNG y data URI',
+        ['alebrije-director', 'alebrije-feliz'].every((n) => fs.existsSync(path.join(imgDirM, n + '.png'))
+          && typeof G.ALEBRIJE_DATA[n] === 'string' && G.ALEBRIJE_DATA[n].startsWith('data:image/png;base64,')),
+        G.ALEBRIJE_DATA ? Object.keys(G.ALEBRIJE_DATA).join(',') : 'sin ALEBRIJE_DATA');
+      check('final Leyendas: las poses de Teodora del final (altiva/presentadora) existen como PNG y data URI',
+        ['teodora-altiva', 'teodora-presentadora'].every((n) => fs.existsSync(path.join(imgDirM, n + '.png'))
+          && typeof G.TEODORA_DATA[n] === 'string' && G.TEODORA_DATA[n].startsWith('data:image/png;base64,')),
+        G.TEODORA_DATA ? Object.keys(G.TEODORA_DATA).join(',') : 'sin TEODORA_DATA');
       check('patrón: luz NEUTRA del duelo (amb y sun en blanco equilibrado, sin puntos de color, sin LIGHT.fiesta)',
         !!Sc.PatronDuel.LIGHT && Sc.PatronDuel.LIGHT.amb[0] === Sc.PatronDuel.LIGHT.amb[1] && Sc.PatronDuel.LIGHT.amb[1] === Sc.PatronDuel.LIGHT.amb[2]
         && Sc.PatronDuel.LIGHT.sun[0] === Sc.PatronDuel.LIGHT.sun[1] && Sc.PatronDuel.LIGHT.sun[1] === Sc.PatronDuel.LIGHT.sun[2]
         && Sc.PatronDuel.LIGHT.points.length === 0 && patronSrc.includes('light: PATRON_LIGHT') && !patronSrc.includes('W.LIGHT.fiesta'),
         JSON.stringify(Sc.PatronDuel.LIGHT));
       check('patrón: el sprite ocupa el mismo alto que la figura por código (ALB_H = 130) y el ancho sale del aspect del master',
-        Sc.PatronDuel.ALB.h === 130 && Sc.PatronDuel.ALB.w === 96 && Sc.PatronDuel.ALB.files.length === 7, JSON.stringify(Sc.PatronDuel.ALB));
+        Sc.PatronDuel.ALB.h === 130 && Sc.PatronDuel.ALB.w === 96 && Sc.PatronDuel.ALB.files.length === 9, JSON.stringify(Sc.PatronDuel.ALB));
       // --- Corrección de Jose (2026-11-21, 2ª ronda): el retrato VS
       // salía como un zoom roto de la figura por código; el resplandor
       // blanco-dorado no se distinguía; el sprite estaba tieso ---

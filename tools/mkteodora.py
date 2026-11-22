@@ -25,6 +25,12 @@ Dos etapas:
                           Fuente: teodora-float-izquierda-generada-v1.png
                           en la carpeta de diseño; se procesa con la
                           MISMA extracción (fondo uniforme → alfa).
+     teodora-altiva     ← teo_altiva (poses boss v1): la cinemática
+                          del final la presentaba DIBUJADA POR CÓDIGO
+                          (teoCv('altiva')); ahora es su sprite real.
+     teodora-presentadora ← teo_presentadora (sprites faltantes v1):
+                          en la versión plena del final ella PRESENTA
+                          (micrófono en mano, brazo abierto).
 
    Las hojas vienen sobre fondo crema uniforme: se inunda el fondo
    desde los bordes (flood-fill por tolerancia de color), se conserva
@@ -86,6 +92,18 @@ CUTS = [
     # viene a cuadro completo sobre fondo crema uniforme; la celda es
     # la imagen entera y la extracción es la misma de siempre.
     ("side-izq", "teodora-float-izquierda-generada-v1.png", (0, 0, 1216, 1728), False),
+    # Poses de la cinemática del final de Leyendas (revelación y
+    # cierre): altiva es la 1ª figura de poses boss; presentadora,
+    # la 4ª de faltantes (entre dash y sorprendida).
+    ("altiva", "teodora-poses-boss-v1.webp", (30, 0, 610, 912), False),
+    ("presentadora", "teodora-sprites-faltantes-v1.webp", (1490, 0, 1985, 992), False),
+    # Ronda de la Soga (2026-11-21): su salto de la soga de la hoja
+    # de poses de boss (entre la altiva y la selfie; el arco de
+    # fuego impreso bajo ella es otro componente y se descarta solo)
+    # y la quemada cómica de la hoja de faltantes (entre la derrotada
+    # y el dash), para su momento de la selfie quemada del guion.
+    ("salto", "teodora-poses-boss-v1.webp", (610, 0, 1330, 912), False),
+    ("quemada", "teodora-sprites-faltantes-v1.webp", (490, 0, 998, 992), False),
 ]
 NAMES = [f"teodora-{pose}" for pose, _sheet, _cell, _sh in CUTS]
 TARGET_H = 440

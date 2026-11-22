@@ -34,9 +34,24 @@ Dos etapas:
    Verificación automática: los píxeles OPACOS fuera de la máscara
    cambian en exactamente 0 (el script aborta si no).
 
-2. INCRUSTADO: los 7 PNG (base + 6 zonas) se incrustan como data URIs
-   en G.ALEBRIJE_DATA, en el mismo estilo que rocket-sheets.js
-   (mkrockets.py) y belt-sheets.js (mkbelt.py).
+2. POSES DE LA ESCENA DEL FINAL (2026-11-21): la cinemática del
+   final de Leyendas (revelación del set y cierre con créditos) le
+   pedía al Alebrije las poses 'director' y 'feliz' DIBUJADAS POR
+   CÓDIGO (albCv). Se extraen de su hoja de poses aprobada
+   (diseno-alebrije/alebrije-sprites-poses-v2.webp, mapa de
+   sprites: alb_claqueta y alb_aceptado) con la misma extracción de
+   mkteodora.py (fondo crema → flood-fill → componente mayor → alfa
+   real, alto normalizado a 440 px):
+
+     alebrije-director ← alb_claqueta (con la claqueta en las manos)
+     alebrije-feliz    ← alb_aceptado (saltando feliz, brazos arriba)
+
+   Identidad intacta: ojos negros enormes, lengua roja rizada
+   fuera, mancha roja visible en el flanco frontal.
+
+3. INCRUSTADO: los PNG (base + 6 zonas + 2 poses) se incrustan como
+   data URIs en G.ALEBRIJE_DATA, en el mismo estilo que
+   rocket-sheets.js (mkrockets.py) y belt-sheets.js (mkbelt.py).
 
 POR QUÉ data URIs y NO rutas de archivo: el juego se corre también
 desde file:// (la copia local de Jose) y Chrome marca toda imagen de
@@ -52,11 +67,37 @@ import pathlib
 
 import numpy as np
 from PIL import Image, ImageFilter
+from scipy import ndimage
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 IMG_DIR = ROOT / "application" / "src" / "assets" / "img"
 OUT = ROOT / "application" / "src" / "js" / "alebrije-sheets.js"
 BASE = "alebrije-frente"
+DESIGN_DIR_ALB = pathlib.Path.home() / "workspace" / "goals" / "1-minuto-para-la-fiesta" / "files" / "diseno-alebrije"
+BG_TOL = 30  # tolerancia de color para considerar un píxel «fondo»
+
+# Poses para la escena del final. En la hoja de poses v2 las figuras
+# del centro (claqueta, duelo y aceptado) se TOCAN entre sí (los
+# brazos extendidos del duelo rozan a sus vecinas y forman un solo
+# componente opaco de x 487 a 2034), así que no basta recortar
+# celdas: se inunda el fondo de la hoja entera, se siegan dos tiras
+# verticales por los puentes (x = 905 y x = 1420, medidos cortando y
+# etiquetando hasta que cada figura queda como su propia pieza) y
+# cada pose es el componente cuyo centro cae en su tramo de x:
+# director (claqueta) ≈ 487–901 · aceptado (feliz) ≈ 1424–2034.
+# La tercera siega (x = 1550) parte el contacto REAL entre las
+# crines del duelo y las de «feliz»: en la hoja los abanicos rojos
+# de ambos se tocan en un tramo de ~44 px (verificado trazando el
+# camino más ancho entre las dos masas: cuello de botella EDT 22,
+# todo píxeles rojos de crines), así que ningún criterio de color
+# los separa; la siega solo afeita una astilla del lóbulo exterior
+# de cada abanico.
+POSE_SHEET = "alebrije-sprites-poses-v2.webp"
+POSE_CUTS_X = (905, 1420, 1550)
+POSE_SPANS = [
+    ("director", 480, 910),
+    ("feliz", 1420, 2050),
+]
 
 # Color vivo de resplandor por zona (ver justificación arriba). El
 # duelo usa la MISMA paleta para el nombre de la zona en pantalla
@@ -168,11 +209,78 @@ def build_zones() -> None:
               f"máscara {n_mask} px · halo {n_halo} px · opacos fuera de máscara modificados: 0")
 
 
-NAMES = [BASE] + [f"alebrije-zona-{z}" for z in ZONE_COLORS]
+def build_poses() -> None:
+    src = DESIGN_DIR_ALB / POSE_SHEET
+    if not src.exists():
+        print(f"AVISO: no está la hoja {src}; se conservan los PNG existentes de las poses")
+        return
+    im = Image.open(src).convert("RGB")
+    arr = np.asarray(im).astype(np.int32)
+    corners = np.concatenate([
+        arr[:12, :12].reshape(-1, 3), arr[:12, -12:].reshape(-1, 3),
+        arr[-12:, :12].reshape(-1, 3), arr[-12:, -12:].reshape(-1, 3),
+    ])
+    bg = np.median(corners, axis=0)
+    dist = np.abs(arr - bg).max(axis=-1)
+    candidate = dist < BG_TOL
+    # Las siegas cuentan como fondo YA en la inundación: entre las
+    # figuras que se tocan quedan bolsas de fondo atrapadas (el hueco
+    # entre las crines y el brazo del duelo, junto a la mano de
+    # «feliz») que, si la inundación no las alcanza, quedan como una
+    # masa «opaca» de color fondo que pega los trozos de la vecina a
+    # la figura elegida. Con la tira abierta, la inundación entra en
+    # la bolsa y todo se separa solo.
+    for cx in POSE_CUTS_X:
+        candidate[:, cx - 4:cx + 4] = True
+    lab, _n = ndimage.label(candidate)
+    border_labels = set(np.unique(np.concatenate([lab[0, :], lab[-1, :], lab[:, 0], lab[:, -1]]))) - {0}
+    is_bg = np.isin(lab, list(border_labels))
+    alpha = np.where(is_bg, 0, 255).astype(np.uint8)
+    for cx in POSE_CUTS_X:
+        alpha[:, cx - 4:cx + 4] = 0
+    rgb = arr.astype(np.uint8)
+    # Segunda barrera: el resplandor amarillo pálido impreso
+    # alrededor de las chispas que hay ENTRE figuras también cuenta
+    # como «opaco» para la inundación (su canal azul dista del fondo
+    # más que BG_TOL) y forma puentes anchos que pegan a la vecina —
+    # la chispa entre el duelo y «feliz» tocaba las crines de ambos.
+    # Se etiqueta el alfa SIN ese resplandor (la figura elegida es el
+    # componente permitido mayor de su tramo) y al final se dilata 3
+    # px sobre el alfa original para recuperar su borde íntegro; el
+    # borde blanco NO es resplandor (su azul es ≥ 235) y las caras
+    # amarillas tampoco (su max−min es ≫ 90).
+    rr, gg, bb = (rgb[..., i].astype(np.int32) for i in range(3))
+    spread = np.maximum(np.maximum(rr, gg), bb) - np.minimum(np.minimum(rr, gg), bb)
+    glow = (alpha > 0) & (rr >= 240) & (gg >= 215) & (bb < 235) & (spread >= 25) & (spread <= 90)
+    allowed = (alpha > 0) & ~glow
+    lab2, n = ndimage.label(allowed)
+    objs = ndimage.find_objects(lab2)
+    sizes = ndimage.sum(allowed, lab2, range(1, n + 1)) if n else []
+    for pose, x0, x1 in POSE_SPANS:
+        best, best_size = None, 0
+        for i, sl in enumerate(objs, 1):
+            cx = (sl[1].start + sl[1].stop) / 2
+            if x0 <= cx <= x1 and sizes[i - 1] > best_size:
+                best, best_size = i, sizes[i - 1]
+        if best is None:
+            raise SystemExit(f"ERROR: no se encontró la pose {pose} en {src}")
+        mask = ndimage.binary_dilation(lab2 == best, iterations=3)
+        a2 = np.where(mask, alpha, 0).astype(np.uint8)
+        img = Image.fromarray(np.dstack([rgb, a2]), "RGBA")
+        img = img.crop(img.getchannel("A").getbbox())
+        w, h = img.size
+        img = img.resize((round(w * 440 / h), 440), Image.LANCZOS)
+        dest = IMG_DIR / f"alebrije-{pose}.png"
+        img.save(dest)
+        print(f"alebrije-{pose:9s} ← {POSE_SHEET} tramo x {x0}–{x1}: {img.size[0]}×{img.size[1]}, {int((a2 > 8).sum())} px opacos")
+
+
+NAMES = [BASE] + [f"alebrije-zona-{z}" for z in ZONE_COLORS] + [f"alebrije-{p}" for p, _x0, _x1 in POSE_SPANS]
 
 
 def main() -> None:
     build_zones()
+    build_poses()
     entries = []
     for name in NAMES:
         data = (IMG_DIR / f"{name}.png").read_bytes()
@@ -185,7 +293,9 @@ def main() -> None:
         "   como data URIs (G.ALEBRIJE_DATA): base + 6 zonas de\n"
         "   resplandor de COLOR VIVO por zona, derivadas del master\n"
         "   de Jose procesando la imagen (fuera de cada máscara, ni\n"
-        "   un píxel opaco cambia; el halo solo toca transparencia).\n"
+        "   un píxel opaco cambia; el halo solo toca transparencia),\n"
+        "   + las poses director/feliz de la escena del final,\n"
+        "   recortadas de su hoja de poses aprobada.\n"
         "   Fuente de diseño: application/src/assets/img/alebrije-*.png\n"
         "   (regenerar con: python3 tools/mkalebrije.py).\n"
         "   Data URIs a propósito: una imagen cargada desde file:// es\n"
