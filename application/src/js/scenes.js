@@ -2714,8 +2714,10 @@
   // la foto del cohete ~13:00. Si Leyendas también se habilita,
   // ELIGE EL JUGADOR (decisión de Jose, 2026-11-21).
   // IDENTIDAD: Pollito es el gato blanco atigrado de su hoja definida
-  // (Actor normal: frontal sin espejo, escala de su bundle); en 1A va
-  // de copiloto del rival y en 1B flota libre como caos. José conserva
+  // (Actor normal: frontal sin espejo, escala de su bundle); en 1B
+  // flota libre como caos. En 1A NO hay Actor de Pollito en la pista
+  // (corrección de Jose, 2026-11-21): va DENTRO del cohete rival — su
+  // nuca atigrada se ve en la ventanilla del PNG trasero. José conserva
   // sus lentes: el aturdido se marca con giro + estrellitas FUERA del
   // casco, nunca repintando ojos sobre sus lentes. El casco burbuja es
   // un overlay dibujado por código sobre cualquier sprite (drawHelmet).
@@ -2795,7 +2797,7 @@
   function rocketImg(name) {
     if (typeof Image === 'undefined') return null; // p. ej. la prueba de humo en Node
     if (!G.ROCKET_DATA || !G.ROCKET_DATA[name]) return null; // sin rocket-sheets.js cargado: no reventar
-    if (!rocketImgs[name]) { const im = new Image(); im.src = G.ROCKET_DATA[name]; rocketImgs[name] = im; }
+    if (!rocketImgs[name]) { const im = new Image(); im.src = G.ROCKET_DATA[name]; im._opaqueFracW = ROCKET_OPAQUE_FRAC_W[name] || 1; rocketImgs[name] = im; }
     return rocketImgs[name];
   }
   function rocketPreload() { for (const n of ROCKET_FILES) rocketImg(n); }
@@ -2804,7 +2806,15 @@
   // real del PNG. Si la imagen aún no cargó, no pinta nada (false).
   function drawRocketW(im, x, y, z, wWorld, o) {
     if (!rocketReady(im)) return false;
-    R.sprite(im, x, y, z, Object.assign({}, o, { w: wWorld, h: wWorld * (im.naturalHeight / im.naturalWidth) }));
+    // wWorld es el ancho OPACO deseado: el dibujo compensa el relleno
+    // transparente del lienzo con la fracción opaca medida de la
+    // imagen (im._opaqueFracW, puesta en rocketImg). En los PNG
+    // traseros actuales la fracción medida es 1,00 (las aletas llegan
+    // a los bordes del lienzo), así que hoy el tamaño no cambia; si
+    // el arte se regenera con margen, basta actualizar la medición
+    // (ROCKET_OPAQUE_FRAC_W) para que el ancho opaco siga siendo ese.
+    const dw = wWorld / (im._opaqueFracW || 1);
+    R.sprite(im, x, y, z, Object.assign({}, o, { w: dw, h: dw * (im.naturalHeight / im.naturalWidth) }));
     return true;
   }
   // Ídem por su ALTO de mundo (perfiles del despegue y la transición).
@@ -2819,34 +2829,57 @@
   // mágico de 34 sin relación con el dibujo. Ahora TODO sale de una
   // constante: ROCKET_W = 46 cabe en UN carril (52) con 3 u de margen
   // por lado; ROCKET_H sale del aspect real de los PNG traseros
-  // (280×370 y 280×372 ⇒ alto/ancho ≈ 1,325); la roca de un carril
-  // (METEOR_W = 50) se ve de ~un carril; y hay choque solo si las
-  // HUELLAS se solapan de verdad, con núcleos reducidos al 70% del
-  // ancho visual de cada sprite para que se sienta justo:
-  //   choque ⇔ |xCohete − xRoca| < (0,7·ROCKET_W + 0,7·METEOR_W)/2 ≈ 33,6
+  // (280×370 y 280×372 ⇒ alto/ancho ≈ 1,325).
   const ROCKET_W = 46;
   const ROCKET_ASPECT = 371 / 280;
   const ROCKET_H = ROCKET_W * ROCKET_ASPECT; // ≈ 61
-  const METEOR_W = 50;
-  const RING_HIT_W = (ROCKET_W * 0.7 + METEOR_W * 0.7) / 2; // ≈ 33,6
-  const ROCKET_CAT_DX = 14; // Pollito asoma junto a la ventanilla rival (≈ 0,3·ROCKET_W del centro)
+  // ANCHOS OPACOS MEDIDOS (corrección del playtest de Jose,
+  // 2026-11-21: «a veces los meteoritos se ven más grandes que su
+  // hitbox»): la ÚNICA verdad del tamaño es la caja opaca (alfa ≥ 128)
+  // de cada sprite, medida píxel a píxel — no el tamaño del lienzo:
+  // · PNG traseros de los cohetes: la caja opaca ES el lienzo entero
+  //   (280×370 y 280×372; las aletas llegan a los bordes) ⇒ fracción
+  //   1,00: el ROCKET_W dibujado ya es el ancho opaco, sin compensación.
+  // · Roca rockCv('rock', seed) en su lienzo de 96×96: el cuerpo opaco
+  //   ocupa solo una fracción según la seed — 0: 72/96 = 0,750;
+  //   1: 66/96 ≈ 0,688; 2: 69/96 ≈ 0,719 (medido replicando el trazo
+  //   de rockCv). Antes la roca se dibujaba a 50 u de LIENZO: su
+  //   silueta real era de solo ~35 u, pero el hitbox cobraba como si
+  //   midiera 50 — por eso el golpe no coincidía con lo que se veía.
+  // METEOR_W = 50 pasa a ser el ancho OPACO de diseño (≈ un carril)
+  // y el dibujo compensa el relleno transparente: se pinta a
+  // METEOR_W / fracción para que la silueta mida 50 u de verdad. El
+  // hitbox se calcula desde esos anchos OPACOS con los núcleos al 70%
+  // de siempre (el perdón deliberado: la silueta puede rozar la del
+  // cohete sin cobrar el choque, pero jamás se cobra un choque con
+  // las siluetas visiblemente separadas):
+  //   choque ⇔ |xCohete − xRoca| < (0,7·ROCKET_W + 0,7·METEOR_W)/2 ≈ 33,6
+  const ROCKET_OPAQUE_FRAC_W = { 'cohete-party-back': 1, 'cohete-rival-back': 1 };
+  const ROCK_OPAQUE_FRAC_W = [72 / 96, 66 / 96, 69 / 96]; // por seed de rockCv('rock', seed)
+  const METEOR_W = 50; // ancho OPACO de la roca (≈ un carril de 52)
+  const meteorDrawW = (seed) => METEOR_W / (ROCK_OPAQUE_FRAC_W[seed] || ROCK_OPAQUE_FRAC_W[0]);
+  const RING_HIT_W = (ROCKET_W * 0.7 + METEOR_W * 0.7) / 2; // ≈ 33,6, desde los anchos OPACOS
   // Marcas de la pista (ver el callback boxes de RingRaceDuel): el
   // avance se percibe por la banda transversal de cada segmento, las
   // balizas laterales y la marca dorada de distancia cada 500 u.
   const RING_SEG = 90, TRACK_BAND_W = 7, TRACK_DIST_EVERY = 500;
   const TRACK_BANDS = [['#b97f3e', '#a8732f'], ['#d9a45b', '#cb9c4e'], ['#a8743a', '#99662f']]; // [tramo de 1500 u][segmento par/impar]
-  // VELOCIDAD PROPIA DE LOS METEORITOS (corrección del playtest de
-  // Jose, 2026-11-21): antes las rocas estaban FIJAS en la pista y
-  // solo se acercaban por la velocidad del jugador. Ahora cada una
-  // vuela HACIA el jugador: nace con mv al azar en [26, 40] u/s y la
-  // rampa de carrera la acelera +0,35 u/s por segundo transcurrido,
-  // con tope de 65 u/s. La velocidad de cierre real es v + mv.
-  const METEOR_V_MIN = 26, METEOR_V_MAX = 40, METEOR_V_RAMP = 0.35, METEOR_V_CAP = 65;
-  // Con el cierre más rápido, la sombra roja de aviso se enciende
-  // antes (560 u en vez de 430): el tiempo hasta el impacto queda en
-  // ≈ 560/177 ≈ 3,2 s en el peor caso (cierre máximo: crucero del
-  // rival 112 + roca a 65) y ≈ 4 s al crucero típico del jugador.
-  const METEOR_WARN_Z = 560;
+  // VELOCIDAD PROPIA DE LOS METEORITOS (correcciones del playtest de
+  // Jose, 2026-11-21): las rocas vuelan HACIA el jugador con mv al
+  // azar en [26, 40] u/s al nacer, y la rampa las acelera al acercarse
+  // a la META (pedido expreso de la segunda ronda: por PROGRESO, no
+  // por tiempo): el factor va de 1,0 en la salida a 1,95 junto al
+  // aro, aplicado sobre el mv de cada roca, con techo absoluto de
+  // 85 u/s. El driver es la fracción recorrida por el LÍDER de la
+  // carrera, max(prog, rprog)/RING_LEN — ver meteorSpeed. La
+  // velocidad de cierre real es v + mv: junto a la meta llega a
+  // ≈ 121 (crucero máx. del jugador) + 78 (40 × 1,95) ≈ 199 u/s.
+  const METEOR_V_MIN = 26, METEOR_V_MAX = 40, METEOR_V_PROG = 0.95, METEOR_V_CAP = 85;
+  // Aviso justo con el nuevo cierre: la sombra roja se enciende a
+  // 620 u ⇒ en el peor caso (cierre ≈ 199 u/s) avisa con ≈ 3,1 s y
+  // al crucero típico (cierre ≈ 185 u/s) con ≈ 3,4 s. Sube de 560 a
+  // 620 para que el aviso nunca caiga por debajo de ~3 s.
+  const METEOR_WARN_Z = 620;
   // ÍTEM DE IMPULSO (pedido de Jose, 2026-11-21): estrella dorada en
   // la pista que SOLO recoge el jugador — es su herramienta para
   // recuperarse tras un choque; el rival NO la recoge nunca. Al
@@ -2971,8 +3004,11 @@
       super(who, 'jose', done, { rounds: 1, need: 1, label: 'CARRERA', title: 'ANILLOS DE J1407B', hint: '← → para cambiar de carril · Si tu copiloto sugiere otro carril y vas al contrario, el cohete duda', rendT: 1.6 });
       this.isRingRace = true; this.quietRend = true;
       this.copilotId = (o && o.copilot) || spaceCopilotOf(who);
-      this.cat = new Actor('pollito', RING_LANES[2] + ROCKET_CAT_DX, -40);
-      this.cat.dir = 'down'; this.cat.elev = 30;
+      // SIN Actor de Pollito en esta carrera (corrección de Jose,
+      // 2026-11-21): con el cohete ya en su tamaño correcto, el Actor
+      // se veía como un personaje parado EN MITAD DE LA PISTA. Pollito
+      // va DENTRO del cohete rival: su nuca atigrada ya se ve en la
+      // ventanilla de cohete-rival-back.png. (En 1B sí flota libre.)
       rocketPreload(); // los cohetes son imágenes: a cargar desde ya
       // CÁMARA DE 1A (corrección de Jose, 2026-11-21): antes dist 330 /
       // pitch 0,30 y el cohete dibujado a 148×130 ocupaba ~190 px de
@@ -3015,7 +3051,6 @@
       this.doubtT = 0; this.sug = null; this.sugCd = 2.5;
       this.meteors = []; this.nextMet = 520; this.finished = false;
       this.boosts = []; this.nextBoost = rnd(BOOST_EVERY_MIN, BOOST_EVERY_MAX); this.boostT = 0;
-      this.cat.x = RING_LANES[2] + ROCKET_CAT_DX; this.cat.y = -40; this.cat.elev = 30;
     }
     press(dir) {
       const nl = Math.max(0, Math.min(2, this.lane + dir));
@@ -3031,9 +3066,13 @@
       const lanes = dbl ? (Math.random() < 0.5 ? [0, 1] : [1, 2]) : [(Math.random() * 3) | 0];
       this.meteors.push({ prog: at, lanes, hitP: false, hitB: false, rDodge: false, rot: rnd(0, 6.3), seed: (Math.random() * 3) | 0, mv: rnd(METEOR_V_MIN, METEOR_V_MAX) });
     }
-    // Velocidad actual de una roca: su mv de nacimiento más la rampa
-    // de carrera (+0,35 u/s por segundo), con tope de 65 u/s.
-    meteorSpeed(m) { return Math.min(METEOR_V_CAP, m.mv + METEOR_V_RAMP * this.elapsed); }
+    // Fracción de carrera recorrida por el LÍDER (0 en la salida,
+    // 1 en el aro): es el driver de la rampa de los meteoritos.
+    raceFrac() { return Math.min(1, Math.max(this.prog, this.rprog) / RING_LEN); }
+    // Velocidad actual de una roca: su mv de nacimiento por el factor
+    // de PROGRESO (1,0 en la salida → 1,95 junto a la meta), con
+    // techo absoluto de 85 u/s.
+    meteorSpeed(m) { return Math.min(METEOR_V_CAP, m.mv * (1 + METEOR_V_PROG * this.raceFrac())); }
     spawnBoost(at, lane) {
       // La estrella nunca nace pegada a un meteorito (≥140 u en
       // prog): recogerla no puede ser un castigo. Si el punto cae
@@ -3054,12 +3093,12 @@
       this.boostT = 0; // chocar CORTA el impulso: nada de invulnerabilidad
       W.puff(this.laneX, -4, 7, true); G.sfx('bad');
       this.say('¡Choque! El cohete se frena…', '#ff6b7a', 1.1);
-      this.cat.hop(170); // Pollito se ríe del choque ajeno (salta en su ventanilla)
+      // (La risa de Pollito ante el choque ajeno queda solo en el
+      // texto/sonido: ya no hay Actor suyo en la pista que salte.)
     }
     crashB() {
       this.rcrashT = 2.3; this.crashesB++; this.rv *= 0.45;
       W.puff(this.rlaneX, Math.max(-330, -(this.rprog - this.prog)), 7, true); G.sfx('meow');
-      this.cat.emo('!!', 0.9); // Pollito se asusta si chocan ellos
       if (this.crashesB === 1) this.say('¡El rival chocó! Pollito se asustó', '#7dff8a', 1.1);
     }
     finish(w) {
@@ -3070,7 +3109,6 @@
     }
     extra() { return { spaceRace: 'anillos', crashesP: this.crashesP, crashesB: this.crashesB, copilot: this.copilotId }; }
     update(dt) {
-      const cat = this.cat; cat.update(dt);
       if (!this.tick(dt)) return;
       this.elapsed += dt;
       if (this.tapDir) { this.press(this.tapDir); this.tapDir = 0; }
@@ -3099,7 +3137,12 @@
       const tx = RING_LANES[this.lane], stL = (this.doubtT > 0 ? 120 : 300) * dt;
       this.laneX += Math.max(-stL, Math.min(stL, tx - this.laneX));
       // IA del rival: esquiva el meteorito que tenga delante (84%).
-      const nm = this.meteors.find((mm) => mm.prog > this.rprog + 30 && mm.prog < this.rprog + 320 && mm.lanes.includes(this.rlane));
+      // La ventana de anticipación CRECE con el progreso (320 u en la
+      // salida → 500 u junto a la meta): con el cierre de ~190 u/s
+      // cerca del aro, 500 u dan ≈ 2,6 s para decidir, y el rival
+      // cruza un carril en ~0,22 s a 240 u/s — sigue siendo justo.
+      const dodgeWin = 320 + 180 * this.raceFrac();
+      const nm = this.meteors.find((mm) => mm.prog > this.rprog + 30 && mm.prog < this.rprog + dodgeWin && mm.lanes.includes(this.rlane));
       if (nm && !nm.rDodge) {
         nm.rDodge = true;
         if (Math.random() < 0.84) { const safe = [0, 1, 2].filter((l) => !nm.lanes.includes(l)); this.rlane = safe.sort((a, b) => Math.abs(a - this.rlane) - Math.abs(b - this.rlane))[0]; }
@@ -3138,9 +3181,6 @@
       }
       this.boosts = this.boosts.filter((b) => !b.done && b.prog > this.prog - 200);
       this.meteors = this.meteors.filter((m) => m.prog > Math.min(this.prog, this.rprog) - 260);
-      // Pollito acompaña al cohete rival, asomado en su ventanilla.
-      const rz = Math.max(-330, Math.min(150, -(this.rprog - this.prog)));
-      cat.x = this.rlaneX + ROCKET_CAT_DX; cat.y = rz - 3; cat.elev = 30 + Math.sin(this.T * 2.2) * 1.6;
       if (this.prog >= RING_LEN) return this.finish('p');
       if (this.rprog >= RING_LEN) return this.finish('b');
       if (this.elapsed > 115) return this.finish(this.prog > this.rprog + 30 ? 'p' : this.rprog > this.prog + 30 ? 'b' : 'tie');
@@ -3156,7 +3196,7 @@
     draw(dt) {
       const rz = Math.max(-330, Math.min(150, -(this.rprog - this.prog)));
       W.render({
-        cam: this.cam, dt, mesh: null, actors: [this.cat], noApartment: true,
+        cam: this.cam, dt, mesh: null, actors: [], noApartment: true, // sin actores: Pollito va DENTRO del cohete rival (PNG), no en la pista
         light: { amb: [0.42, 0.44, 0.62], sun: [0.3, 0.3, 0.42], sky: '#0a1030', points: [{ x: 0, y: 120, z: -300, r: 700, c: [0.3, 0.3, 0.25] }] },
         boxes: (mb) => { // LA PISTA ES EL ANILLO: cinta 3D que avanza, con 3 carriles y divisorias teal emisivas
           // AVANCE VISIBLE (corrección de Jose, 2026-11-21): la lógica
@@ -3195,7 +3235,9 @@
             for (const l of m.lanes) {
               const mx = RING_LANES[l];
               if (mz > -METEOR_WARN_Z) R.flat(R.glowTex, mx, 0.9, mz, METEOR_W * 0.6, { tint: [1, 0.35, 0.25], alpha: 0.35 + Math.sin(t * 10) * 0.15 }); // sombra de aviso en el carril (antes por el cierre más rápido)
-              R.sprite(rockCv('rock', m.seed), mx, 16, mz, { w: METEOR_W, h: METEOR_W, roll: m.rot, lit: 0.5 });
+              // Se dibuja a meteorDrawW(seed): el lienzo compensado para que el ancho OPACO de la silueta sea METEOR_W (ver constantes)
+              const mw = meteorDrawW(m.seed);
+              R.sprite(rockCv('rock', m.seed), mx, 16, mz, { w: mw, h: mw, roll: m.rot, lit: 0.5 });
             }
           }
           // Estrellas de impulso en la pista: resplandor dorado en el
@@ -3255,7 +3297,8 @@
   RingRaceDuel.HIT_W = RING_HIT_W;
   RingRaceDuel.ROCKET_FILES = ROCKET_FILES;
   RingRaceDuel.TRACK = { seg: RING_SEG, bandW: TRACK_BAND_W, distEvery: TRACK_DIST_EVERY, beacons: true, altTones: true };
-  RingRaceDuel.METEOR_V = { min: METEOR_V_MIN, max: METEOR_V_MAX, ramp: METEOR_V_RAMP, cap: METEOR_V_CAP, warnZ: METEOR_WARN_Z };
+  RingRaceDuel.METEOR_V = { min: METEOR_V_MIN, max: METEOR_V_MAX, prog: METEOR_V_PROG, cap: METEOR_V_CAP, warnZ: METEOR_WARN_Z };
+  RingRaceDuel.OPAQUE = { rocketFracW: ROCKET_OPAQUE_FRAC_W, rockFracW: ROCK_OPAQUE_FRAC_W, meteorDrawW: [0, 1, 2].map(meteorDrawW) };
   RingRaceDuel.BOOST = { w: BOOST_W, dur: BOOST_DUR, mult: BOOST_MULT, sep: BOOST_SEP, everyMin: BOOST_EVERY_MIN, everyMax: BOOST_EVERY_MAX };
 
   // ---------- 1B. CINTURÓN DE ASTEROIDES (Mass Meteor) ----------
