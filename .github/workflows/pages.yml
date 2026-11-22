@@ -1,6 +1,7 @@
 # Publica el juego («1 Minuto para la Fiesta») en GitHub Pages.
-# El juego es un sitio estático sin build: se sirve tal cual application/src.
-# Cada push a main vuelve a desplegar la versión nueva automáticamente.
+# El juego es un sitio estático sin build. En cada push a main, este workflow
+# copia application/src a la raíz de la rama gh-pages, que es la fuente que
+# GitHub Pages sirve (Settings → Pages → Deploy from a branch → gh-pages).
 name: Publicar en GitHub Pages
 
 on:
@@ -9,9 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -20,18 +19,24 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Descargar el repo
         uses: actions/checkout@v4
-      - name: Configurar Pages
-        uses: actions/configure-pages@v5
-      - name: Subir el juego (application/src)
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: application/src
-      - name: Desplegar
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Sincronizar application/src → rama gh-pages
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          rm -rf /tmp/site && mkdir -p /tmp/site
+          cp -r application/src/. /tmp/site/
+          rm -rf /tmp/site/tests
+          cd /tmp/site
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Despliegue desde main ${SHA}"
+          git remote add origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+          git push -q -f origin gh-pages
+          echo "gh-pages actualizado desde ${SHA}"
