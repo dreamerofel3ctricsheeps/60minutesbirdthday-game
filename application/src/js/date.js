@@ -196,12 +196,33 @@
     }
     reapplySkip();
   }
+  // ---------- Ganancias globales de los Ajustes ----------
+  // La fuente de verdad del sonido es la Configuración del juego
+  // (game.js: G.musicGain()/G.sfxGain(), que ya incluyen el
+  // SILENCIO GENERAL). La cita las lee PEREZOSAMENTE en cada uso
+  // —nunca al cargar el módulo— y game.js la empuja a resincronizar
+  // por G.DateMode.applySoundSettings cuando algo cambia. Si
+  // game.js no está (este archivo ejercitado en solitario), las
+  // lecturas devuelven null y la cita se comporta como siempre:
+  // manda su propio silencio de sesión (D.muted) a volumen pleno.
+  function cfgMusicGain() { try { return (G && typeof G.musicGain === 'function') ? G.musicGain() : null; } catch (e) { return null; } }
+  function cfgSfxGain() { try { return (G && typeof G.sfxGain === 'function') ? G.sfxGain() : null; } catch (e) { return null; } }
+  // Aplica la configuración a la canción: su volumen ES la
+  // ganancia global de música, y queda silenciada si la apaga el
+  // silencio de la cita (D.muted) o el general (ganancia cero).
+  function applySongSound() {
+    if (!song) return;
+    const g = cfgMusicGain();
+    if (g == null) { song.muted = D.muted; return; }
+    song.volume = Math.max(0, Math.min(1, g));
+    song.muted = D.muted || g <= 0;
+  }
   function createSong() {
     if (song) return song;
     try {
       song = document.createElement('audio');
       song.preload = 'auto';
-      song.muted = D.muted; // la preferencia de silencio de la sesión manda desde el primer frame
+      applySongSound(); // la configuración global manda desde el primer frame (incluye el silencio de la sesión)
       const s1 = document.createElement('source'); s1.src = 'assets/audio/and-i-love-her.ogg'; s1.type = 'audio/ogg';
       const s2 = document.createElement('source'); s2.src = 'assets/audio/and-i-love-her.mp3'; s2.type = 'audio/mpeg';
       song.appendChild(s1); song.appendChild(s2);
@@ -285,8 +306,11 @@
   }
   function playDoorClose() {
     if (D.muted) return; // el silencio de la cita manda también sobre la Puerta
+    const g = cfgSfxGain();
+    if (g != null && g <= 0) return; // el silencio general (o efectos a cero) manda también
     const elx = createDoorSfx();
     if (!elx || typeof elx.play !== 'function') return;
+    elx.volume = 0.9 * (g == null ? 1 : g); // su volumen de siempre × la ganancia global de efectos
     try { elx.currentTime = 0; } catch (e) { /* aún sin metadata: play() parte del inicio igual */ }
     try { const p = elx.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* sin audio: el cruce sigue en silencio */ }
   }
@@ -316,7 +340,7 @@
   }
   function toggleMute() {
     D.muted = !D.muted;
-    if (song) song.muted = D.muted;
+    applySongSound(); // D.muted nuevo + la configuración global, en un solo lugar
     syncMuteBtn();
   }
   function ensureMuteBtn() {
@@ -3626,6 +3650,9 @@
   }
   G.DateMode = {
     start, stop, setPaused, verify: verifyCode, verifyAdmin: verifyAdminCode, dateNow,
+    // Resincroniza el audio de la cita con los Ajustes (game.js lo
+    // llama cuando cambia cualquier control de sonido).
+    applySoundSettings: applySongSound,
     scenes: DATE_SCENES, state: D,
     SUCK_DUR, DOOR_CALL_T, DOOR_OPEN_T, JOSE_LAG,
     update(dt) { if (D.scene) D.scene.update(dt); },
