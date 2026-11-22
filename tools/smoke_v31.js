@@ -3787,6 +3787,69 @@ const tick = () => new Promise((r) => setImmediate(r));
     D.repersistSave();
     check('alcance: entrar a práctica con historia en curso la abandona (guardado borrado) y ni la red lo trae de vuelta',
       lsAC.getItem('1mtp.save') === null, '');
+    // Notificaciones al continuar (corrección de Jose, 2026-11-22:
+    // «cuando se refresca la pantalla y se retoma la partida, las
+    // notificaciones es como si nunca hubieran sido vistas»). El
+    // estado de lectura de la máquina del teléfono viaja en el
+    // guardado y la restauración lo reaplica tal cual: el historial
+    // restaurado jamás cuenta como no leído por restaurarse.
+    console.log('  — notificaciones: el estado de lectura viaja en el guardado');
+    check('autoguardado: el punto de control fotografía el estado de notificaciones (unread, pending, muted) y applySave lo reaplica tras el reset',
+      gameAC.includes('phone: { unread: phone.unread || 0, pending: !!phone.pending, muted: !!phone.muted }')
+      && gameAC.includes('const phSv = sv.phone || {}') && gameAC.includes('phone.unread = (typeof phSv.unread'), '');
+    const phAC = G.ui.phone, badgeAC = documentFake.querySelector('#phonebadge');
+    S.player = 'saulo'; S.phase = 'act2';
+    msgsAC.innerHTML = '<div class="row"><div class="msg"><div class="bubble">Ya leído</div></div></div><div class="row"><div class="msg"><div class="bubble">También leído</div></div></div>';
+    phAC.reset(); phAC.unread = 0; phAC.pending = false; phAC.muted = false; phAC.paint();
+    D.saveCheckpoint('night', { storyIdx: 2 });
+    let svPhAC = null; try { svPhAC = JSON.parse(lsAC.getItem('1mtp.save') || 'null'); } catch (e) { svPhAC = null; }
+    check('autoguardado: el JSON del punto de control lleva el estado de notificaciones fotografiado',
+      !!svPhAC && !!svPhAC.phone && svPhAC.phone.unread === 0 && svPhAC.phone.pending === false, '');
+    phAC.unread = 7; phAC.pending = true; phAC.paint(); // el «refresco» revuelve también el teléfono
+    D.applySave(D.readSave());
+    check('autoguardado: guardar con 0 no leídos → continuar con 0 (ni el historial restaurado ni una alerta fantasma resucitan)',
+      phAC.unread === 0 && phAC.pending === false && badgeAC.textContent === '', '');
+    phAC.unread = 4; phAC.muted = true; phAC.paint();
+    D.saveCheckpoint('night', { storyIdx: 2 });
+    phAC.reset(); // el «refresco»: la máquina arranca limpia…
+    D.applySave(D.readSave()); // …y la restauración reaplica lo guardado
+    check('autoguardado: guardar con N no leídos → continuar con N (la insignia vuelve igual, y el silencio del panel se conserva)',
+      phAC.unread === 4 && phAC.muted === true && badgeAC.textContent === '4', '');
+    phAC.reset();
+  }
+
+  // --- Sección AD: el chat flotante NUNCA sobre un menú (corrección
+  // de Jose, 2026-11-22: «cuando le doy a pausa y el chat queda
+  // abierto, este último queda por encima del menú»). Los modales
+  // viven dentro del escenario (#overlay/#pauseov) y el teléfono
+  // flotante es hijo de main con z 30: la garantía es CSS pura
+  // (display:none por :has en el bloque flotante, el mismo trato
+  // que la capa táctil), sin tocar la máquina del teléfono — al
+  // cerrar el menú, el chat vuelve exactamente como estaba.
+  {
+    console.log('\nAD) Capas: con menú o pausa abiertos, el chat flotante se retira');
+    const cssAD = fs.readFileSync(path.join(SRC, '..', 'css', 'style.css'), 'utf8');
+    const gameAD = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const iMediaAD = cssAD.indexOf('@media (orientation: landscape) and (max-height: 700px)');
+    const iRuleAD = cssAD.indexOf('main:has(#overlay.show) > #phone');
+    const iNextAD = iMediaAD >= 0 ? cssAD.indexOf('@media', iMediaAD + 10) : -1;
+    check('capas: la regla vive en el bloque flotante (donde el panel solapa el escenario) y oculta el chat con menú o pausa abiertos',
+      iMediaAD >= 0 && iRuleAD > iMediaAD && (iNextAD < 0 || iRuleAD < iNextAD)
+      && cssAD.includes('main:has(#pauseov.show) > #phone { display: none; }'), '');
+    const iPauseAD = gameAD.indexOf('G.setPaused = (v) => {');
+    const pauseBodyAD = iPauseAD >= 0 ? gameAD.slice(iPauseAD, gameAD.indexOf('pauseBtn.onclick', iPauseAD)) : '';
+    check('capas: pausar/depausar y el menú de pausa NO tocan la máquina del teléfono (pausar no es cerrar el chat)',
+      !!pauseBodyAD && !pauseBodyAD.includes('phone.') && !pauseBodyAD.includes('phoneEl'), '');
+    const phAD = G.ui.phone, phoneElAD = documentFake.querySelector('#phone');
+    phAD.reset(); phAD.show(); // chat abierto, como lo deja el jugador al pausar
+    const beforeAD = JSON.stringify(phAD.state());
+    const povAD = documentFake.querySelector('#pauseov'), ovlAD = documentFake.querySelector('#overlay');
+    povAD.classList.add('show'); ovlAD.classList.add('show'); // las clases que ponen la pausa y los menús
+    const duringAD = JSON.stringify(phAD.state());
+    povAD.classList.remove('show'); ovlAD.classList.remove('show'); // al cerrar, el chat reaparece por CSS…
+    check('capas: con pausa/menú abiertos y tras cerrarlos, la máquina del chat queda intacta (sigue abierto, sin ph-off, misma insignia)',
+      beforeAD === duringAD && JSON.stringify(phAD.state()) === beforeAD && phAD.visible === true && !phoneElAD.classList.contains('ph-off'), '');
+    phAD.reset();
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);
