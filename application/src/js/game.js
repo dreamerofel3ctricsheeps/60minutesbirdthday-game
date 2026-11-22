@@ -285,7 +285,7 @@
     pauseOv.innerHTML = `<div class="modal"><h1><span class="pic pic-pause lg"><i></i><i></i></span>PAUSA</h1>
       <div class="pbtns">
         <button class="big" id="presume"><span class="pic pic-play"></span>Seguir jugando</button>
-        <button class="big alt" id="pmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos</button>
+        <button class="big alt${G.minigamesUnlocked() ? '' : ' locked'}" id="pmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos</button>
         <button class="big alt" id="psettings"><span class="pic pic-gear"><i></i></span>Ajustes</button>
         <button class="big alt" id="pexit"><span class="pic pic-door"></span>Salir al título</button>
         <button class="big alt" id="psecret">???</button>
@@ -326,6 +326,29 @@
   function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(G.settings)); } catch (e) { /* almacenamiento no disponible */ } }
   function applySettings() { document.body.classList.toggle('touch-on', !!G.settings.touch); }
   applySettings();
+
+  // ---------- Candado de Minijuegos (regla de Jose, 2026-11-22) ----------
+  // La práctica (el menú Minijuegos del título y de la pausa) nace
+  // BLOQUEADA. La abren dos llaves, y el desbloqueo PERSISTE entre
+  // sesiones en localStorage, con clave propia junto a la de ajustes:
+  //   1) llegar a CUALQUIER final en modo historia —victoria o
+  //      derrota, estándar o alternativo—: ver showEnding, que es el
+  //      único cierre de la historia y no se invoca ni desde la
+  //      práctica ni desde el easter egg «La Cita».
+  //   2) el código admin123 en la opción «???»: solo su hash SHA-256
+  //      vive en el repo (date.js, G.DateMode.verifyAdmin).
+  // Sin almacenamiento disponible, el desbloqueo dura la sesión
+  // (respaldo en memoria) en vez de romperse.
+  const MINIGAMES_KEY = '1mtp.minigames';
+  let mgSession = false; // respaldo en memoria; también lo resetea el humo vía G.debug
+  G.minigamesUnlocked = () => {
+    if (mgSession) return true;
+    try { return localStorage.getItem(MINIGAMES_KEY) === '1'; } catch (e) { return false; }
+  };
+  G.unlockMinigames = () => {
+    mgSession = true;
+    try { localStorage.setItem(MINIGAMES_KEY, '1'); } catch (e) { /* sin almacenamiento: vale el respaldo de sesión */ }
+  };
   function settingsScreen() {
     return new Promise((res) => {
       menuShow(`<h2><span class="pic pic-gear"><i></i></span>Ajustes</h2>
@@ -481,7 +504,22 @@
     $('#dateback').onclick = back;
     $('#datego').onclick = () => {
       const inp = $('#datecode'); // se lee al hacer clic, no al abrir
-      const ok = G.DateMode && G.DateMode.verify(inp ? inp.value : '');
+      const val = inp ? inp.value : '';
+      // Segunda llave del mismo panel: el código admin123 NO abre
+      // la cita — desbloquea los Minijuegos (persistente) y lo
+      // CONFIRMA en pantalla, a diferencia del código erróneo,
+      // que sigue cerrando en silencio total.
+      if (G.DateMode && G.DateMode.verifyAdmin && G.DateMode.verifyAdmin(val)) {
+        G.unlockMinigames();
+        G.sfx('ok');
+        menuShow(`<h2>¡Minijuegos desbloqueados!</h2>
+          <p>La práctica queda abierta en el título y en la pausa, desde ahora y en tus próximas visitas.</p>
+          <div class="pbtns"><button class="big" id="adminok">Volver</button></div>`);
+        const m2 = overlay.querySelector('.modal'); if (m2) m2.classList.add('noscroll');
+        $('#adminok').onclick = back;
+        return;
+      }
+      const ok = G.DateMode && G.DateMode.verify(val);
       if (!ok) { back(); return; } // silencio total
       startDate();
     };
@@ -625,7 +663,21 @@
       return; // 'list'
     }
   }
+  // Pantalla del candado: sin desbloqueo, TODAS las entradas al
+  // menú de práctica (título, pausa y el atajo ?duelo=) caen aquí
+  // o se ignoran. La pista nombra las dos llaves sin regalar el
+  // código: jugar la historia hasta un final, o el código en «???».
+  function minigamesLockedScreen() {
+    return new Promise((res) => {
+      menuShow(`<h2><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>Minijuegos — práctica</h2>
+      <p>La práctica está bloqueada por ahora.</p>
+      <p class="dim">Termina el juego o desbloquea con un código en ???</p>
+      <button class="big alt" id="mback">← Volver</button>`);
+      $('#mback').onclick = () => { G.sfx('pick'); res(); };
+    });
+  }
   async function showMinigames(from) {
+    if (!G.minigamesUnlocked()) { await minigamesLockedScreen(); menuHide(); return; }
     for (;;) {
       const pick = await duelListScreen(from);
       if (pick === 'back') break;
@@ -641,7 +693,7 @@
         overlay.innerHTML = `<div class="modal"><div class="logo"><img class="logoico" src="assets/icons/pastel.png" alt=""><h1>1 MINUTO<br><span>PARA LA FIESTA</span></h1></div>
           <p>Siete roomies. Una fiesta sorpresa. Y Ximena, que vuelve de 36 horas de guardia, está por llegar.</p>
           <p class="dim">Recolecta lo que puedas en 60 segundos. Después: decide, improvisa, vence en duelo a <b>Pollito</b> y a <b>José</b> y, sobre todo, <b>no la despiertes</b>.</p>
-          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button><button class="big alt" id="tsettings"><span class="pic pic-gear"><i></i></span>AJUSTES</button><button class="big alt" id="tsecret">???</button></div></div>`;
+          <div class="pbtns"><button class="big" id="tplay"><span class="pic pic-play"></span>JUGAR</button><button class="big alt${G.minigamesUnlocked() ? '' : ' locked'}" id="tmg"><span class="pic pic-grid"><i></i><i></i><i></i><i></i></span>MINIJUEGOS</button><button class="big alt" id="tsettings"><span class="pic pic-gear"><i></i></span>AJUSTES</button><button class="big alt" id="tsecret">???</button></div></div>`;
         overlay.classList.add('show');
         $('#tplay').onclick = () => {
           overlay.classList.remove('show'); overlay.innerHTML = ''; G.sfx('ok');
@@ -1133,6 +1185,14 @@
   }
 
   async function showEnding(key) {
+    // Llave 1 del candado de Minijuegos: llegar a un final en modo
+    // historia —cualquiera: victoria o derrota, estándar o
+    // alternativo— cuenta como pasarse el juego y desbloquea la
+    // práctica para siempre. showEnding solo se invoca desde el
+    // flujo de la historia (main y los clímax alternativos); el
+    // guard deja constancia de que ni la práctica ni la cita
+    // (fase 'date') pueden abrir el candado por esta vía.
+    if (!G.practiceMode && S.phase !== 'date') G.unlockMinigames();
     const e = G.ENDINGS[key], text = typeof e.text === 'function' ? e.text(S) : e.text;
     const lvl = Math.min(4, Math.floor(S.quality / 20));
     const extras = [];
@@ -1219,7 +1279,9 @@
     await titleScreen();
     // modo práctica: index.html?duelo=decoracion | pollito | mensajes | apagon | pizza | sonambula | memoria | cactus | repisas | pisoton | azotea
     const pr = /[?&]duelo=(\w+)/.exec(location.search);
-    if (pr && G.EVENTS[pr[1]] && G.EVENTS[pr[1]].type === 'minigame') {
+    // El atajo de práctica también respeta el candado de Minijuegos:
+    // sin desbloqueo se ignora y la partida arranca normal.
+    if (pr && G.EVENTS[pr[1]] && G.EVENTS[pr[1]].type === 'minigame' && G.minigamesUnlocked()) {
       S.player = 'natalia'; S.phase = 'act2';
       Object.keys(G.ITEMS).forEach((id) => (S.inv[id] = true)); ui.refreshInv();
       G.home = new Sc.HomeScene(); G.home.xState = 'sleeping'; G.home.wander = true; G.setScene(G.home);

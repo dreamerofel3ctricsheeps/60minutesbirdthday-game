@@ -87,6 +87,16 @@
   const normalizeCode = (txt) => String(txt || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   function verifyCode(txt) { return sha256hex(normalizeCode(txt)) === CODE_HASH; }
 
+  // ---------- Segundo código de «???»: la llave de Minijuegos ----------
+  // El mismo panel acepta OTRO código (admin123) que NO abre la
+  // cita: desbloquea el menú de Minijuegos (la llave vive en
+  // game.js: G.unlockMinigames, persistente en localStorage).
+  // Como el de la cita, del código solo vive su hash SHA-256
+  // (calculado sobre la forma normalizada: mayúsculas y solo
+  // caracteres alfanuméricos); el texto plano no está en el repo.
+  const ADMIN_HASH = '5b40171489659251097e7790fc2f1892e2183a72546fe1df283d07865db9149c';
+  function verifyAdminCode(txt) { return sha256hex(normalizeCode(txt)) === ADMIN_HASH; }
+
   // ---------- Tabla maestra de escenas (documento §11) ----------
   // REGLA DE DISTANCIAS (documento §5): cada franja caminable se
   // dimensiona para que recorrerla a ritmo de paseo dure lo que
@@ -3615,7 +3625,7 @@
     D.scene = null; D.plazaScene = null; D.angelScene = null; D.aeroScene = null; D.praderaScene = null; D.finaleScene = null;
   }
   G.DateMode = {
-    start, stop, setPaused, verify: verifyCode, dateNow,
+    start, stop, setPaused, verify: verifyCode, verifyAdmin: verifyAdminCode, dateNow,
     scenes: DATE_SCENES, state: D,
     SUCK_DUR, DOOR_CALL_T, DOOR_OPEN_T, JOSE_LAG,
     update(dt) { if (D.scene) D.scene.update(dt); },

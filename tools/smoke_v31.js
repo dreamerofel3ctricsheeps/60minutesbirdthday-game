@@ -169,8 +169,20 @@ const documentFake = {
 };
 
 // ---------- Sandbox y carga de scripts reales ----------
+// localStorage falso en memoria: permite ejercitar la persistencia
+// real del juego (ajustes y el candado de Minijuegos, sección Q).
+const fakeLocalStorage = (() => {
+  const m = new Map();
+  return {
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => { m.set(k, String(v)); },
+    removeItem: (k) => { m.delete(k); },
+    clear: () => m.clear(),
+  };
+})();
 const sandbox = {
   console, performance, setTimeout, clearTimeout, setInterval, clearInterval,
+  localStorage: fakeLocalStorage,
   document: documentFake,
   ImageData: class { constructor(data, w, h) { this.data = data; this.width = w; this.height = h; } },
   location: { search: '', pathname: '/index.html', href: '' },
@@ -196,11 +208,14 @@ load('gl3d.js');
 load('world.js');
 load('scenes.js');
 // game.js no exporta MG; la inyección es SOLO para la prueba (el archivo
-// real no cambia): se añade MG a lo que G.debug ya expone.
+// real no cambia): se añade MG a lo que G.debug ya expone. La sección Q
+// suma showMinigames/showEnding (el candado de Minijuegos) y un reset
+// del respaldo en memoria del candado (mgSession), para poder simular
+// una sesión sin desbloqueo tras haberlo abierto.
 load('game.js', (code) => {
   const from = 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect };';
   if (!code.includes(from)) throw new Error('no se encontró G.debug en game.js');
-  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen };');
+  return code.replace(from, 'G.debug = { S, apply, runEvent, tick, actArrival, actCollect, MG, selectChar, pickCharScreen, showMinigames, showEnding, resetMinigames: () => { mgSession = false; } };');
 });
 
 const G = sandbox.G, Sc = G.Scenes, W = G.World;
@@ -2346,6 +2361,92 @@ const tick = () => new Promise((r) => setImmediate(r));
       !cssP.includes('@media (max-width: 900px) {') && cssP.includes('@media (max-width: 900px) and (max-aspect-ratio: 4/5)'), '');
     check('encuadre: la tarjeta del título escala con el alto del escenario (clamp con cqh, no solo con vw)',
       cssP.includes('clamp(26px, 9.5cqh, 50px)') && cssP.includes('clamp(12px, 3.3cqh, 14px)'), '');
+  }
+
+  // ============================================================
+  // Q) Candado de Minijuegos (regla de Jose, 2026-11-22): la
+  // práctica nace BLOQUEADA. Dos llaves: (1) llegar a cualquier
+  // final en modo historia (showEnding) y (2) el código admin123
+  // en la opción «???» (solo su hash SHA-256 en date.js). El
+  // desbloqueo persiste en localStorage ('1mtp.minigames').
+  // ============================================================
+  console.log('\nQ) Candado de Minijuegos — bloqueado hasta pasarse el juego o con admin123 en «???»');
+  {
+    const gameTxtQ = fs.readFileSync(path.join(SRC, 'game.js'), 'utf8');
+    const dateTxtQ = fs.readFileSync(path.join(SRC, 'date.js'), 'utf8');
+    const cssQ = fs.readFileSync(path.join(__dirname, '..', 'application', 'src', 'css', 'style.css'), 'utf8');
+    const overlayQ = documentFake.querySelector('#overlay');
+    const cryptoQ = require('crypto');
+    // --- Fuente: las piezas del candado están donde deben estar ---
+    check('candado: la llave persiste con clave propia documentada (1mtp.minigames) y API en G',
+      gameTxtQ.includes("const MINIGAMES_KEY = '1mtp.minigames'") && gameTxtQ.includes('G.minigamesUnlocked') && gameTxtQ.includes('G.unlockMinigames'), '');
+    check('candado: showEnding (el cierre de la historia) abre la llave 1 con su guard (ni práctica ni cita)',
+      /async function showEnding\(key\) \{\s*\/\/ Llave 1[\s\S]{0,600}?if \(!G\.practiceMode && S\.phase !== 'date'\) G\.unlockMinigames\(\);/.test(gameTxtQ), '');
+    check('candado: showMinigames cae en la pantalla del candado sin desbloqueo, con la pista exacta de Jose',
+      gameTxtQ.includes('if (!G.minigamesUnlocked()) { await minigamesLockedScreen(); menuHide(); return; }')
+      && gameTxtQ.includes('Termina el juego o desbloquea con un código en ???'), '');
+    check('candado: el atajo ?duelo= también respeta el candado',
+      gameTxtQ.includes("G.EVENTS[pr[1]].type === 'minigame' && G.minigamesUnlocked()"), '');
+    check('candado: los botones de título y pausa se pintan apagados (clase locked) sin desbloqueo, y el CSS la define sin emojis',
+      (gameTxtQ.match(/minigamesUnlocked\(\) \? '' : ' locked'/g) || []).length === 2 && cssQ.includes('button.big.locked'), '');
+    check('candado: date.js guarda SOLO el hash SHA-256 de admin123 (forma normalizada) y expone verifyAdmin',
+      dateTxtQ.includes(`const ADMIN_HASH = '${cryptoQ.createHash('sha256').update('ADMIN123').digest('hex')}'`)
+      && dateTxtQ.includes('function verifyAdminCode(txt) { return sha256hex(normalizeCode(txt)) === ADMIN_HASH; }')
+      && dateTxtQ.includes('verifyAdmin: verifyAdminCode') && !dateTxtQ.includes("'admin123'") && !dateTxtQ.includes('"admin123"'), '');
+    check('candado: el panel «???» comprueba la llave admin (confirmación) ANTES que el código de la cita (silencio)',
+      gameTxtQ.includes('G.DateMode.verifyAdmin(val)') && gameTxtQ.includes('¡Minijuegos desbloqueados!')
+      && gameTxtQ.indexOf('verifyAdmin(val)') < gameTxtQ.indexOf('G.DateMode.verify(val)'), '');
+    // --- Estado inicial: bloqueado ---
+    fakeLocalStorage.clear(); G.debug.resetMinigames();
+    check('candado: sin desbloqueo previo, la práctica nace bloqueada y sin clave guardada',
+      G.minigamesUnlocked() === false && fakeLocalStorage.getItem('1mtp.minigames') === null, '');
+    // --- La puerta enseña la pista, no la lista ---
+    const pLocked = G.debug.showMinigames('title'); await tick();
+    const lockedHtml = overlayQ.innerHTML;
+    check('candado: al intentarlo bloqueado se muestra la pista (y NO la lista de duelos)',
+      lockedHtml.includes('Termina el juego o desbloquea con un código en ???') && !lockedHtml.includes('data-id='), lockedHtml.slice(0, 120));
+    documentFake.querySelector('#mback').onclick(); await pLocked;
+    check('candado: la pantalla del candado se cierra con Volver y el candado sigue puesto',
+      !overlayQ.classList.contains('show') && G.minigamesUnlocked() === false, '');
+    // --- Llave 2: admin123 en «???» (DateMode simulado: la cripto
+    // real la fijan el check de fuente de arriba y check_date) ---
+    G.DateMode = { verify: () => false, verifyAdmin: (t) => t === 'admin123' };
+    let cancelsQ = 0;
+    G.openDateCode(() => { cancelsQ++; });
+    documentFake.querySelector('#datecode').value = 'admin123';
+    documentFake.querySelector('#datego').onclick(); await tick();
+    check('candado: admin123 muestra la confirmación «¡Minijuegos desbloqueados!» y NO entra a la cita',
+      overlayQ.innerHTML.includes('¡Minijuegos desbloqueados!') && S.phase !== 'date', overlayQ.innerHTML.slice(0, 120));
+    check('candado: admin123 desbloquea y el desbloqueo QUEDA PERSISTIDO en localStorage',
+      G.minigamesUnlocked() === true && fakeLocalStorage.getItem('1mtp.minigames') === '1', '');
+    documentFake.querySelector('#adminok').onclick(); await tick();
+    check('candado: la confirmación vuelve a la pantalla anterior (onCancel) con el menú abierto',
+      cancelsQ === 1 && !overlayQ.classList.contains('show'), 'cancels=' + cancelsQ);
+    // --- Desbloqueado: la lista real abre como siempre ---
+    const pList = G.debug.showMinigames('title'); await tick();
+    const listHtml = overlayQ.innerHTML;
+    check('candado: ya desbloqueado, el menú muestra la lista de duelos de práctica de siempre',
+      listHtml.includes('Minijuegos — práctica') && listHtml.includes('data-id=') && !listHtml.includes('Termina el juego o desbloquea'), listHtml.slice(0, 120));
+    documentFake.querySelector('#mback').onclick(); await pList;
+    // --- Código erróneo en «???»: silencio total, como siempre ---
+    G.openDateCode(() => { cancelsQ++; });
+    documentFake.querySelector('#datecode').value = 'NOES1234';
+    documentFake.querySelector('#datego').onclick(); await tick();
+    check('candado: un código que no es ni la cita ni admin cierra en silencio (vuelve sin mensajes)',
+      cancelsQ === 2 && !overlayQ.classList.contains('show') && !overlayQ.innerHTML.includes('desbloqueados'), 'cancels=' + cancelsQ);
+    G.DateMode = undefined;
+    // --- Llave 1: llegar a un final de historia desbloquea ---
+    fakeLocalStorage.clear(); G.debug.resetMinigames();
+    check('candado: sesión limpia (sin la clave persistida) vuelve a estar bloqueada',
+      G.minigamesUnlocked() === false, '');
+    sandbox.location.reload = () => {}; // showEnding recarga al cerrar; aquí no
+    G.practiceMode = false; S.phase = 'act2'; S.flags = S.flags || {};
+    const pEnd = G.debug.showEnding('ruina'); // final de DERROTA: también cuenta como pasarse el juego
+    check('candado: al llegar a un final de historia (aunque sea la ruina) el desbloqueo se activa y persiste',
+      G.minigamesUnlocked() === true && fakeLocalStorage.getItem('1mtp.minigames') === '1', '');
+    documentFake.querySelector('#mok').onclick(); await pEnd;
+    check('candado: la pantalla del final se cierra con normalidad tras desbloquear',
+      !overlayQ.classList.contains('show'), '');
   }
 
   console.log(`\n${failures ? '✘ ' + failures + ' FALLOS' : '✔ TODO OK'} — ${checks - failures}/${checks} checks`);

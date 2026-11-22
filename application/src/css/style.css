@@ -119,6 +119,7 @@ button.big { margin-top: 14px; margin-top: clamp(8px, 3.5cqh, 14px); background:
 button.big:hover { transform: translateY(-1px); filter: brightness(1.08); }
 button.big:active { transform: translateY(3px); box-shadow: 0 1px 0 #120f1b; }
 button.big.alt { background: var(--panel2); color: var(--ink); }
+button.big.locked { opacity: .55; filter: grayscale(.75); } /* candado de Minijuegos: visible pero apagado; al pulsarlo se muestra la pista */
 .pbtns { display: flex; flex-direction: column; gap: 10px; align-items: center; margin-top: 6px; }
 .pbtns button.big { margin-top: 0; min-width: 240px; }
 /* ---------- Pausa ---------- */
