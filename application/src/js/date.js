@@ -279,21 +279,40 @@
   // la caminata ni la canción; el cierre se lee juntos en la
   // sala, con su firma. Son textos BASE (los del guion v2)
   // puestos a pedido de Jose: su versión definitiva la escribe
-  // él y se cambia SOLO aquí. La mecánica (guion v2) los
-  // consume tal cual: la apertura la lee Ximena a ritmo del
-  // jugador en el depa (Acto 1), los cuatro fragmentos caen en
-  // la banda de la carta durante la caminata (Acto 2) y el
-  // cierre se lee en pareja en la sala (Acto 3); el cierre
-  // total compone la carta completa con todos ellos.
+  // él y se cambia SOLO aquí.
+  // MODELO DE LISTAS (pedido de Jose, 2026-11-22: «voy a querer
+  // agregar VARIAS frases por escena y no solo una»): cada
+  // momento es un ARREGLO de frases, de cualquier largo ≥ 1, y
+  // la mecánica las consume EN ORDEN — la apertura, una por
+  // avance del jugador; las de cada escena del paseo, repartidas
+  // en puntos a lo largo de su recorrido (cartaPuntos); las del
+  // cierre, en secuencia en el sofá —; la carta fullscreen del
+  // cierre total las compone TODAS, en orden, con la firma al
+  // pie. Un arreglo vacío no rompe nada: ese momento no muestra
+  // frases. (cartaFrases acepta también una cadena suelta, por
+  // si se escribe una sola sin corchetes.) Los borradores
+  // vigentes quedan como la frase 1 de cada momento: hasta que
+  // Jose entregue su texto final, el juego se comporta igual.
   const CARTA_TEXTOS = {
-    apertura: 'Esta carta no se lee en un sillón: se lee caminando. Sal — yo voy contigo.',
-    plaza: 'Primer lugar: por donde todo el mundo pasa y nadie se detiene. Nosotros sí.',
-    sanangel: 'Aquí la gente se declara desde hace cien años. Yo solo te miro, y ya está declarado.',
-    aero: 'Porque un día volaremos a algún lado. Y el destino va a ser lo de menos.',
-    castillo: 'Y si la vida nos pone un castillo en el cielo, lo cruzamos igual: caminando, y juntos.',
-    cierre: '¿Ves? La carta terminaba donde empezó: en casa, contigo.',
+    apertura: ['Esta carta no se lee en un sillón: se lee caminando. Sal — yo voy contigo.'],
+    plaza: ['Primer lugar: por donde todo el mundo pasa y nadie se detiene. Nosotros sí.'],
+    sanangel: ['Aquí la gente se declara desde hace cien años. Yo solo te miro, y ya está declarado.'],
+    aero: ['Porque un día volaremos a algún lado. Y el destino va a ser lo de menos.'],
+    castillo: ['Y si la vida nos pone un castillo en el cielo, lo cruzamos igual: caminando, y juntos.'],
+    cierre: ['¿Ves? La carta terminaba donde empezó: en casa, contigo.'],
     firma: 'Feliz cumpleaños, mi amor.',
   };
+  // La lista de frases de un momento, normalizada: acepta el
+  // arreglo del modelo (o una cadena suelta) y descarta lo que
+  // no sea texto con contenido (un arreglo vacío — o de puros
+  // vacíos — deja el momento sin frases, sin romper nada).
+  function cartaFrases(x) {
+    const arr = Array.isArray(x) ? x : (x == null ? [] : [x]);
+    return arr.filter((s) => typeof s === 'string' && s.trim().length > 0);
+  }
+  // Los momentos de la carta, en el orden en que la carta
+  // fullscreen del cierre total los compone.
+  const CARTA_MOMENTOS = ['apertura', 'plaza', 'sanangel', 'aero', 'castillo', 'cierre'];
 
   // ---------- Estado propio del modo ----------
   const D = {
@@ -308,7 +327,7 @@
     // --- La carta (guion v2): la llave de la cita y sus
     // fragmentos. start() los reinicia en cada partida.
     cartaAbierta: false, // la carta ya se abrió en el depa: la salida despierta
-    cartaFrag: { plaza: false, sanangel: false, aero: false, castillo: false }, // fragmentos ya mostrados (una sola vez por partida)
+    cartaFrag: { plaza: 0, sanangel: 0, aero: 0, castillo: 0 }, // frases ya DISPARADAS por escena (contador del modelo de listas; cada frase sale una sola vez por partida)
     completed: false, // el cierre total (carta + foto) ya se presentó en esta partida
     // --- El menú final del cierre (pedido de Jose): al
     // terminar todo, «Reintentar» o «Salir al título».
@@ -1277,24 +1296,140 @@
   // únicamente para eso»). La mecánica no cambia: mismos
   // disparadores, misma regla de lectura, misma cola.
   // Regla de solape: si un fragmento llega con otro en
-  // curso, queda EN ESPERA (una sola en cola) y entra cuando
-  // el actual termina de desvanecerse — nunca se enciman.
+  // curso, queda EN ESPERA en la cola y entra cuando el
+  // actual termina de desvanecerse — nunca se enciman ni
+  // se pierden (con el modelo de listas la cola puede
+  // guardar varias frases de la MISMA escena: cada entrada
+  // lleva su escena de origen, para poder descartar las de
+  // una escena al cruzar su Puerta — descartarFrasesEscena).
   const CARTA_BAND_IN = 0.8, CARTA_BAND_OUT = 1.4;
-  const cartaBand = { text: null, t: 0, total: 0, pending: null };
-  function showCartaBand(text) {
+  const cartaBand = { text: null, t: 0, total: 0, scene: null, queue: [] };
+  function showCartaBand(text, scene) {
     if (!text) return;
-    if (cartaBand.text) { cartaBand.pending = text; return; }
-    cartaBand.text = text; cartaBand.t = 0;
+    if (cartaBand.text) { cartaBand.queue.push({ text, scene: scene || null }); return; }
+    cartaBand.text = text; cartaBand.scene = scene || null; cartaBand.t = 0;
     cartaBand.total = CARTA_BAND_IN + cartaReadTime(text) + CARTA_BAND_OUT;
   }
   function updateCartaBand(dt) {
     if (!cartaBand.text) return;
     cartaBand.t += dt;
     if (cartaBand.t >= cartaBand.total) {
-      const next = cartaBand.pending;
-      cartaBand.text = null; cartaBand.pending = null; cartaBand.t = 0; cartaBand.total = 0;
-      if (next) showCartaBand(next);
+      const next = cartaBand.queue.shift() || null;
+      cartaBand.text = null; cartaBand.scene = null; cartaBand.t = 0; cartaBand.total = 0;
+      if (next) showCartaBand(next.text, next.scene);
     }
+  }
+  // ---------- El reparto de las frases del paseo ----------
+  // Cada escena dispara sus frases EN ORDEN, repartidas a
+  // lo largo de su recorrido útil: la frase i (de n) sale
+  // al alcanzar el punto desde + (hasta − desde) × i/n —
+  // la primera en el punto de disparo de siempre y las
+  // siguientes en fracciones parejas del trecho que queda
+  // hasta cerca de la Puerta de salida. El «progreso» es la
+  // x del controlado en plaza/San Ángel/aeropuerto y el pan
+  // de cámara en las praderas (su disparo de siempre ya era
+  // por pan: el castillo entrando en cuadro).
+  function cartaTrecho(id) {
+    switch (id) {
+      case 'plaza': return { desde: 430, hasta: PLAZA_FX.vistaWorldX - 150 }; // la Puerta de salida está en vistaWorldX (4250)
+      case 'sanangel': return { desde: SA_VELAS_X0, hasta: SANANGEL.exitDoorX - 150 };
+      case 'aero': return { desde: 1750, hasta: AERO.exitDoorX - 150 };
+      case 'castillo': return { desde: 2500, hasta: PRADERA.worldW - 640 - 200 }; // pan máximo = worldW − 640
+      default: return null;
+    }
+  }
+  function cartaPuntos(id) {
+    const n = cartaFrases(CARTA_TEXTOS[id]).length;
+    const trecho = cartaTrecho(id);
+    if (!trecho || n === 0) return [];
+    const pts = [];
+    for (let i = 0; i < n; i++) pts.push(trecho.desde + (trecho.hasta - trecho.desde) * (i / n));
+    return pts;
+  }
+  // Las frases de la escena que tocan disparar al llegar a
+  // `prog`: las marca como disparadas en D.cartaFrag (el
+  // contador por escena) y las devuelve EN ORDEN, para que
+  // la escena las pase a la banda. Si el jugador corre y
+  // cruza dos puntos de golpe, salen las dos (la segunda
+  // espera en la cola de la banda, sin perderse).
+  function cartaDisparos(id, prog) {
+    const frases = cartaFrases(CARTA_TEXTOS[id]);
+    const pts = cartaPuntos(id);
+    const out = [];
+    while (D.cartaFrag[id] < frases.length && prog >= pts[D.cartaFrag[id]]) {
+      out.push(frases[D.cartaFrag[id]]);
+      D.cartaFrag[id]++;
+    }
+    return out;
+  }
+  // Al cruzar la Puerta de una escena, sus frases que NO
+  // salieron se descartan (pertenecen a su escena: ni las
+  // que nunca llegaron a su punto ni las que esperaban en
+  // la cola). La que esté EN PANTALLA ya salió: termina de
+  // desvanecerse con normalidad.
+  function descartarFrasesEscena(id) {
+    D.cartaFrag[id] = cartaFrases(CARTA_TEXTOS[id]).length;
+    cartaBand.queue = cartaBand.queue.filter((q) => q.scene !== id);
+  }
+  // ---------- El cierre en el sofá: la secuencia ----------
+  // Las frases del cierre se muestran en secuencia, cada
+  // una con SU tiempo de lectura (la regla de siempre), y
+  // la firma acompaña a la ÚLTIMA, como antes acompañaba
+  // al cierre único. La duración total del estado
+  // 'reading' suma las frases + la firma + el respiro.
+  function cierreDurTotal() {
+    return cartaFrases(CARTA_TEXTOS.cierre).reduce((a, t) => a + cartaReadTime(t), 0) +
+      cartaReadTime(CARTA_TEXTOS.firma) + 1.2;
+  }
+  // La frase del cierre que toca en el instante t del
+  // estado 'reading' (con su tiempo local dentro de ella).
+  function cierreFraseEn(t) {
+    const fs = cartaFrases(CARTA_TEXTOS.cierre);
+    let acc = 0;
+    for (let i = 0; i < fs.length; i++) {
+      const d = cartaReadTime(fs[i]);
+      if (t < acc + d) return { texto: fs[i], idx: i, esUltima: i === fs.length - 1, local: t - acc, dur: d };
+      acc += d;
+    }
+    return { texto: fs.length ? fs[fs.length - 1] : null, idx: fs.length - 1, esUltima: true, local: 0, dur: 0 };
+  }
+  // ---------- La carta fullscreen del cierre total ----------
+  // Se compone con TODAS las frases en orden (un párrafo
+  // por momento: sus frases unidas con un espacio) y la
+  // firma al pie, en la zona limpia del papel de
+  // carta-final.png. Con varias frases el texto crece: la
+  // composición se AUTO-AJUSTA bajando el tamaño de letra
+  // por escalones hasta que la firma cabe sobre el papel
+  // (yMax); el mínimo legible es el último escalón — si ni
+  // así cupiera, se dibuja a ese mínimo y cartaFullFit lo
+  // REPORTA con fits:false (el presupuesto orientativo de
+  // la carta final es ~1800 caracteres totales).
+  const CARTA_FULL = {
+    sizes: [10.5, 10, 9.5, 9, 8.5, 8, 7.5, 7], // escalones del auto-ajuste; el último (7) es el mínimo legible
+    y0: 74, yMax: 330, // la primera línea y el tope de la firma, sobre el papel
+    wrapW: 292, lhK: 13.5 / 10.5, gapK: 0.55, // interlineado (× tamaño) y respiro entre párrafos (× interlineado)
+  };
+  function cartaFullCompose(c, size) {
+    const paras = CARTA_MOMENTOS
+      .map((id) => cartaFrases(CARTA_TEXTOS[id]).join(' '))
+      .filter((p) => p.length > 0);
+    const items = []; // { t: línea } | { gap: true }
+    paras.forEach((p, i) => {
+      if (i) items.push({ gap: true });
+      for (const l of wrapCartaText(c, p, size, CARTA_FULL.wrapW)) items.push({ t: l });
+    });
+    const lh = size * CARTA_FULL.lhK;
+    const advance = items.reduce((a, it) => a + (it.gap ? lh * CARTA_FULL.gapK : lh), 0);
+    return { items, lh, advance, firmaY: CARTA_FULL.y0 + advance + 2 };
+  }
+  function cartaFullFit(c) {
+    for (const size of CARTA_FULL.sizes) {
+      const comp = cartaFullCompose(c, size);
+      if (comp.firmaY <= CARTA_FULL.yMax) return { size, items: comp.items, lh: comp.lh, firmaY: comp.firmaY, fits: true };
+    }
+    const size = CARTA_FULL.sizes[CARTA_FULL.sizes.length - 1];
+    const comp = cartaFullCompose(c, size);
+    return { size, items: comp.items, lh: comp.lh, firmaY: comp.firmaY, fits: false };
   }
   // El fundido del fragmento en escena: entra suave
   // (CARTA_BAND_IN), se queda pleno lo que manda la regla
@@ -1673,7 +1808,10 @@
       // su dir vigente y queda fijo toda la secuencia —
       // la «toma» y la lectura comparten orientación.
       const o = cartaOrientDe(this.xi.dir);
-      this.phase = 'carta'; this.cartaSeq = { step: 'toma', t: 0, orient: o.set, flip: o.flip };
+      // Las frases de la apertura (modelo de listas): se
+      // leen EN ORDEN, una por avance del jugador; la
+      // secuencia guarda la lista y el índice en curso.
+      this.phase = 'carta'; this.cartaSeq = { step: 'toma', t: 0, orient: o.set, flip: o.flip, texts: cartaFrases(CARTA_TEXTOS.apertura), idx: 0 };
       const xi = this.xi;
       xi.route = null; xi.vx = xi.vy = 0; xi.moving = false;
       xi.dir = 'up'; // frente a la mesa de centro
@@ -1732,9 +1870,14 @@
         if (S.t >= 0.8) { S.step = 'lee'; S.t = 0; }
         return;
       }
-      // 'lee': el fragmento se queda lo que dure SU lectura;
-      // se avanza con ESPACIO/toque, sin reloj que apure.
+      // 'lee': cada frase se queda hasta que el jugador
+      // avanza (ESPACIO/toque), sin reloj que apure. Con
+      // varias frases, cada avance pasa a la SIGUIENTE;
+      // solo al avanzar desde la ÚLTIMA la carta queda
+      // abierta y la salida despierta. (Sin frases, el
+      // primer avance la abre igual: nada se atasca.)
       if (G.input.hit('action') || D.tap) {
+        if (S.idx < S.texts.length - 1) { S.idx++; S.t = 0; D.tap = false; return; }
         D.cartaAbierta = true;
         this.xi.hidden = false;
         this.cartaSeq = null;
@@ -1832,6 +1975,9 @@
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; D.tap = false;
+      // Las frases de la plaza que no salieron se quedan
+      // en la plaza: se descartan al cruzar su Puerta.
+      descartarFrasesEscena('plaza');
       // La calle queda limpia para la próxima visita: ni
       // encuentros ni autos a mitad de cruce al volver.
       this.encuentros = []; this.autos = []; this.frenoT = 0; this.speedK = 1;
@@ -1867,14 +2013,15 @@
       this.updateEncuentros(dt);
       this.updateAutos(dt);
       updateStripFree(this, dt);
-      // El fragmento de la PLAZA (guion v2): cae al asomar la
-      // Catedral — unos pasos después de la llegada, ya en
-      // modo libre y lejos de las Puertas (junto a la de
-      // salida el disparo espera a que la pareja se aleje) —,
-      // una sola vez por partida.
-      if (!D.cartaFrag.plaza && !this.nearExit && A.x >= 430) {
-        D.cartaFrag.plaza = true;
-        showCartaBand(CARTA_TEXTOS.plaza);
+      // Las frases de la PLAZA (guion v2): la primera cae al
+      // asomar la Catedral — unos pasos después de la
+      // llegada, ya en modo libre y lejos de las Puertas
+      // (junto a la de salida el disparo espera a que la
+      // pareja se aleje) — y las siguientes en los puntos
+      // repartidos por el resto de la franja (cartaPuntos);
+      // cada una, una sola vez por partida.
+      if (!this.nearExit) {
+        for (const txt of cartaDisparos('plaza', A.x)) showCartaBand(txt, 'plaza');
       }
     }
     // Los ENCUENTROS de la calle: el Alebrije y Teodora cruzan
@@ -2013,7 +2160,9 @@
             // texto flotante a un lado, sin recuadro (el
             // avance sigue a ritmo del jugador; el hint es
             // la instrucción y va en letra pequeña al pie).
-            drawCartaTexto(c, CARTA_TEXTOS.apertura, Math.min(1, this.cartaSeq.t * 2 + 0.4), { hint: 'ESPACIO: seguir' });
+            // Con varias frases se dibuja la que va en
+            // curso (cartaSeq.idx), una por avance.
+            drawCartaTexto(c, this.cartaSeq.texts[this.cartaSeq.idx], Math.min(1, this.cartaSeq.t * 2 + 0.4), { hint: 'ESPACIO: seguir' });
           }
           return;
         }
@@ -2411,6 +2560,10 @@
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
+      // Las frases de San Ángel que no salieron se quedan
+      // en San Ángel: se descartan al cruzar cualquiera de
+      // sus Puertas.
+      descartarFrasesEscena('sanangel');
       playDoorClose(); // la Puerta se cierra tras la pareja (grabación real)
     }
     update(dt) {
@@ -2475,13 +2628,14 @@
       this.speedK = this.frenoT > 0 ? SA_BOLAS.frenoK : 1;
       updateStripFree(this, dt);
       this.updateBolas(dt);
-      // El fragmento de SAN ÁNGEL (guion v2): al entrar en
-      // la zona del árbol (donde arranca el camino de velas,
-      // cerca del abrazo), lejos de las Puertas, una sola vez
-      // por partida.
-      if (!D.cartaFrag.sanangel && !this.nearDoor && A.x >= SA_VELAS_X0) {
-        D.cartaFrag.sanangel = true;
-        showCartaBand(CARTA_TEXTOS.sanangel);
+      // Las frases de SAN ÁNGEL (guion v2): la primera al
+      // entrar en la zona del árbol (donde arranca el
+      // camino de velas, cerca del abrazo) y las siguientes
+      // en los puntos repartidos hasta cerca de la Puerta
+      // del árbol (cartaPuntos); lejos de las Puertas y
+      // cada una una sola vez por partida.
+      if (!this.nearDoor) {
+        for (const txt of cartaDisparos('sanangel', A.x)) showCartaBand(txt, 'sanangel');
       }
     }
     // ---------- La acción de abrazo (solo San Ángel) ----------
@@ -2957,6 +3111,10 @@
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
+      // Las frases del aeropuerto que no salieron se
+      // quedan en el aeropuerto: se descartan al cruzar
+      // cualquiera de sus Puertas.
+      descartarFrasesEscena('aero');
       playDoorClose(); // la Puerta se cierra tras la pareja (grabación real)
     }
     update(dt) {
@@ -2990,12 +3148,14 @@
       this.nearDoorX = dE <= dX ? this.entryDoorX : this.exitDoorX;
       if (this.nearDoor && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
       updateStripFree(this, dt);
-      // El fragmento del AEROPUERTO (guion v2): a mitad de la
-      // escena (x ≈ 1800 de 3600), en la parte en calma y
-      // lejos de las Puertas, una sola vez por partida.
-      if (!D.cartaFrag.aero && !this.nearDoor && A.x >= 1750) {
-        D.cartaFrag.aero = true;
-        showCartaBand(CARTA_TEXTOS.aero);
+      // Las frases del AEROPUERTO (guion v2): la primera a
+      // mitad de la escena (x ≈ 1800 de 3600), en la parte
+      // en calma, y las siguientes en los puntos repartidos
+      // hasta cerca de la Puerta de salida (cartaPuntos);
+      // lejos de las Puertas y cada una una sola vez por
+      // partida.
+      if (!this.nearDoor) {
+        for (const txt of cartaDisparos('aero', A.x)) showCartaBand(txt, 'aero');
       }
     }
     draw(dt) {
@@ -3426,6 +3586,10 @@
     beginExit() {
       if (this.phase !== 'free') return;
       this.phase = 'exitdoor'; this.phaseT = 0; this.usedDoorX = this.nearDoorX; D.tap = false;
+      // Las frases de las praderas que no salieron se
+      // quedan en las praderas: se descartan al cruzar
+      // cualquiera de sus Puertas.
+      descartarFrasesEscena('castillo');
       playDoorClose(); // la Puerta se cierra tras la pareja (grabación real)
     }
     update(dt) {
@@ -3466,14 +3630,15 @@
       this.speedK = this.frenoT > 0 ? PRADERA.calcifer.frenoK : 1;
       updateStripFree(this, dt);
       this.updateCalcifers(dt);
-      // El fragmento de las PRADERAS (guion v2): cuando el
-      // castillo entra en cuadro. Su capa (PRADERA.castillo:
-      // centro 1432, parallax 0,25, ancho ≈ 325) asoma por la
-      // derecha cuando pan ≳ 2500; lejos de las Puertas y una
-      // sola vez por partida.
-      if (!D.cartaFrag.castillo && !this.nearDoor && this.pan >= 2500) {
-        D.cartaFrag.castillo = true;
-        showCartaBand(CARTA_TEXTOS.castillo);
+      // Las frases de las PRADERAS (guion v2): la primera
+      // cuando el castillo entra en cuadro. Su capa
+      // (PRADERA.castillo: centro 1432, parallax 0,25,
+      // ancho ≈ 325) asoma por la derecha cuando pan ≳
+      // 2500; las siguientes en los puntos repartidos del
+      // pan hasta cerca del final (cartaPuntos); lejos de
+      // las Puertas y cada una una sola vez por partida.
+      if (!this.nearDoor) {
+        for (const txt of cartaDisparos('castillo', this.pan)) showCartaBand(txt, 'castillo');
       }
     }
     // Los Calcifer de la vereda: quietos sobre su tronquito,
@@ -4364,10 +4529,12 @@
           break;
         }
         case 'reading': {
-          // Terminan de leer la carta, en pareja: el panel
-          // con el cierre y la firma dura lo que manda la
-          // regla de lectura (cierre + firma + un respiro).
-          if (C.t > cartaReadTime(CARTA_TEXTOS.cierre) + cartaReadTime(CARTA_TEXTOS.firma) + 1.2) this.nextCine('gaze');
+          // Terminan de leer la carta, en pareja: las frases
+          // del cierre se suceden, cada una con SU tiempo de
+          // lectura, y al final la firma y un respiro (la
+          // suma la da cierreDurTotal, la misma regla de
+          // siempre aplicada frase a frase).
+          if (C.t > cierreDurTotal()) this.nextCine('gaze');
           break;
         }
         case 'gaze': {
@@ -4807,10 +4974,28 @@
       // 'reading' y se desvanece en el aire, subiendo un
       // poco, al pasar a la mirada ('gaze').
       if (this.cine.st === 'reading') {
-        drawCartaTexto(c, CARTA_TEXTOS.cierre, Math.min(1, this.cine.t * 2), { firma: CARTA_TEXTOS.firma });
+        // Las frases del cierre EN SECUENCIA (cierreFraseEn
+        // dice cuál toca y su tiempo local): cada una entra
+        // con su fundido y la firma acompaña solo a la
+        // ÚLTIMA, al pie, como acompañaba al cierre único.
+        // Sin frases de cierre, la firma se lee sola.
+        const cf = cierreFraseEn(this.cine.t);
+        if (cf.texto != null) {
+          drawCartaTexto(c, cf.texto, Math.min(1, cf.local * 2), { firma: cf.esUltima ? CARTA_TEXTOS.firma : undefined });
+        } else {
+          drawCartaTexto(c, CARTA_TEXTOS.firma, Math.min(1, this.cine.t * 2), {});
+        }
       } else if (this.cine.st === 'gaze' && this.cine.t < 1.3) {
+        // La ÚLTIMA frase (con su firma) se desvanece en el
+        // aire al pasar a la mirada, como hacía el cierre
+        // único.
         const k = this.cine.t / 1.3;
-        drawCartaTexto(c, CARTA_TEXTOS.cierre, 1 - k, { firma: CARTA_TEXTOS.firma, drift: 7 * k });
+        const fsG = cartaFrases(CARTA_TEXTOS.cierre);
+        if (fsG.length) {
+          drawCartaTexto(c, fsG[fsG.length - 1], 1 - k, { firma: CARTA_TEXTOS.firma, drift: 7 * k });
+        } else {
+          drawCartaTexto(c, CARTA_TEXTOS.firma, 1 - k, { drift: 7 * k });
+        }
       }
       if (!cineOn && this.nearSofa) { const p = this.xi.head(44); G.prompt(c, 'ESPACIO: sentarse', p.x, p.y); }
       else if (!cineOn && this.nearDoor) { const p = this.xi.head(46); G.prompt(c, 'ESPACIO: salir a las praderas', p.x, p.y); }
@@ -4839,17 +5024,21 @@
           c.restore();
         } else { c.fillStyle = '#17101f'; c.fillRect(0, 0, 640, 360); }
         if (cl.step === 'carta') {
-          const paras = [CARTA_TEXTOS.apertura, CARTA_TEXTOS.plaza, CARTA_TEXTOS.sanangel,
-            CARTA_TEXTOS.aero, CARTA_TEXTOS.castillo, CARTA_TEXTOS.cierre];
-          const lines = [];
-          for (const p of paras) { lines.push(...wrapCartaText(c, p, 10.5, 292)); lines.push(''); }
-          lines.pop();
-          let y = 74;
-          for (const l of lines) {
-            if (l) G.text(c, l, 320, y, { size: 10.5, bold: false, color: '#4a3423', stroke: false });
-            y += 13.5;
+          // La carta COMPLETA: todas las frases de todos
+          // los momentos, en orden (un párrafo por momento),
+          // con la firma al pie. cartaFullFit elige el mayor
+          // tamaño de los escalones con el que la composición
+          // cabe en la zona limpia del papel (si ni al mínimo
+          // cupiera, dibuja a ese mínimo: fits queda en
+          // falso en el cálculo, sin romper el dibujo).
+          const fit = cartaFullFit(c);
+          let y = CARTA_FULL.y0;
+          for (const it of fit.items) {
+            if (it.gap) { y += fit.lh * CARTA_FULL.gapK; continue; }
+            if (it.t) G.text(c, it.t, 320, y, { size: fit.size, bold: false, color: '#4a3423', stroke: false });
+            y += fit.lh;
           }
-          G.text(c, CARTA_TEXTOS.firma, 470, y + 2, { size: 11, color: '#7a4a2b', align: 'right', stroke: false });
+          G.text(c, CARTA_TEXTOS.firma, 470, fit.firmaY, { size: fit.size + 0.5, color: '#7a4a2b', align: 'right', stroke: false });
           G.text(c, 'ESPACIO: seguir', 320, 344, { size: 9, bold: false, color: '#8a6f4d', stroke: false });
         }
         return;
@@ -5000,14 +5189,14 @@
     // sin abrir, ningún fragmento mostrado y la cita sin
     // completar; la banda, vacía.
     D.cartaAbierta = false;
-    D.cartaFrag = { plaza: false, sanangel: false, aero: false, castillo: false };
+    D.cartaFrag = { plaza: 0, sanangel: 0, aero: 0, castillo: 0 };
     D.completed = false;
     // La vía de salida al título queda guardada: el menú
     // final la invoca («Salir al título») y la reutiliza
     // como callback del reinicio («Reintentar»).
     D.onDone = onDone || null;
     D.tap = false; D.tapPos = null; D.endMenuCancel = false;
-    cartaBand.text = null; cartaBand.pending = null; cartaBand.t = 0; cartaBand.total = 0;
+    cartaBand.text = null; cartaBand.scene = null; cartaBand.queue = []; cartaBand.t = 0; cartaBand.total = 0;
     if (G.S) G.S.phase = 'date';
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.add('date-mode');
     D.scene = new DateScene(onDone);
@@ -5018,8 +5207,8 @@
     D.active = false; D.state = 'idle'; D.clockRunning = false; D.clockStarted = false; fbRunning = false;
     D.cartaAbierta = false; D.completed = false;
     D.tapPos = null; D.endMenuCancel = false;
-    D.cartaFrag = { plaza: false, sanangel: false, aero: false, castillo: false };
-    cartaBand.text = null; cartaBand.pending = null; cartaBand.t = 0; cartaBand.total = 0;
+    D.cartaFrag = { plaza: 0, sanangel: 0, aero: 0, castillo: 0 };
+    cartaBand.text = null; cartaBand.scene = null; cartaBand.queue = []; cartaBand.t = 0; cartaBand.total = 0;
     skipArmed = false; // sin arranque en curso: el metadata tardío ya no debe saltar nada
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
     if (doorSfx && typeof doorSfx.pause === 'function') { try { doorSfx.pause(); } catch (e) {} }
@@ -5051,6 +5240,13 @@
       // Ganchos de la carta (guion v2, secciones F/O/S): los
       // textos, la regla de lectura, la banda y su disparo.
       CARTA_TEXTOS, cartaReadTime, cartaBand, showCartaBand, updateCartaBand,
+      // Ganchos del MODELO DE LISTAS de la carta (sección
+      // AA): la normalización de frases, el reparto de
+      // puntos por escena, el disparo y el descarte al
+      // cruzar la Puerta, la secuencia del cierre en el
+      // sofá y el auto-ajuste de la carta fullscreen.
+      cartaFrases, cartaPuntos, cartaDisparos, descartarFrasesEscena,
+      cierreFraseEn, cierreDurTotal, CARTA_FULL, cartaFullFit, CARTA_MOMENTOS,
       // Ganchos de la presentación de los textos de la
       // carta en escena (sección W): el estilo display, el
       // fundido con su deriva, y los tres caminos de dibujo
