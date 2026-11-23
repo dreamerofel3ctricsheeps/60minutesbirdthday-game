@@ -394,6 +394,96 @@
     // por delante y no se le mueve nada).
     if (song && isFinite(song.currentTime) && song.currentTime < AUDIO_SKIP - 0.05) seekSong();
   }
+  // ---------- El bucle de la parte final (pedido de Jose,
+  // 2026-11-23: «cuando la canción se acabe y aún no se ha
+  // llegado a la parte final del easter egg con los personajes
+  // viendo las fotos, la canción debe seguir escuchándose;
+  // analiza el audio y creo que la parte final puede
+  // reproducirse en bucle») ----------
+  // La cita corre en modo libre: si el jugador tarda más que
+  // la pista, la canción terminaba y el resto —el finale y el
+  // álbum de fotos incluidos— transcurría en silencio. Ahora,
+  // al llegar al final ÚTIL de la pista, su PARTE FINAL entra
+  // en bucle (no la canción entera desde cero) y sigue
+  // sonando hasta que la cita se detiene.
+  //
+  // Los puntos salen de MEDIR el archivo de Jose
+  // (and-i-love-her.ogg, 44,1 kHz, duración total 164,886 s;
+  // análisis de envolvente y onsets del 2026-11-23):
+  // - La transferencia trae un ruido de superficie constante
+  //   (~−36 dB): la música entra a los 7,06 s (primer ataque
+  //   medido) y el acorde final, golpeado a los 155,21 s, se
+  //   apaga hasta fundirse con ese ruido a los ~159,5 s; de
+  //   159,5 a 164,886 solo queda el crepitar, sin música.
+  // - El pulso medido por autocorrelación del flujo de
+  //   onsets es estable en ambas mitades: ~0,81 s (≈74 ppm);
+  //   el compás de 4/4 mide 3,238 s. Con el primer ataque
+  //   como compás 0, la grabación suma 47 compases: intro
+  //   (4), estrofa (8), estrofa (8), puente (8), solo de
+  //   guitarra (8), estrofa final (8) y outro (3).
+  // - SONG_LOOP_START = 123,62: el ataque medido del primer
+  //   compás de la ESTROFA FINAL (el compás 36 de la
+  //   rejilla; la energía en la banda vocal 1,5–4 kHz
+  //   confirma que 124–148 s es estrofa cantada, hermana de
+  //   la primera, y no el solo instrumental de 98–124).
+  // - SONG_LOOP_END = 159,5: donde la caída del acorde
+  //   final alcanza el suelo de ruido (−35,4 dB medidos
+  //   contra −36,1 del crepitar): cortar ahí no pierde
+  //   música audible ni deja pasar segundos de puro ruido.
+  // El bucle [123,62, 159,5) dura 35,88 s ≈ 11 compases (la
+  // estrofa final entera + el outro): el salto cae desde un
+  // acorde ya apagado al primer compás de la estrofa, como
+  // si la canción siguiera con otra vuelta de su cierre.
+  const SONG_LOOP_START = 123.62, SONG_LOOP_END = 159.5;
+  // Antelación del retorno: 'timeupdate' puede avisar cada
+  // ~250 ms (y peor en segundo plano); se vuelve 0,4 s ANTES
+  // del punto para no alcanzar jamás el fin real del archivo
+  // (lo que se sacrifica es la cola ya inaudible del acorde).
+  const SONG_LOOP_ANT = 0.4;
+  let loopWraps = 0, loopLatched = false;
+  // El bucle solo existe si el archivo en curso ES el de
+  // Jose (su duración pasa del punto final con margen). Con
+  // un máster más corto (p. ej. el canónico de 149 s) no hay
+  // bucle y la pista se comporta como siempre: termina y ya.
+  function songLoopOk() {
+    return !!(song && isFinite(song.duration) && song.duration >= SONG_LOOP_END + 0.5);
+  }
+  function songLoopReturn() {
+    loopLatched = true; loopWraps++;
+    try { song.currentTime = SONG_LOOP_START; } catch (e) { /* sin metadata aún: el próximo aviso o el 'ended' lo reintentan */ }
+  }
+  function onSongTimeUpdate() {
+    if (!song || !D.clockRunning || !songLoopOk()) return;
+    const raw = song.currentTime;
+    if (!isFinite(raw)) return;
+    // Ya dentro del bucle de nuevo (tras un retorno): se
+    // rearma el disparador. Así una misma llegada al punto
+    // no puede contar dos vueltas si el navegador tarda en
+    // aplicar el salto y el aviso siguiente aún ve la
+    // posición vieja, ya pasada del punto.
+    if (raw < SONG_LOOP_END - 2) loopLatched = false;
+    if (!loopLatched && raw >= SONG_LOOP_END - SONG_LOOP_ANT) songLoopReturn();
+  }
+  function onSongEnded() {
+    // Red de seguridad: si pese a la antelación la pista
+    // llegó a su fin real (un 'timeupdate' estrangulado en
+    // segundo plano), se devuelve al inicio del bucle y se
+    // reanuda la reproducción: la cita nunca se queda en
+    // silencio antes de su parte final.
+    if (!song || !D.clockRunning || !songLoopOk()) return;
+    songLoopReturn();
+    if (typeof song.play === 'function') { try { const p = song.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* sin audio: manda el respaldo */ } }
+  }
+  // Posición VIRTUAL de la canción: la real más lo ya
+  // recorrido en las vueltas del bucle. dateNow() la usa
+  // para que el reloj de la cita NO retroceda al volver el
+  // audio: justo tras un retorno vale SONG_LOOP_END (no
+  // SONG_LOOP_START) y sigue creciendo vuelta a vuelta,
+  // igual que el reloj de respaldo crece sin techo.
+  function songVirtualT() {
+    const raw = song && isFinite(song.currentTime) ? song.currentTime : 0;
+    return raw + loopWraps * (SONG_LOOP_END - SONG_LOOP_START);
+  }
   function onSongMetadata() {
     if (!song) return;
     if (isFinite(song.duration) && song.duration > 0) {
@@ -437,6 +527,8 @@
       if (song.addEventListener) {
         song.addEventListener('loadedmetadata', onSongMetadata);
         song.addEventListener('canplay', reapplySkip);
+        song.addEventListener('timeupdate', onSongTimeUpdate);
+        song.addEventListener('ended', onSongEnded);
         // Solo un fallo del PROPIO <audio> (todas las fuentes caidas) invalida
         // la cancion; el 'error' del <source> .mp3 (404, no existe) se captura
         // aqui pero NO debe tumbar songOk si el ogg suena bien.
@@ -448,6 +540,7 @@
   function startClock() {
     D.clockRunning = true;
     fbElapsed = 0; fbRunning = true; fbStart = performance.now();
+    loopWraps = 0; loopLatched = false; // el bucle de la parte final parte de cero en cada arranque
     skipArmed = true; skipReapplied = false; // el salto es de ESTE arranque
     seekSong(); // intento inmediato: la canción parte 4 s adelante
     if (song && typeof song.play === 'function') {
@@ -459,7 +552,9 @@
     // Con audio manda la canción, pero el tiempo devuelto es el
     // DE LA CITA: se descuenta el silencio saltado para que la
     // tabla DATE_SCENES siga sincronizada con la música real.
-    if (songOk && song && isFinite(song.currentTime)) return Math.max(0, song.currentTime - skipOffset());
+    // Con el bucle de la parte final cuenta la posición
+    // VIRTUAL (songVirtualT), que no retrocede en los retornos.
+    if (songOk && song && isFinite(song.currentTime)) return Math.max(0, songVirtualT() - skipOffset());
     if (!fbRunning) return fbElapsed;
     return fbElapsed + (performance.now() - fbStart) / 1000;
   }
@@ -5361,6 +5456,7 @@
     D.cartaFrag = { plaza: 0, sanangel: 0, aero: 0, castillo: 0 };
     cartaBand.text = null; cartaBand.scene = null; cartaBand.queue = []; cartaBand.t = 0; cartaBand.total = 0;
     skipArmed = false; // sin arranque en curso: el metadata tardío ya no debe saltar nada
+    loopWraps = 0; loopLatched = false; // el bucle muere con la cita: sin reloj corriendo, ningún retorno más
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
     if (doorSfx && typeof doorSfx.pause === 'function') { try { doorSfx.pause(); } catch (e) {} }
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('date-mode');
@@ -5384,6 +5480,11 @@
       // simular el metadata del <audio> falso y ejercitar el
       // salto del silencio inicial y el botón de silencio.
       AUDIO_SKIP, getSong: () => song, onSongMetadata, startClock, toggleMute,
+      // Ganchos del bucle de la parte final (sección AB):
+      // los puntos medidos del archivo, los mismos
+      // escuchadores que registra el navegador y el
+      // contador de vueltas del reloj virtual.
+      SONG_LOOP_START, SONG_LOOP_END, onSongTimeUpdate, onSongEnded, getLoopWraps: () => loopWraps,
       // Gancho del SFX de la Puerta (sección Q): el elemento
       // propio de la grabación y su disparo, para contar
       // cuántas veces suena por cruce en el harness.

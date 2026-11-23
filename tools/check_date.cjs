@@ -213,6 +213,22 @@
      al mínimo legible cabe (presupuesto orientativo:
      ~1800 caracteres). Un arreglo vacío no atasca
      ningún momento.
+   AB) El bucle de la parte final de la canción (pedido
+     de Jose, 2026-11-23: «cuando la canción se acabe y
+     aún no se ha llegado a la parte final del easter
+     egg..., la canción debe seguir escuchándose»): los
+     puntos salen de MEDIR el archivo real (164,886 s;
+     la música va del primer ataque a los 7,06 s al
+     acorde final que se apaga a los ~159,5 s; pulso
+     ~0,81 s ≈ 74 ppm, 47 compases de 3,238 s) y el
+     bucle es la estrofa final (compás 36) + el outro:
+     [123,62, 159,5), 35,88 s. Al cruzar el fin útil la
+     posición retorna con antelación ('timeupdate') y
+     red de 'ended' si la pista llega a su fin real; el
+     reloj de la cita cuenta la posición VIRTUAL y no
+     retrocede en los retornos; con un máster más corto
+     que el punto final no hay bucle; el silencio de la
+     cita queda intacto y stop() detiene el bucle.
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -3354,6 +3370,85 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   CTA.firma = origFirmaA;
   check('los textos de la carta quedan RESTAURADOS al texto final de Jose al terminar la sección',
     DM.debug.CARTA_MOMENTOS.every((id) => CTA[id] === origTextosA[id]) && CTA.firma === origFirmaA);
+
+  console.log('\nAB) El bucle de la parte final de la canción (pedido de Jose, 2026-11-23: que la canción no se acabe antes de llegar a la parte final)');
+  // Como en la sección K: el <audio> es un FakeEl y sus
+  // eventos no se disparan solos; se ejercitan las MISMAS
+  // funciones que el navegador dispara (onSongTimeUpdate y
+  // onSongEnded, ganchos debug) moviendo la posición a mano.
+  // La duración REAL del archivo de Jose, medida con
+  // ffprobe sobre and-i-love-her.ogg: 164,886 s.
+  DM.stop();
+  const songLoopEl = DM.debug.getSong();
+  const DUR_REAL = 164.886;
+  check('los puntos del bucle son los MEDIDOS del archivo de Jose: inicio 123,62 (compás 36, la estrofa final) y fin útil 159,5 (el acorde final ya fundido con el ruido de superficie)',
+    DM.debug.SONG_LOOP_START === 123.62 && DM.debug.SONG_LOOP_END === 159.5,
+    `start=${DM.debug.SONG_LOOP_START} end=${DM.debug.SONG_LOOP_END}`);
+  check('las constantes son coherentes con la duración real (0 < inicio < fin ≤ duración) y el bucle dura ≥ 15 s (35,88 s ≈ 11 compases: la estrofa final + el outro)',
+    DM.debug.SONG_LOOP_START > 0 && DM.debug.SONG_LOOP_START < DM.debug.SONG_LOOP_END && DM.debug.SONG_LOOP_END <= DUR_REAL &&
+    (DM.debug.SONG_LOOP_END - DM.debug.SONG_LOOP_START) >= 15,
+    `largo=${(DM.debug.SONG_LOOP_END - DM.debug.SONG_LOOP_START).toFixed(2)}`);
+  check('el navegador escucha timeupdate y ended en el elemento de la canción (fuente)',
+    dateSrc.includes("addEventListener('timeupdate', onSongTimeUpdate)") && dateSrc.includes("addEventListener('ended', onSongEnded)"));
+  songLoopEl.duration = DUR_REAL; songLoopEl.currentTime = 0;
+  DM.debug.onSongMetadata();
+  DM.debug.startClock();
+  check('al arrancar la cita, el contador de vueltas del bucle parte de cero', DM.debug.getLoopWraps() === 0);
+  songLoopEl.currentTime = 100;
+  DM.debug.onSongTimeUpdate();
+  check('a mitad de la pista, el aviso de tiempo NO retorna la posición ni cuenta vueltas',
+    songLoopEl.currentTime === 100 && DM.debug.getLoopWraps() === 0);
+  check('y el reloj de la cita sigue a la canción como siempre (100 − salto = 96)', DM.dateNow() === 96, 'dateNow=' + DM.dateNow());
+  songLoopEl.currentTime = DM.debug.SONG_LOOP_END - 0.5; // 159,0: aún fuera de la antelación (0,4)
+  const tAntesVuelta = DM.dateNow();
+  DM.debug.onSongTimeUpdate();
+  check('justo antes del punto de retorno (fin − 0,5), la posición NO se toca',
+    songLoopEl.currentTime === DM.debug.SONG_LOOP_END - 0.5 && DM.debug.getLoopWraps() === 0);
+  songLoopEl.currentTime = DM.debug.SONG_LOOP_END - 0.2; // 159,3: dentro de la antelación
+  DM.debug.onSongTimeUpdate();
+  check('al cruzar el punto (con la antelación), la posición VUELVE al inicio del bucle y la vuelta cuenta',
+    songLoopEl.currentTime === DM.debug.SONG_LOOP_START && DM.debug.getLoopWraps() === 1,
+    `currentTime=${songLoopEl.currentTime} vueltas=${DM.debug.getLoopWraps()}`);
+  check('el reloj de la cita NO retrocede en el retorno: tras la vuelta vale el fin del bucle (posición virtual), más que antes de cruzar',
+    DM.dateNow() > tAntesVuelta && Math.abs(DM.dateNow() - (DM.debug.SONG_LOOP_END - DM.debug.AUDIO_SKIP)) < 1e-9,
+    `antes=${tAntesVuelta} después=${DM.dateNow()}`);
+  DM.debug.onSongTimeUpdate(); // el aviso siguiente ya ve la posición dentro del bucle
+  check('el retorno no se dispara dos veces por la misma llegada (sin doble conteo de vueltas)',
+    DM.debug.getLoopWraps() === 1 && songLoopEl.currentTime === DM.debug.SONG_LOOP_START);
+  songLoopEl.currentTime = DM.debug.SONG_LOOP_END - 0.1;
+  DM.debug.onSongTimeUpdate();
+  check('la SEGUNDA vuelta también retorna y cuenta: el bucle es indefinido',
+    songLoopEl.currentTime === DM.debug.SONG_LOOP_START && DM.debug.getLoopWraps() === 2);
+  songLoopEl.currentTime = DUR_REAL; // el fin real del archivo, si un aviso de tiempo se perdió
+  DM.debug.onSongEnded();
+  check('si la pista llega a su fin real (la red «ended»), también vuelve al inicio del bucle y cuenta la vuelta',
+    songLoopEl.currentTime === DM.debug.SONG_LOOP_START && DM.debug.getLoopWraps() === 3);
+  DM.debug.onSongTimeUpdate(); // el navegador avisa tras aplicar el salto: la posición ya está dentro del bucle
+  check('tras el retorno por «ended», el aviso siguiente ve la posición dentro del bucle y NO cuenta otra vuelta (el disparador se rearma)',
+    DM.debug.getLoopWraps() === 3 && songLoopEl.currentTime === DM.debug.SONG_LOOP_START);
+  // Con un máster más corto que el punto final no hay
+  // bucle: la pista se comporta como siempre (termina y ya).
+  songLoopEl.duration = 153; songLoopEl.currentTime = 152.9;
+  DM.debug.onSongTimeUpdate(); DM.debug.onSongEnded();
+  check('con un archivo más corto que el punto final (153 s), NO hay bucle: ni el aviso ni el fin retornan la posición',
+    songLoopEl.currentTime === 152.9 && DM.debug.getLoopWraps() === 3);
+  songLoopEl.duration = DUR_REAL;
+  // El silencio de la cita no se toca con el bucle.
+  const mutedAntesLoop = songLoopEl.muted;
+  DM.debug.toggleMute();
+  songLoopEl.currentTime = DM.debug.SONG_LOOP_END - 0.1;
+  DM.debug.onSongTimeUpdate();
+  check('el bucle respeta el silencio: retorna igual, pero el elemento queda como el silencio manda',
+    songLoopEl.currentTime === DM.debug.SONG_LOOP_START && DM.debug.getLoopWraps() === 4 && songLoopEl.muted === !mutedAntesLoop,
+    `muted=${songLoopEl.muted}`);
+  DM.debug.toggleMute();
+  // stop() detiene el bucle: sin reloj corriendo, ningún
+  // aviso retorna la posición y el contador queda a cero.
+  DM.stop();
+  songLoopEl.currentTime = DM.debug.SONG_LOOP_END - 0.1;
+  DM.debug.onSongTimeUpdate(); DM.debug.onSongEnded();
+  check('tras stop(), el bucle está detenido: la posición no retorna y el contador de vueltas queda a cero',
+    songLoopEl.currentTime === DM.debug.SONG_LOOP_END - 0.1 && DM.debug.getLoopWraps() === 0);
 
   console.log(`\n${failures ? '✘' : '✔'} check_date: ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
