@@ -150,6 +150,44 @@
   const CARTA_TOP = 16;
   const CARTA_POS = { x: CARTA_MESA.x + CARTA_MESA.w / 2, y: CARTA_MESA.y + CARTA_MESA.h / 2, r: 60 };
 
+  // ---------- La proporción de las poses de lectura ----------
+  // (playtest de Jose, 2026-11-22: «el personaje se hace
+  // inmenso cuando lee la carta»). drawHomeImg dibuja el
+  // LIENZO ENTERO de la imagen a worldH unidades de mundo,
+  // así que lo que manda es cuánto del lienzo ocupa LA
+  // FIGURA (medido con PIL sobre el canal alfa):
+  //   · ximena-sobre / lectura-sola / lectura-sola-2
+  //     (320×384): la figura llena las filas 7..376 → el
+  //     96,4 % del alto del lienzo.
+  //   · lectura-pareja / -2 / -3 (560×360): las figuras
+  //     llenan las filas 8..351 → el 95,6 %.
+  // La pose de la apertura se dibujaba a 122 fijos: la
+  // figura salía a ~118 u de mundo frente a las ~67 u del
+  // actor (Sp.charTop('ximena')) — un 75 % más grande que
+  // ella, y encima sin la compensación de escala del modo
+  // cita. El alto correcto del lienzo es charTop/FRAC ≈ 70,
+  // multiplicado por xi.scale: la pose queda como un
+  // reemplazo exacto del actor oculto (durante la fase
+  // 'carta' la compensación no corre — update vuelve
+  // temprano —, así que vale la última escala calculada en
+  // su sitio, que es la que el actor llevaría).
+  const CARTA_POSE_FRAC = 370 / 384;
+  function cartaPoseWorldH(scale) {
+    return (Sp.charTop('ximena') || 67) / CARTA_POSE_FRAC * (scale || 1);
+  }
+  // El compuesto del finale iba a 96: sus figuras salían a
+  // ~92 u, MÁS ALTAS SENTADAS que la Ximena de pie (67 u).
+  // En el arte, la figura sentada (344 px) mide el 93 % de
+  // la de pie (370 px) — la proporción del propio artista
+  // entre las dos poses —, así que el alto del lienzo es
+  // charTop × (344/370) / (344/360) = charTop × 360/370
+  // ≈ 65,5, por la escala viva de Ximena (en el finale la
+  // compensación sí corre durante la cinemática).
+  const PAREJA_FRAC = 344 / 360, PAREJA_SENTADA = 344 / 370;
+  function parejaWorldH(scale) {
+    return (Sp.charTop('ximena') || 67) * PAREJA_SENTADA / PAREJA_FRAC * (scale || 1);
+  }
+
   // ---------- Los textos de la carta (guion v2, «la carta») ----------
   // BORRADOR (2026-11-22): los fragmentos de la carta que la cita
   // muestra por entregas. La apertura se lee a ritmo del jugador
@@ -1653,7 +1691,7 @@
           // sitio (si la imagen cargó; si no, el actor visible
           // hace de respaldo y no se dibuja nada encima).
           const img = this.cartaPoseImg();
-          if (imgOk(img)) drawHomeImg(this.home, c, img, this.xi.x, 0, this.xi.y, 122, false);
+          if (imgOk(img)) drawHomeImg(this.home, c, img, this.xi.x, 0, this.xi.y, cartaPoseWorldH(this.xi.scale), false);
           if (this.cartaSeq && this.cartaSeq.step === 'lee') {
             drawCartaPanel(c, CARTA_TEXTOS.apertura, Math.min(1, this.cartaSeq.t * 2 + 0.4), null, 'ESPACIO: seguir');
           }
@@ -4159,7 +4197,7 @@
         const img = this.cine.st === 'reading'
           ? (Math.floor(this.cine.t / 1.5) % 2 === 0 ? lecturaParejaImg : lecturaPareja2Img)
           : lecturaPareja3Img;
-        drawHomeImg(this.home, c, img, FINALE.sofa.cx, 4, FINALE.sofa.cz + 6, 96, false);
+        drawHomeImg(this.home, c, img, FINALE.sofa.cx, 4, FINALE.sofa.cz + 6, parejaWorldH(this.xi.scale), false);
       }
       // Pollito en su servicio (el actor del armario se
       // dibuja solo; estos son sus PNG)
@@ -4412,6 +4450,11 @@
       // predicado, y la proyección analítica de la casa (para
       // fijar que coincide con la del motor, gl3d.js).
       CARTA_POS, CARTA_TOP, CARTA_OBJETIVO, objetivoCartaActivo, projectHomePoint, vpFromCam,
+      // Ganchos de la proporción de las poses (sección V):
+      // las fracciones de figura medidas en los PNG y los
+      // altos de mundo corregidos de la pose de la carta y
+      // del compuesto del finale.
+      CARTA_POSE_FRAC, cartaPoseWorldH, PAREJA_FRAC, PAREJA_SENTADA, parejaWorldH,
       // Ganchos del álbum del cierre (sección T): la lista
       // de fotos en orden y la imagen de la carta (el humo
       // marca sus FakeImage como «cargadas» poniendo

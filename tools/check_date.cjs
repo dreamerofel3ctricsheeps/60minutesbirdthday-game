@@ -2276,6 +2276,43 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     'cartaAbierta=' + DM.state.cartaAbierta + ' phase=' + scU.phase);
   DM.stop();
 
+  console.log('\nV) La proporción de las poses de lectura (playtest de Jose, 2026-11-22)');
+  // Regresión del playtest: «el personaje se hace inmenso
+  // cuando lee la carta». La pose se dibujaba con el LIENZO
+  // a 122 u de mundo, pero la figura ocupa el 96,4 % del
+  // lienzo (medido con PIL sobre el alfa de lectura-sola,
+  // lectura-sola-2 y ximena-sobre: filas 7..376 de 384, las
+  // tres comparten lienzo y proporción): la Ximena de la
+  // pose salía a ~118 u frente a las ~67 u de su actor
+  // (Sp.charTop). Estos checks fijan la aritmética: alto
+  // del lienzo × fracción de figura = alto del actor, con
+  // la fracción como constante documentada (CARTA_POSE_FRAC).
+  const charTopV = G.Sprites.charTop('ximena');
+  check('la fracción de figura de las poses de la carta es la medida en los PNG (370/384 ≈ 0,964)',
+    Math.abs(DBG.CARTA_POSE_FRAC - 370 / 384) < 0.001, 'frac=' + DBG.CARTA_POSE_FRAC.toFixed(4));
+  const figCartaV = DBG.cartaPoseWorldH(1) * DBG.CARTA_POSE_FRAC;
+  check('la figura de la pose de la carta (toma y lee comparten el cálculo) mide lo que el actor de Ximena (±12 %)',
+    Math.abs(figCartaV / charTopV - 1) <= 0.12,
+    `figura=${figCartaV.toFixed(1)} u, actor=${charTopV.toFixed(1)} u, lienzo=${DBG.cartaPoseWorldH(1).toFixed(1)} u`);
+  check('el alto viejo del lienzo (122) habría dejado la figura un ≥50 % más grande que el actor: la regresión queda documentada',
+    122 * DBG.CARTA_POSE_FRAC / charTopV >= 1.5,
+    'ratio viejo=' + (122 * DBG.CARTA_POSE_FRAC / charTopV).toFixed(2));
+  check('el alto de la pose sigue a la compensación de escala de Ximena (xi.scale): a escala 1,25 el lienzo crece en la misma razón',
+    Math.abs(DBG.cartaPoseWorldH(1.25) / DBG.cartaPoseWorldH(1) - 1.25) < 0.001);
+  const dateSrcV = fs.readFileSync(path.join(SRC, 'date.js'), 'utf8');
+  check('el dibujo de la pose de la carta usa el alto corregido (sin el 122 fijo) y el del compuesto del finale usa el suyo (sin el 96 fijo)',
+    dateSrcV.includes('cartaPoseWorldH(this.xi.scale)') && !dateSrcV.includes('this.xi.y, 122, false') &&
+    dateSrcV.includes('parejaWorldH(this.xi.scale)') && !dateSrcV.includes('FINALE.sofa.cz + 6, 96, false'));
+  // El compuesto del finale: las figuras están SENTADAS y
+  // salían a ~92 u (96 × 0,956), más altas que la Ximena de
+  // pie. Con la proporción del propio arte (la figura
+  // sentada, 344 px, es el 93 % de la de pie, 370 px) la
+  // figura del compuesto debe quedar en ~0,93 × charTop.
+  const figParejaV = DBG.parejaWorldH(1) * DBG.PAREJA_FRAC;
+  check('la figura SENTADA del compuesto del finale queda en la proporción del arte respecto a la de pie (~0,93 × el actor, ±12 %) y por debajo de su alto de pie',
+    Math.abs(figParejaV / (charTopV * DBG.PAREJA_SENTADA) - 1) <= 0.12 && figParejaV < charTopV,
+    `figura=${figParejaV.toFixed(1)} u, objetivo=${(charTopV * DBG.PAREJA_SENTADA).toFixed(1)} u, lienzo=${DBG.parejaWorldH(1).toFixed(1)} u`);
+
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);
 
