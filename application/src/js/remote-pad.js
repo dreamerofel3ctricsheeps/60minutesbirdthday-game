@@ -10,7 +10,8 @@
   const G = (root.G = root.G || {});
   if (typeof document === 'undefined') { G.RemotePad = { open() {}, hide() {}, disconnect() {} }; return; }
   const PID = 'remote';
-  function code() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += a[Math.random() * a.length | 0]; return s; }
+  // 8 caracteres: en internet la sala es la única llave del mando (en LAN da igual, nadie teclea el código).
+  function code() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 8; i++) s += a[Math.random() * a.length | 0]; return s; }
 
   let es = null, room = null, panel = null, curBox = null, lastSig = null, mo = null;
 
@@ -72,7 +73,11 @@
     let lan = null; try { lan = await fetch('/lan').then(r => r.json()); } catch (e) {}
     if (!lan) { alert('El mando necesita el servidor relay.\nEn tu computadora:\n  npm run build && npm run relay'); return; }
     room = code();
-    build('http://' + lan.ip + ':' + lan.port + '/control?room=' + room);
+    // En https el relay vive en el MISMO origen que el juego (Cloudflare);
+    // en LAN (http) manda la IP que reporta el /lan del relay local.
+    build(location.protocol === 'https:'
+      ? location.origin + '/control?room=' + room
+      : 'http://' + lan.ip + ':' + lan.port + '/control?room=' + room);
     es = new EventSource('/events?room=' + room + '&role=game');
     es.onmessage = (e) => { try { fromPad(JSON.parse(e.data)); } catch (x) {} };
     mo = new MutationObserver(scheduleScan);
@@ -89,7 +94,7 @@
     panel = document.createElement('div'); panel.className = 'rp-panel';
     panel.innerHTML =
       '<div class="rp-box"><div class="rp-title">📱 Tu teléfono como mando</div>' +
-      '<div class="rp-sub">Escanea con la cámara del teléfono (<b>misma Wi-Fi</b>):</div>' +
+      '<div class="rp-sub">Escanea con la cámara del teléfono' + (location.protocol === 'https:' ? '' : ' (<b>misma Wi-Fi</b>)') + ':</div>' +
       '<img class="rp-qr" alt="QR del mando"><div class="rp-sub">o abre la dirección a mano:</div>' +
       '<div class="rp-url"></div><div class="rp-status">Esperando teléfono…</div>' +
       '<button class="rp-close">Empezar a jugar</button></div>';
