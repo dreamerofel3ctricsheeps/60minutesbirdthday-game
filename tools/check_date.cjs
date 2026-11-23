@@ -2289,6 +2289,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('el texto de la instrucción dice que hay una carta en la sala, sobre la mesa de centro, y que hay que abrirla',
     /carta/.test(DBG.CARTA_OBJETIVO) && /sala/.test(DBG.CARTA_OBJETIVO) && /mesa de centro/.test(DBG.CARTA_OBJETIVO) && /ábrela/.test(DBG.CARTA_OBJETIVO),
     DBG.CARTA_OBJETIVO);
+  // El selector generalizado de instrucciones: sin abrir,
+  // la instrucción del momento es la de buscar la carta.
+  check('sin abrir la carta, la instrucción del momento (selector general) es la de buscarla',
+    DBG.instruccionCarta(scU) === DBG.CARTA_OBJETIVO,
+    String(DBG.instruccionCarta(scU)));
   // El dibujo del depa con la instrucción y la carta no
   // explota (la casa 3D es WebGL real: su draw se sustituye
   // por un stub, como hace la sección T con el finale, y se
@@ -2310,6 +2315,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('abierta la carta por la vía real, la instrucción de objetivo se RETIRA',
     DM.state.cartaAbierta === true && scU.phase === 'depa' && DBG.objetivoCartaActivo(scU) === false,
     'cartaAbierta=' + DM.state.cartaAbierta + ' phase=' + scU.phase);
+  // LA GUÍA TRAS LEER LA CARTA (el nuevo pedido del
+  // playtest): abierta la carta y aún en el depa, la
+  // instrucción que toca es la de Jose, con su texto exacto.
+  check('la guía posterior a la carta es el texto exacto de Jose: «Ve hacia la puerta y ve a la plaza»',
+    DBG.CARTA_GUIA_PLAZA === 'Ve hacia la puerta y ve a la plaza',
+    DBG.CARTA_GUIA_PLAZA);
+  check('con la carta abierta y aún en el depa, la instrucción activa es la guía a la puerta/plaza (y ya no la de buscar la carta)',
+    DBG.instruccionCarta(scU) === DBG.CARTA_GUIA_PLAZA && DBG.instruccionCarta(scU) !== DBG.CARTA_OBJETIVO,
+    String(DBG.instruccionCarta(scU)));
+  // El dibujo del depa con la guía activa no explota.
+  let depaDrawGuiaOk = true;
+  const homeDrawU2 = scU.home.draw;
+  scU.home.draw = () => {};
+  try { scU.draw(0.016); } catch (e) { depaDrawGuiaOk = false; }
+  scU.home.draw = homeDrawU2;
+  check('el dibujo del depa con la guía a la plaza activa no explota', depaDrawGuiaOk);
+  // Al salir del depa ya no toca ninguna instrucción: ni la
+  // de buscar la carta ni la guía (función pura sobre la
+  // fase, como la sección Y con la orientación).
+  check('fuera de la fase depa (plaza, puerta, lectura…) no hay instrucción activa',
+    DBG.instruccionCarta({ phase: 'plaza' }) === null &&
+    DBG.instruccionCarta({ phase: 'door' }) === null &&
+    DBG.instruccionCarta({ phase: 'carta' }) === null &&
+    DBG.instruccionCarta(null) === null);
   DM.stop();
 
   console.log('\nV) La proporción de las poses de lectura (playtest de Jose, 2026-11-22)');

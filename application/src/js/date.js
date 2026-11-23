@@ -1425,22 +1425,36 @@
     if (fx.a <= 0) return;
     drawCartaTexto(c, cartaBand.text, fx.a, { drift: fx.drift });
   }
-  // La INSTRUCCIÓN DE OBJETIVO de la apertura (pedido de Jose
-  // en su playtest del 2026-11-22: «debería haber una
-  // instrucción que me diga busca la carta o algo así, para
-  // que el jugador sepa que tiene que buscar la carta»).
-  // Mientras la carta no se abra, la cita dice qué hay que
-  // hacer en una banda de papel ARRIBA (la banda de los
-  // fragmentos va abajo), PERSISTENTE: es espacio de pantalla,
-  // no del mundo, así que se ve desde cualquier rincón del
-  // depa, sin depender de la proximidad a la sala. Al abrir
-  // la carta se retira y la guía «a la plaza →» toma el relevo.
+  // Las INSTRUCCIONES de la apertura (pedidos de Jose en su
+  // playtest del 2026-11-22: «debería haber una instrucción
+  // que me diga busca la carta o algo así, para que el
+  // jugador sepa que tiene que buscar la carta» y, después,
+  // «cuando se lee la carta, luego debe decir la guía: ve
+  // hacia la puerta y ve a la plaza»). La cita muestra
+  // siempre LA instrucción que toca según el momento, en la
+  // misma banda de papel ARRIBA, PERSISTENTE: es espacio de
+  // pantalla, no del mundo, así que se ve desde cualquier
+  // rincón del depa, sin depender de la proximidad.
+  //   - Carta sin abrir: buscarla y abrirla.
+  //   - Carta abierta, aún en el depa: ir a la puerta y
+  //     salir a la plaza (la guía pulsante «a la plaza →»
+  //     sobre la puerta queda como refuerzo visual).
+  //   - Ya en la plaza (o en cualquier otra fase): ninguna.
   const CARTA_OBJETIVO = 'Hay una carta para ti en la sala: búscala sobre la mesa de centro y ábrela';
+  const CARTA_GUIA_PLAZA = 'Ve hacia la puerta y ve a la plaza';
+  // La instrucción de BUSCAR la carta (la original): solo
+  // vive mientras la carta siga sin abrir.
   function objetivoCartaActivo(scene) {
     return !!scene && scene.phase === 'depa' && !D.cartaAbierta;
   }
-  function drawCartaObjetivo(c) {
-    const lines = wrapCartaText(c, CARTA_OBJETIVO, 11.5, 500);
+  // El selector general: el texto de la instrucción del
+  // momento, o null si no toca ninguna.
+  function instruccionCarta(scene) {
+    if (!scene || scene.phase !== 'depa') return null;
+    return D.cartaAbierta ? CARTA_GUIA_PLAZA : CARTA_OBJETIVO;
+  }
+  function drawCartaObjetivo(c, texto) {
+    const lines = wrapCartaText(c, texto || CARTA_OBJETIVO, 11.5, 500);
     c.font = `${11.5}px ${G.FONT}`;
     const wLine = Math.max(...lines.map((l) => c.measureText(l).width));
     const w = Math.min(580, wLine + 46), h = lines.length * 15 + 19;
@@ -1973,9 +1987,11 @@
             c.fillStyle = grd; c.beginPath(); c.arc(p.x, p.y, 30, 0, 6.3); c.fill();
           }
         }
-        // La instrucción de objetivo, mientras la carta no
-        // se abra: persistente y visible desde todo el depa.
-        if (objetivoCartaActivo(this)) drawCartaObjetivo(c);
+        // La instrucción del momento (buscar la carta, o ya
+        // abierta ir hacia la puerta y a la plaza):
+        // persistente y visible desde todo el depa.
+        const insCarta = instruccionCarta(this);
+        if (insCarta) drawCartaObjetivo(c, insCarta);
         if (this.phase === 'depa' && this.nearCarta && !D.cartaAbierta) {
           const h = this.xi.head(46);
           if (h && isFinite(h.x)) G.prompt(c, 'ESPACIO: abrir la carta', h.x, h.y);
@@ -4992,7 +5008,7 @@
       // su tablero, la instrucción de objetivo con su
       // predicado, y la proyección analítica de la casa (para
       // fijar que coincide con la del motor, gl3d.js).
-      CARTA_POS, CARTA_TOP, CARTA_OBJETIVO, objetivoCartaActivo, projectHomePoint, vpFromCam,
+      CARTA_POS, CARTA_TOP, CARTA_OBJETIVO, CARTA_GUIA_PLAZA, objetivoCartaActivo, instruccionCarta, projectHomePoint, vpFromCam,
       // Ganchos de la proporción de las poses (sección V):
       // las fracciones de figura medidas en los PNG y los
       // altos de mundo corregidos de la pose de la carta y
