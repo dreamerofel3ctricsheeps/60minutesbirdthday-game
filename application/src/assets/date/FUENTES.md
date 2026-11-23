@@ -463,3 +463,126 @@
 - **Uso:** última imagen del cierre total del guion v2,
   después de la imagen de la carta; tras ella, fundido y
   tarjeta de fin.
+
+## pollito-torta-walk-1.png … pollito-torta-walk-4.png — Pollito trae la torta (ciclo de caminata)
+- **Arte original del juego**: ciclo de caminata de 4
+  frames de Pollito mesero cargando la bandeja con la
+  torta, generado desde `pollito-torta.png` (ronda 1) y
+  su sprite definido: gato BLANCO atigrado — casquete
+  con rayas en la frente, mancha en SU mejilla
+  izquierda, mancha en el lomo, cola anillada —, ojos
+  verde menta y nariz rosa. Las patas alternan
+  (contacto, paso, contacto opuesto, paso) y la bandeja
+  va NIVELADA a la misma altura en los 4 frames, con
+  LA MISMA torta de dos pisos (crema blanca y rosa,
+  fresas, UNA vela encendida) de `pollito-torta.png`.
+- **Procesado:** plancha sobre fondo magenta retirada
+  por clave de color, limpieza del fleco por erosión y
+  borde blanco re-horneado por dilatación; lienzo
+  común con línea de suelo compartida. Salida:
+  429 × 420 cada frame.
+- **Uso:** el Acto 3 del guion v2: Pollito CAMINA de
+  verdad con la torta (nada de deslizarse con una sola
+  imagen) hasta la mesa de centro de la sala.
+
+## pollito-deja-torta.png — Pollito deja la torta en la mesa
+- **Arte original del juego**: Pollito de perfil,
+  inclinado hacia adelante con la bandeja extendida,
+  en el gesto de APOYAR la torta sobre la mesa; la
+  misma torta y la misma bandeja de los frames de
+  caminata. Generado desde `pollito-torta.png`.
+- **Procesado:** fondo magenta por clave de color,
+  erosión de fleco y borde blanco por dilatación.
+  Salida: 433 × 399.
+- **Uso:** el frame del depósito del Acto 3: con este
+  gesto la torta pasa de la bandeja a la mesa de
+  centro (donde queda `torta-mesa.png`).
+
+## torta-mesa.png — La torta sobre la mesa
+- **Arte original del juego**: la torta SOLA sobre su
+  bandeja de plata con pie, sin Pollito — exactamente
+  la misma torta de dos pisos (crema blanca y rosa,
+  fresas) con su vela encendida que Pollito trae en
+  los frames de caminata y en `pollito-torta.png`.
+- **Procesado:** fondo magenta por clave de color,
+  erosión de fleco y borde blanco por dilatación.
+  Salida: 236 × 181.
+- **Uso:** el ítem que queda sobre la mesa de centro
+  de la sala tras el depósito de Pollito en el Acto 3;
+  pieza central de la mesa (reemplaza al pastelito de
+  la escena final actual). La vela va en el arte; el
+  soplido interactivo es decisión pendiente.
+
+## pollito-orgulloso.png — Pollito orgulloso tras servir
+- **Arte original del juego**: Pollito de frente, ya
+  sin bandeja, erguido y muy orgulloso de su servicio:
+  pecho fuera, mentón alto, patas en la cintura y
+  expresión satisfecha; el mismo gato blanco atigrado
+  de siempre (mancha en SU mejilla izquierda, cola
+  anillada, ojos verde menta). Generado desde
+  `pollito-torta.png`.
+- **Procesado:** fondo magenta por clave de color,
+  erosión de fleco y borde blanco por dilatación.
+  Salida: 360 × 400.
+- **Uso:** el cierre del gag de mesero del Acto 3:
+  Pollito se queda junto a la mesa, orgulloso, tras
+  presentar la torta.
+
+## ximena-sobre.png — Ximena toma la carta (el sobre cerrado)
+- **Arte original del juego**: Ximena de frente
+  sosteniendo el SOBRE CERRADO con las dos manos a la
+  altura del pecho, mirándolo con curiosidad — el
+  sobre crema con sello de cera de corazón de
+  `carta-sobre.png` —, generada desde sus sprites
+  definidos y `lectura-sola.png` (moño castaño alto,
+  orejas de conejo moradas, lentes redondos, abrigo
+  blanco).
+- **Procesado:** fondo magenta por clave de color,
+  erosión de fleco y borde blanco por dilatación;
+  mismo encuadre que `lectura-sola.png`. Salida:
+  320 × 384.
+- **Uso:** el beat «toma la carta» del Acto 1 del
+  guion v2: Ximena recoge la carta de la mesa de
+  centro antes de abrirla (la salida sigue dormida).
+
+## lectura-sola-2.png — Ximena pasa la hoja (lectura sola, frame 2)
+- **Arte original del juego**: segundo frame de la
+  lectura sola de Ximena — está PASANDO LA HOJA: el
+  papel va inclinado con una esquina levantándose y
+  la cabeza en un ángulo apenas distinto —, generado
+  desde `lectura-sola.png` con su misma escala y
+  encuadre, para alternar con él en un bucle sutil de
+  2 frames y que la lectura se vea viva.
+- **Procesado:** fondo magenta por clave de color,
+  erosión de fleco y borde blanco por dilatación.
+  Salida: 320 × 384.
+- **Uso:** el Acto 1 del guion v2, en bucle con
+  `lectura-sola.png` mientras Ximena lee el primer
+  fragmento a ritmo del jugador.
+
+## lectura-pareja-2.png — La pareja pasa la hoja (lectura en pareja, frame 2)
+- **Arte original del juego**: segundo frame de la
+  lectura en pareja — Ximena pasa la hoja (el papel
+  baja un poco y se inclina) y Jose se inclina un
+  pelo más; ambos siguen mirando el papel —, generado
+  desde `lectura-pareja.png` con su mismo encuadre,
+  para un bucle de 2 frames con él.
+- **Procesado:** fondo magenta por clave de color,
+  erosión de fleco y borde blanco por dilatación.
+  Salida: 560 × 360.
+- **Uso:** el Acto 3 del guion v2, en bucle con
+  `lectura-pareja.png` mientras terminan de leer la
+  carta en el sofá.
+
+## lectura-pareja-3.png — La pareja se mira (el beat emocional)
+- **Arte original del juego**: el frame emocional de
+  la lectura en pareja — los dos levantan la mirada
+  de la hoja y se miran SONRIENDO, con la carta aún
+  entre los dos, un poco más baja —, generado desde
+  `lectura-pareja.png` con su mismo encuadre.
+- **Procesado:** fondo magenta por clave de color,
+  erosión de fleco y borde blanco por dilatación.
+  Salida: 560 × 360.
+- **Uso:** el Acto 3 del guion v2: el beat justo
+  después de terminar la carta (cierre y firma) y
+  antes de que Pollito llegue con la torta.
