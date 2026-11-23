@@ -187,6 +187,61 @@
   function parejaWorldH(scale) {
     return (Sp.charTop('ximena') || 67) * PAREJA_SENTADA / PAREJA_FRAC * (scale || 1);
   }
+  // El margen del lienzo BAJO la figura sentada (medido:
+  // el contenido llena las filas 8..351 de 360 → 8 px bajo
+  // sus pies/posaderas). Al anclar el compuesto sobre los
+  // cojines del sofá hay que bajar el lienzo este margen
+  // para que LA FIGURA — no el lienzo — apoye en el cojín.
+  const PAREJA_BASE_FRAC = 8 / 360;
+
+  // ---------- La proporción de Pollito en el finale ----------
+  // (playtest de Jose, 2026-11-22: «lo mismo ocurre con
+  // Pollito… no está bien proporcionado»). Sus PNG del
+  // servicio se dibujaban con el lienzo a 76 u (caminata y
+  // gesto) y 62 u (orgulloso), sin referencia: su figura
+  // salía ~3× su tamaño. La referencia es SU ACTOR definido:
+  // charTop('pollito') = (base−top)×escala = (140−61)×0,25
+  // ≈ 19,75 u de figura, y su draw3d (world.js) lo dibuja
+  // con sx/sy ×1,15 → el alto EFECTIVO de su sprite en el
+  // juego es ≈ 22,7 u (medido sobre su hoja: la figura del
+  // idle/prowl llena 80–84 px de la celda de 150, que a
+  // ×0,25 ×1,15 da 23,0–24,2 u: la misma banda).
+  // Las fracciones de figura de sus PNG (medidas con PIL
+  // sobre el alfa; la «figura» es el contenido completo:
+  // Pollito CON su bandeja y la torta, que en la pose de
+  // mesero forman una sola masa con él):
+  //   · pollito-torta-walk-1..4 (429×420): filas 32..411,
+  //     10..411, 32..411 y 37..411 → 380, 402, 380 y 375 px
+  //     → 0,905 / 0,957 / 0,905 / 0,893 del lienzo.
+  //   · pollito-deja-torta (433×399): filas 10..390 → 0,955.
+  //   · pollito-orgulloso (360×400): filas 8..391 → 0,960.
+  // Los tres comparten la línea de suelo: el contenido
+  // termina 8 px antes del borde inferior del lienzo
+  // (margen 8/420, 8/399 y 8/400), que se descuenta al
+  // anclar para que sus patas apoyen en el suelo.
+  function pollitoTop() { return (Sp.charTop('pollito') || 19.75) * 1.15; }
+  const POLLITO_FRAC = { walk: [380 / 420, 402 / 420, 380 / 420, 375 / 420], deja: 381 / 399, orgulloso: 384 / 400 };
+  const POLLITO_BOT = { walk: 8 / 420, deja: 8 / 399, orgulloso: 8 / 400 };
+  function pollitoWorldH(frac) { return pollitoTop() / frac; }
+
+  // Registra una imagen como billboard GL de la casa (el
+  // pase con PRUEBA DE PROFUNDIDAD de W.render, vía el
+  // gancho extraSprites de la HomeScene): los muebles la
+  // ocluyen como ocluyen a los actores — la pareja queda
+  // DETRÁS del respaldo del sofá y Pollito pasa por delante
+  // o por detrás de cada mueble según su z, no «encima de
+  // todo» como salía al dibujarla en la capa 2D posterior
+  // (drawHomeImg), que fue el defecto del playtest. El
+  // alto es worldH unidades de mundo (R.sprite aplica el
+  // mismo estiramiento vertical que a los actores) y el
+  // ancho sale de la proporción natural de la imagen.
+  function spriteHomeImg(img, x, yBase, z, worldH, flip) {
+    if (!imgOk(img)) return false;
+    const R = G.R;
+    if (!R || typeof R.sprite !== 'function') return false;
+    R.sprite(img, x, yBase, z, { w: worldH * img.naturalWidth / img.naturalHeight, h: worldH, flip: !!flip });
+    return true;
+  }
 
   // ---------- Los textos de la carta (guion v2, «la carta») ----------
   // BORRADOR (2026-11-22): los fragmentos de la carta que la cita
@@ -3660,6 +3715,16 @@
     // mesa usaba antes. Ximena en el cojín oeste, Jose en
     // el este, como en los sprites de lectura en pareja.
     seatXi: { x: 609, y: 188 }, seatJose: { x: 661, y: 188 },
+    // La altura del cojín donde apoya la figura sentada:
+    // en la malla de world.js los cojines del sofá son las
+    // cajas B(584,20,174,50,6,28) y B(636,20,174,50,6,28)
+    // → su cara superior queda a y = 20+6 = 26. El respaldo
+    // (B(570,20,203,130,24,11), hasta y=44, en z 203–214)
+    // queda ENTRE la cámara y los asientos (z 188): con el
+    // compuesto en el pase GL con profundidad, el respaldo
+    // ocluye la parte baja de las figuras y se lee que
+    // están sentadas DETRÁS del sofá, no sobre la mesa.
+    seatY: 26,
     // Antes de «sentarse», cada uno llega caminando a su
     // punto de la franja libre entre la mesa de centro y el
     // sofá (z 140–170); de ahí el sprite compuesto de la
@@ -3676,10 +3741,16 @@
     // como en la apertura); él, desde arriba del mueble.
     catHide: { x: 600, y: 330, elev: 100 }, catFloor: { x: 600, y: 354 },
     // El servicio de la torta: Pollito baja del armario y
-    // CAMINA (su ciclo pollito-torta-walk) por el pasillo
-    // oeste del sofá hasta junto a la mesa de centro, deja
-    // la torta y se queda a un lado, orgulloso.
-    catPath: [[524, 308], [524, 176], [560, 146]],
+    // CAMINA (su ciclo pollito-torta-walk) por zona ABIERTA
+    // y VISIBLE (playtest de Jose: «ni siquiera se ve cómo
+    // llega»): cruza la puerta del pasillo, baja por
+    // DELANTE del sofá (la franja sur, sobre la alfombra,
+    // a la vista de la pareja y de la cámara) y sube por el
+    // costado oeste hasta junto a la mesa de centro, deja
+    // la torta y se queda a un lado, orgulloso. Nunca pasa
+    // detrás del compuesto de la pareja (su x queda siempre
+    // al oeste de los asientos) ni fuera del encuadre.
+    catPath: [[524, 304], [516, 238], [560, 200], [560, 146]],
     catServe: { x: 560, y: 146 }, // junto a la mesa, en el gesto de dejar la torta
     catProud: { x: 566, y: 162 }, // a un lado de la mesa, ya servida
     torta: { x: 635, z: 124 }, // la torta, sobre la mesa de centro
@@ -3741,6 +3812,14 @@
       // la casa (extraBoxes): solo ESTA instancia lo usa, así
       // que ni el juego principal ni la apertura la ven.
       home.extraBoxes = (mb) => this.drawTableBoxes(mb);
+      // Y sus billboards (la carta, la torta, la pareja
+      // sentada, el servicio de Pollito) entran por el gancho
+      // de sprites de la casa (extraSprites): se dibujan en
+      // el pase GL CON profundidad, para que los muebles los
+      // ocluyan como a los actores (la pareja DETRÁS del
+      // respaldo del sofá). Dibujarlos en la capa 2D tras la
+      // casa los dejaba «encima de todo» (playtest de Jose).
+      home.extraSprites = () => this.drawFinaleSprites();
       // La pareja, junto a la puerta principal.
       const xi = this.xi;
       xi.hidden = false; xi.x = FINALE.spawnXi.x; xi.y = FINALE.spawnXi.y; xi.dir = 'up'; xi.speed = 165;
@@ -3784,12 +3863,12 @@
       cat.route = null; cat.dir = 'down'; cat.moving = false;
       this.climbK = 0;
       // Si la torta ya se sirvió en una visita anterior, la
-      // mesa queda como quedó (la cinemática, repetible) y
-      // Pollito se queda orgulloso a su lado, con su PNG.
-      this.catVis = this.tortaShown ? 'proud' : 'actor';
-      if (this.catVis === 'proud') {
-        cat.hidden = true; cat.x = FINALE.catProud.x; cat.y = FINALE.catProud.y; cat.elev = 0;
-      }
+      // mesa queda como quedó (la cinemática, repetible);
+      // Pollito, en cambio, está de vuelta en su escondite
+      // del armario, espiando como al principio — tras
+      // servirla SE FUE (estado 'exit' de la cinemática), no
+      // se queda orgulloso junto a la mesa para siempre.
+      this.catVis = 'actor';
       this.seatedPose = false; this.close = null; this.closeAct = false;
       this.cine = { st: this.tortaShown ? 'done' : 'idle', t: 0 };
       W.closet.k = W.closet.target = W.CLOSET_PEEK;
@@ -3867,8 +3946,12 @@
     }
     // ---------- la cinemática de cierre ----------
     // Estados (guion v2): seats → reading → gaze → descend
-    // → walk → place → proud → emotion → closing → rise →
-    // done. Saltable con la acción en cualquier estado salvo
+    // → walk → place → proud → exit → emotion → closing →
+    // rise → done. (El 'exit' es del playtest de Jose: tras
+    // dejar la torta y su beat de orgullo, Pollito se va —
+    // camina de vuelta al armario y se oculta en su
+    // escondite; no se queda plantado junto a la mesa.)
+    // Saltable con la acción en cualquier estado salvo
     // 'closing' (skipCine deja la escena en su estado
     // posterior); en 'closing' la acción avanza la carta y
     // la foto a ritmo del jugador.
@@ -4019,7 +4102,32 @@
           if (C.t > 1.1) this.nextCine('proud');
           break;
         }
-        case 'proud': if (C.t > 1.0) this.nextCine('emotion'); break;
+        case 'proud': {
+          if (C.t > 1.0) {
+            // Cumplido su beat de orgullo, Pollito SE VA: el
+            // actor retoma el cuerpo (sin bandeja: vuelve con
+            // su caminata definida) rumbo a su escondite.
+            this.catVis = 'actor';
+            cat.hidden = false; cat.elev = 0; cat.route = null;
+            cat.x = FINALE.catProud.x; cat.y = FINALE.catProud.y; cat.dir = 'down';
+            this.climbK = 0;
+            this.nextCine('exit');
+          }
+          break;
+        }
+        case 'exit': {
+          // Pollito vuelve al armario: camina al pie del
+          // mueble y trepa (el mismo catHome de 'seats').
+          // Al llegar queda en su escondite, espiando, y la
+          // cinemática sigue con la emoción de la pareja.
+          this.catHome(dt);
+          if (this.catIsHome()) this.nextCine('emotion');
+          else if (C.t > 14) { // red de seguridad: la cinemática nunca se atasca por él
+            cat.x = FINALE.catHide.x; cat.y = FINALE.catHide.y; cat.elev = FINALE.catHide.elev; cat.route = null;
+            this.nextCine('emotion');
+          }
+          break;
+        }
         case 'emotion': {
           // La pareja, ya con la torta en la mesa, se mira
           // un momento más (el compuesto de la mirada).
@@ -4128,9 +4236,11 @@
     skipCine() {
       // Salto de la cinemática (acción/ESPACIO, como las
       // demás del juego): la escena queda en su estado
-      // posterior — la torta en la mesa, Pollito orgulloso a
-      // su lado, la pareja de pie y el cierre ya presentado
-      // (la cita cuenta como completada).
+      // posterior — la torta en la mesa, la pareja de pie,
+      // el cierre ya presentado (la cita cuenta como
+      // completada) y Pollito YA DE VUELTA en su escondite
+      // del armario: el mismo estado final al que llega la
+      // cinemática completa por su estado 'exit'.
       if (this.cine.st === 'rise') {
         this.xi.x = FINALE.outXi.x; this.xi.y = FINALE.outXi.y; this.xi.route = null;
         this.jose.x = FINALE.outJose.x; this.jose.y = FINALE.outJose.y; this.jose.route = null;
@@ -4143,10 +4253,11 @@
       this.close = null; this.closeAct = false;
       D.completed = true;
       const cat = this.cat;
-      cat.elev = 0; cat.route = null; cat.moving = false;
-      cat.hidden = true; // lo dibuja su PNG de orgullo
-      cat.x = FINALE.catProud.x; cat.y = FINALE.catProud.y; cat.dir = 'down';
-      this.catVis = 'proud';
+      cat.route = null; cat.moving = false;
+      cat.hidden = false; // el actor, espiando desde el armario
+      cat.x = FINALE.catHide.x; cat.y = FINALE.catHide.y; cat.elev = FINALE.catHide.elev; cat.dir = 'down';
+      this.catVis = 'actor';
+      this.climbK = 0;
       this.xi.expr = null; this.jose.expr = null;
       this.beginRise();
     }
@@ -4157,10 +4268,11 @@
     // para brillar en la noche de velas. El resto de la
     // puesta (la carta, la torta, la pareja sentada, el
     // servicio de Pollito) son los PNG del guion v2 y se
-    // dibujan en draw() como billboards: meterlos en 3D
-    // rompería su estilo de recorte. (La puesta anterior —
-    // la mesa de fiesta con el pastelito y la campana —
-    // quedó retirada por el guion v2.)
+    // dibujan como billboards GL en drawFinaleSprites (el
+    // pase con profundidad: su estilo de recorte se conserva
+    // y los muebles los ocluyen como a los actores). (La
+    // puesta anterior — la mesa de fiesta con el pastelito
+    // y la campana — quedó retirada por el guion v2.)
     drawTableBoxes(mb) {
       const T = FINALE.ctable, surfY = T.top + 2.5, t = this.t;
       [612, 658].forEach((cx, i) => {
@@ -4170,6 +4282,60 @@
         mb.box(cx - 1, surfY + 7.7, T.cz - 1, 2, fh, 2, '#ffab3d', { emit: true });
         mb.box(cx - 0.5, surfY + 8.1, T.cz - 0.5, 1, fh * 0.6, 1, '#ffe9a8', { emit: true });
       });
+    }
+    // Los billboards de la puesta, en el pase GL de la casa
+    // (gancho extraSprites de ESTA HomeScene): con prueba de
+    // profundidad, como los actores. Aquí van la carta y la
+    // torta sobre la mesa, la pareja sentada y el servicio
+    // de Pollito — todo lo que antes se dibujaba en la capa
+    // 2D posterior y por eso salía «encima de todo»: la
+    // pareja enorme SOBRE la mesa y Pollito gigante delante
+    // de los muebles (playtest de Jose, 2026-11-22).
+    drawFinaleSprites() {
+      const R = G.R;
+      // la carta ya leída, sobre la mesa de centro (si la
+      // torta ya está puesta, se corre a un lado)
+      spriteHomeImg(cartaSobreImg, this.tortaOnTable ? 604 : FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, 14, false);
+      // la torta: la pieza central de la mesa
+      if (this.tortaOnTable) spriteHomeImg(tortaMesaImg, FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, 30, false);
+      // la pareja sentada: el compuesto de la lectura,
+      // ANCLADO EN LOS ASIENTOS (el plano de los actores
+      // ocultos, z = seatXi.y) y apoyado en los cojines
+      // (seatY, menos el margen del lienzo bajo la figura):
+      // el respaldo del sofá (z 203–214, hasta y=44) queda
+      // entre la cámara y el compuesto y ocluye su parte
+      // baja — se les ve la cabeza, los hombros y la carta
+      // sobre el respaldo, como dos personas sentadas
+      // DETRÁS del mueble. En 'reading' alterna los dos
+      // frames de pasar la hoja; en la mirada, el orgullo y
+      // la emoción, el frame de mirarse.
+      if (this.seatedPose) {
+        const img = this.cine.st === 'reading'
+          ? (Math.floor(this.cine.t / 1.5) % 2 === 0 ? lecturaParejaImg : lecturaPareja2Img)
+          : lecturaPareja3Img;
+        const h = parejaWorldH(this.xi.scale);
+        spriteHomeImg(img, FINALE.sofa.cx, FINALE.seatY - PAREJA_BASE_FRAC * h, FINALE.seatXi.y, h, false);
+      }
+      // Pollito en su servicio (el actor del armario se
+      // dibuja solo; estos son sus PNG), dimensionados por
+      // SU proporción (pollitoWorldH: su figura = la de su
+      // actor definido, ≈22,7 u; antes iban a 76/62 u de
+      // lienzo, ~3× su tamaño), con el margen bajo sus
+      // patas descontado para que apoyen en el suelo.
+      if (this.catVis === 'walk' || this.catVis === 'place' || this.catVis === 'proud') {
+        if (R && typeof R.shadow === 'function') R.shadow(this.cat.x, this.cat.y, 13, 0.7);
+        if (this.catVis === 'walk') {
+          const i = Math.floor(this.catWalkT / 0.13) % 4;
+          const h = pollitoWorldH(POLLITO_FRAC.walk[i]);
+          spriteHomeImg(pollitoWalkImgs[i], this.cat.x, -POLLITO_BOT.walk * h, this.cat.y, h, this.catFlip);
+        } else if (this.catVis === 'place') {
+          const h = pollitoWorldH(POLLITO_FRAC.deja);
+          spriteHomeImg(pollitoDejaImg, this.cat.x, -POLLITO_BOT.deja * h, this.cat.y, h, this.catFlip);
+        } else {
+          const h = pollitoWorldH(POLLITO_FRAC.orgulloso);
+          spriteHomeImg(pollitoOrgullosoImg, this.cat.x, -POLLITO_BOT.orgulloso * h, this.cat.y, h, false);
+        }
+      }
     }
     draw(dt) {
       this.home.draw(dt);
@@ -4183,32 +4349,13 @@
       }
       if (this.phase !== 'home') return;
       const cineOn = this.cine.st !== 'idle' && this.cine.st !== 'done';
-      // --- la puesta de la sala (los PNG del guion v2,
-      // billboards sobre la casa) ---
-      // la carta ya leída, sobre la mesa de centro (si la
-      // torta ya está puesta, se corre a un lado)
-      drawHomeImg(this.home, c, cartaSobreImg, this.tortaOnTable ? 604 : FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, 14, false);
-      // la torta: la pieza central de la mesa
-      if (this.tortaOnTable) drawHomeImg(this.home, c, tortaMesaImg, FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, 30, false);
-      // la pareja sentada: el compuesto de la lectura (en
-      // 'reading' alterna los dos frames de pasar la hoja;
-      // en la mirada y la emoción, el frame de mirarse)
-      if (this.seatedPose) {
-        const img = this.cine.st === 'reading'
-          ? (Math.floor(this.cine.t / 1.5) % 2 === 0 ? lecturaParejaImg : lecturaPareja2Img)
-          : lecturaPareja3Img;
-        drawHomeImg(this.home, c, img, FINALE.sofa.cx, 4, FINALE.sofa.cz + 6, parejaWorldH(this.xi.scale), false);
-      }
-      // Pollito en su servicio (el actor del armario se
-      // dibuja solo; estos son sus PNG)
-      if (this.catVis === 'walk') {
-        const frame = pollitoWalkImgs[Math.floor(this.catWalkT / 0.13) % 4];
-        drawHomeImg(this.home, c, frame, this.cat.x, 0, this.cat.y, 76, this.catFlip);
-      } else if (this.catVis === 'place') {
-        drawHomeImg(this.home, c, pollitoDejaImg, this.cat.x, 0, this.cat.y, 76, this.catFlip);
-      } else if (this.catVis === 'proud') {
-        drawHomeImg(this.home, c, pollitoOrgullosoImg, this.cat.x, 0, this.cat.y, 62, false);
-      }
+      // --- la puesta de la sala (los PNG del guion v2) ---
+      // Ya NO se dibujan aquí: van en el pase GL con
+      // profundidad de la casa (drawFinaleSprites, por el
+      // gancho extraSprites), para que los muebles los
+      // ocluyan como a los actores. En esta capa 2D solo
+      // quedan el panel de la lectura, los avisos y el
+      // cierre total (pantalla completa).
       // el panel de la lectura en pareja: el cierre de la
       // carta y, al pie, la firma
       if (this.cine.st === 'reading') {
@@ -4455,6 +4602,15 @@
       // altos de mundo corregidos de la pose de la carta y
       // del compuesto del finale.
       CARTA_POSE_FRAC, cartaPoseWorldH, PAREJA_FRAC, PAREJA_SENTADA, parejaWorldH,
+      // Ganchos del playtest del finale (sección W): la
+      // proporción de Pollito (su alto efectivo de actor y
+      // las fracciones/márgenes medidos de sus PNG), el
+      // margen bajo la figura sentada, el registro GL de
+      // billboards y las imágenes de la puesta (el humo las
+      // marca «cargadas» con naturalWidth/naturalHeight,
+      // como hace la sección T con las fotos del álbum).
+      pollitoTop, pollitoWorldH, POLLITO_FRAC, POLLITO_BOT, PAREJA_BASE_FRAC, spriteHomeImg,
+      finaleImgs: { pareja: lecturaParejaImg, pareja2: lecturaPareja2Img, pareja3: lecturaPareja3Img, pollitoWalk: pollitoWalkImgs, pollitoDeja: pollitoDejaImg, pollitoOrgulloso: pollitoOrgullosoImg, tortaMesa: tortaMesaImg, cartaSobre: cartaSobreImg },
       // Ganchos del álbum del cierre (sección T): la lista
       // de fotos en orden y la imagen de la carta (el humo
       // marca sus FakeImage como «cargadas» poniendo

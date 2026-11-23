@@ -108,10 +108,12 @@
      en orden (sentarse → la lectura en pareja con el cierre
      y la firma → la mirada → Pollito baja y CAMINA con la
      torta → la deja en la mesa de centro → orgulloso →
-     emoción → el cierre total, que marca la cita
-     completada → se levantan y vuelve el control); el salto
-     la deja en el estado posterior y la canción/reloj no se
-     reinician al entrar.
+     SE VA (camina de vuelta al armario y se oculta en su
+     escondite) → emoción → el cierre total, que marca la
+     cita completada → se levantan y vuelve el control); el
+     salto la deja en el estado posterior (torta servida y
+     Pollito ya de vuelta en el armario) y la canción/reloj
+     no se reinician al entrar.
    P) La acción de abrazo de San Ángel (pedido de Jose):
      sprite NUEVO de la pareja abrazándose (abrazo.png, arte
      original del juego generado desde los sprites definidos
@@ -1326,14 +1328,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     if (!seen.length || seen[seen.length - 1] !== fin.cine.st) seen.push(fin.cine.st);
     if (fin.cine.st === 'reading' && fin.seatedPose === true && fxi.hidden === true && fjo.hidden === true) readingSeen = true;
   }
-  const cineOrder = ['seats', 'reading', 'gaze', 'descend', 'walk', 'place', 'proud', 'emotion', 'closing', 'rise'];
-  check('la cinemática avanza por sus estados EN ORDEN (sentarse → lectura en pareja → la mirada → Pollito baja → camina con la torta → la deja → orgulloso → emoción → cierre total → levantarse) y termina',
+  const cineOrder = ['seats', 'reading', 'gaze', 'descend', 'walk', 'place', 'proud', 'exit', 'emotion', 'closing', 'rise'];
+  check('la cinemática avanza por sus estados EN ORDEN (sentarse → lectura en pareja → la mirada → Pollito baja → camina con la torta → la deja → orgulloso → SE VA al armario → emoción → cierre total → levantarse) y termina',
     cineOrder.every((s, i) => seen[i] === s) && fin.cine.st === 'done', 'vistos: ' + seen.join(' → '));
   check('durante la LECTURA EN PAREJA el sprite compuesto sustituye a los dos actores (seatedPose, ambos hidden)', readingSeen);
-  check('la torta quedó EN LA MESA de centro y Pollito a su lado, orgulloso (su PNG: el actor queda oculto en su sitio)',
-    fin.tortaOnTable === true && fin.tortaShown === true && fin.catVis === 'proud' &&
-    Math.hypot(fcat.x - FIN.catProud.x, fcat.y - FIN.catProud.y) < 30 && fcat.elev === 0,
-    `cat(${fcat.x},${fcat.y}) catVis=${fin.catVis}`);
+  check('la torta quedó EN LA MESA de centro y Pollito YA SE FUE: de vuelta en su escondite del armario (el actor, espiando: visible, elev ≈ 100)',
+    fin.tortaOnTable === true && fin.tortaShown === true && fin.catVis === 'actor' &&
+    fcat.hidden === false && fcat.elev > 90 &&
+    Math.abs(fcat.x - FIN.catHide.x) < 4 && Math.abs(fcat.y - FIN.catHide.y) < 4,
+    `cat(${fcat.x},${fcat.y}) elev=${fcat.elev} catVis=${fin.catVis}`);
   check('el cierre total marcó la cita COMPLETADA (D.completed) y se consumió (close en null)',
     DM.state.completed === true && fin.close === null, 'completed=' + DM.state.completed);
   check('FINAL_TEXT es la constante de date.js con su valor inicial (la P4 sigue abierta: el definitivo lo escribe Jose)',
@@ -1379,10 +1382,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (let i = 0; i < 30; i++) fin.update(0.05); // avanza (t > 0,4: el salto queda armado)
   key('Space', true); fin.update(0.016); key('Space', false);
   for (let i = 0; i < 200 && fin.cine.st !== 'done'; i++) fin.update(0.05);
-  check('SALTAR la cinemática deja la escena en su estado posterior (torta en la mesa, Pollito orgulloso, sin cierre pendiente ni pose sentada, control devuelto)',
-    fin.cine.st === 'done' && fin.tortaOnTable === true && fin.catVis === 'proud' &&
+  check('SALTAR la cinemática deja la escena en su estado posterior (torta en la mesa, Pollito ya de vuelta en su escondite del armario, sin cierre pendiente ni pose sentada, control devuelto)',
+    fin.cine.st === 'done' && fin.tortaOnTable === true && fin.catVis === 'actor' &&
+    fcat.hidden === false && fcat.elev > 90 && Math.abs(fcat.x - FIN.catHide.x) < 4 &&
     fin.close === null && fin.seatedPose === false && DM.state.completed === true,
-    'cine=' + fin.cine.st);
+    'cine=' + fin.cine.st + ' catVis=' + fin.catVis);
   // --- la salida de revisión: puerta principal → praderas ---
   fxi.x = 510; fxi.y = 560; fxi.vx = fxi.vy = 0;
   fin.update(0.05);
@@ -2312,6 +2316,141 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('la figura SENTADA del compuesto del finale queda en la proporción del arte respecto a la de pie (~0,93 × el actor, ±12 %) y por debajo de su alto de pie',
     Math.abs(figParejaV / (charTopV * DBG.PAREJA_SENTADA) - 1) <= 0.12 && figParejaV < charTopV,
     `figura=${figParejaV.toFixed(1)} u, objetivo=${(charTopV * DBG.PAREJA_SENTADA).toFixed(1)} u, lienzo=${DBG.parejaWorldH(1).toFixed(1)} u`);
+
+  console.log('\nW) El finale tras el playtest: la pareja DETRÁS del sofá (pase GL con profundidad), Pollito en su proporción, su ruta visible y su salida al armario');
+  // Regresión del playtest de Jose (2026-11-22): en la sala
+  // del regreso, la pareja del compuesto salía ENORME y
+  // sentada SOBRE la mesa de centro, delante de todo, y
+  // Pollito igual de desproporcionado, ya presente sin que
+  // se viera su llegada (y sin irse nunca). Causas: los
+  // billboards del finale se dibujaban en la capa 2D
+  // POSTERIOR a la casa (sin profundidad: siempre encima)
+  // con el compuesto anclado a ras de suelo, y los PNG de
+  // Pollito a 76/62 u de lienzo (~3× su actor). El arreglo:
+  // los billboards van en el pase GL de la casa (gancho
+  // extraSprites de la HomeScene, con prueba de
+  // profundidad contra los muebles), el compuesto se ancla
+  // en los asientos y Pollito se dimensiona por su actor.
+  const scenesSrcW = fs.readFileSync(path.join(SRC, 'scenes.js'), 'utf8');
+  check('la HomeScene ofrece el gancho extraSprites (los billboards de una instancia se dibujan en el pase GL con profundidad, como los actores)',
+    scenesSrcW.includes('if (this.extraSprites) this.extraSprites(t)'));
+  DM.start(() => {});
+  DM.debug.travelTo('cita');
+  const fW = DM.state.finaleScene, FINW = DM.debug.FINALE, FIW = DM.debug.finaleImgs;
+  for (let i = 0; i < 25 && fW.phase !== 'home'; i++) fW.update(0.05);
+  check('la casa del finale registra su gancho extraSprites (y el de props, extraBoxes, sigue)',
+    typeof fW.home.extraSprites === 'function' && typeof fW.home.extraBoxes === 'function');
+  // Las imágenes de la puesta, «cargadas» con sus tamaños
+  // reales (como la sección T con las fotos del álbum).
+  const setImgW = (img, w, h) => { img.naturalWidth = w; img.naturalHeight = h; img.width = w; img.height = h; };
+  setImgW(FIW.pareja, 560, 360); setImgW(FIW.pareja2, 560, 360); setImgW(FIW.pareja3, 560, 360);
+  FIW.pollitoWalk.forEach((im) => setImgW(im, 429, 420));
+  setImgW(FIW.pollitoDeja, 433, 399); setImgW(FIW.pollitoOrgulloso, 360, 400);
+  setImgW(FIW.tortaMesa, 236, 252); setImgW(FIW.cartaSobre, 256, 224);
+  // El registro GL, capturado: se sustituye G.R.sprite por
+  // un registrador y se invoca el gancho de la escena.
+  const RW = G.R, sprW = [];
+  const origSpriteW = RW.sprite;
+  RW.sprite = (img, x, y, z, o) => { sprW.push({ img, x, y, z, o }); };
+  const charTopW = G.Sprites.charTop('ximena'), topW = DM.debug.pollitoTop();
+  // --- la pareja sentada, en su sitio y a su medida ---
+  fW.seatedPose = true; fW.cine = { st: 'reading', t: 0, placed: true }; fW.tortaOnTable = false; fW.catVis = 'actor';
+  sprW.length = 0;
+  fW.home.extraSprites();
+  const parW = sprW.find((s) => s.img === FIW.pareja || s.img === FIW.pareja2);
+  check('el compuesto de la pareja se registra en el pase GL (no en la capa 2D), centrado en el sofá y EN EL PLANO DE LOS ASIENTOS (z = seatXi.y, al norte del respaldo z 203: detrás del mueble)',
+    !!parW && parW.x === FINW.sofa.cx && parW.z === FINW.seatXi.y &&
+    parW.z > FINW.sofa.z && parW.z < 203,
+    parW ? `(${parW.x}, y=${parW.y.toFixed(1)}, z=${parW.z})` : 'sin registro');
+  check('la figura sentada apoya EN EL COJÍN: la base del lienzo queda el margen medido bajo seatY (26) y el fondo de la figura (base + margen × alto) cae en el cojín (±0,6 u)',
+    !!parW && Math.abs(parW.y - (FINW.seatY - DM.debug.PAREJA_BASE_FRAC * parW.o.h)) < 0.6 &&
+    Math.abs((parW.y + DM.debug.PAREJA_BASE_FRAC * parW.o.h) - FINW.seatY) < 0.6,
+    parW ? `base=${parW.y.toFixed(2)}, fondo figura=${(parW.y + DM.debug.PAREJA_BASE_FRAC * parW.o.h).toFixed(2)}, seatY=${FINW.seatY}` : 'sin registro');
+  check('la figura sentada visible queda en la proporción del arte (~0,93 × el actor de pie, ±12 %): ni gigante ni sobre la mesa',
+    !!parW && Math.abs(parW.o.h * DM.debug.PAREJA_FRAC / (charTopW * DM.debug.PAREJA_SENTADA) - 1) <= 0.12,
+    parW ? `figura=${(parW.o.h * DM.debug.PAREJA_FRAC).toFixed(1)} u, objetivo=${(charTopW * DM.debug.PAREJA_SENTADA).toFixed(1)} u` : 'sin registro');
+  // --- Pollito, a su tamaño en cada pose del servicio ---
+  const figW = (s, frac) => s.o.h * frac;
+  fW.seatedPose = false;
+  fW.catVis = 'walk'; fW.catWalkT = 0; fW.cat.x = 524; fW.cat.y = 280;
+  sprW.length = 0; fW.home.extraSprites();
+  const walk0W = sprW.find((s) => s.img === FIW.pollitoWalk[0]);
+  check('Pollito CAMINANDO con la torta se registra a SU tamaño: su figura (lienzo × fracción medida) = la de su actor definido (±12 %), con las patas en el suelo',
+    !!walk0W && Math.abs(figW(walk0W, DM.debug.POLLITO_FRAC.walk[0]) / topW - 1) <= 0.12 &&
+    Math.abs(walk0W.y + DM.debug.POLLITO_BOT.walk * walk0W.o.h) < 0.3 && walk0W.z === 280,
+    walk0W ? `figura=${figW(walk0W, DM.debug.POLLITO_FRAC.walk[0]).toFixed(1)} u, actor=${topW.toFixed(1)} u` : 'sin registro');
+  fW.catWalkT = 0.27; // frame 2 del ciclo
+  sprW.length = 0; fW.home.extraSprites();
+  const walk2W = sprW.find((s) => s.img === FIW.pollitoWalk[2]);
+  check('el ciclo de caminata mantiene la figura constante entre frames (cada frame se dimensiona por SU fracción medida)',
+    !!walk2W && Math.abs(figW(walk2W, DM.debug.POLLITO_FRAC.walk[2]) / topW - 1) <= 0.12,
+    walk2W ? `figura=${figW(walk2W, DM.debug.POLLITO_FRAC.walk[2]).toFixed(1)} u` : 'sin registro');
+  fW.catVis = 'place'; sprW.length = 0; fW.home.extraSprites();
+  const dejaW = sprW.find((s) => s.img === FIW.pollitoDeja);
+  check('Pollito DEJANDO la torta, a su tamaño (figura = su actor, ±12 %)',
+    !!dejaW && Math.abs(figW(dejaW, DM.debug.POLLITO_FRAC.deja) / topW - 1) <= 0.12,
+    dejaW ? `figura=${figW(dejaW, DM.debug.POLLITO_FRAC.deja).toFixed(1)} u` : 'sin registro');
+  fW.catVis = 'proud'; sprW.length = 0; fW.home.extraSprites();
+  const orgW = sprW.find((s) => s.img === FIW.pollitoOrgulloso);
+  check('Pollito ORGULLOSO, a su tamaño (figura = su actor, ±12 %)',
+    !!orgW && Math.abs(figW(orgW, DM.debug.POLLITO_FRAC.orgulloso) / topW - 1) <= 0.12,
+    orgW ? `figura=${figW(orgW, DM.debug.POLLITO_FRAC.orgulloso).toFixed(1)} u` : 'sin registro');
+  check('el alto viejo de sus lienzos (76 u) habría dejado su figura ~3× su actor: la regresión queda documentada',
+    76 * DM.debug.POLLITO_FRAC.walk[0] / topW >= 2.5,
+    'ratio viejo=' + (76 * DM.debug.POLLITO_FRAC.walk[0] / topW).toFixed(2));
+  RW.sprite = origSpriteW;
+  // --- y NADA de esto se dibuja ya en la capa 2D ---
+  const ocW = G.ovCtx, diW = [];
+  const origDiW = ocW.drawImage;
+  ocW.drawImage = (...a) => { diW.push(a[0]); };
+  const homeDrawW = fW.home.draw;
+  fW.home.draw = () => {};
+  fW.nearSofa = false; fW.nearDoor = false; fW.close = null;
+  fW.cine = { st: 'proud', t: 0.5, placed: true }; fW.seatedPose = true; fW.catVis = 'proud';
+  let drawWOk = true;
+  try { fW.draw(0.016); } catch (e) { drawWOk = false; }
+  fW.home.draw = homeDrawW; ocW.drawImage = origDiW;
+  const puestaW = [FIW.pareja, FIW.pareja2, FIW.pareja3, FIW.pollitoDeja, FIW.pollitoOrgulloso, FIW.tortaMesa, FIW.cartaSobre, ...FIW.pollitoWalk];
+  check('el draw() de la escena ya NO dibuja la puesta en la capa 2D (ni la pareja, ni Pollito, ni la torta, ni la carta): todo va por el pase GL con profundidad',
+    drawWOk && !diW.some((im) => puestaW.includes(im)), 'drawImage en overlay: ' + diW.length);
+  // --- la ruta de llegada: abierta, visible, por delante
+  // del sofá y sin pisar el compuesto ---
+  const pathW = FINW.catPath;
+  const lenW = pathW.reduce((acc, p, i) => acc + (i ? Math.hypot(p[0] - pathW[i - 1][0], p[1] - pathW[i - 1][1]) : Math.hypot(p[0] - FINW.catFloor.x, p[1] - FINW.catFloor.y)), 0);
+  check('la ruta de Pollito es una caminata de verdad (≥240 u desde el pie del armario) y termina junto a la mesa (catServe)',
+    lenW >= 240 && pathW[pathW.length - 1][0] === FINW.catServe.x && pathW[pathW.length - 1][1] === FINW.catServe.y,
+    'largo=' + lenW.toFixed(0));
+  check('la ruta pasa por DELANTE del sofá (algún tramo al sur del mueble, z > sofá+d, en la franja visible de la alfombra) y NUNCA se mete detrás del compuesto de la pareja (x siempre al oeste de los asientos)',
+    pathW.some((p) => p[1] > FINW.sofa.z + FINW.sofa.d) && pathW.every((p) => p[0] < FINW.seatXi.x),
+    'ruta=' + pathW.map((p) => p.join(',')).join(' → '));
+  // --- la cinemática completa en esta instancia: la
+  // salida se ejecuta y el estado final es el de siempre ---
+  fW.seatedPose = false; fW.catVis = 'actor'; fW.tortaOnTable = false; fW.tortaShown = false;
+  fW.cine = { st: 'idle', t: 0 }; fW.close = null;
+  fW.xi.x = FINW.sofa.cx; fW.xi.y = 250; fW.xi.vx = fW.xi.vy = 0;
+  for (let i = 0; i < 40; i++) fW.update(0.05);
+  key('Space', true); fW.update(0.016); key('Space', false);
+  const seenW = [];
+  for (let i = 0; i < 900 && fW.cine.st !== 'done'; i++) {
+    fW.update(0.05);
+    if (!seenW.length || seenW[seenW.length - 1] !== fW.cine.st) seenW.push(fW.cine.st);
+  }
+  check('la cinemática ejecuta la SALIDA de Pollito (proud → exit → emotion) y termina con la torta en la mesa y Pollito oculto en su escondite',
+    fW.cine.st === 'done' && seenW.join(',').includes('proud,exit,emotion') &&
+    fW.tortaOnTable === true && fW.catVis === 'actor' && fW.cat.hidden === false && fW.cat.elev > 90 &&
+    Math.abs(fW.cat.x - FINW.catHide.x) < 4 && Math.abs(fW.cat.y - FINW.catHide.y) < 4,
+    'vistos: ' + seenW.join(' → '));
+  // --- al REENTRAR con la torta servida: la mesa queda
+  // servida y Pollito está en el armario (no orgulloso) ---
+  fW.enterFinale();
+  check('al reentrar con la torta ya servida, la torta SIGUE en la mesa y Pollito está en su escondite del armario (no plantado junto a la mesa)',
+    fW.tortaOnTable === true && fW.catVis === 'actor' && fW.cat.hidden === false && fW.cat.elev > 90 &&
+    Math.abs(fW.cat.x - FINW.catHide.x) < 4 && Math.abs(fW.cat.y - FINW.catHide.y) < 4,
+    `catVis=${fW.catVis} elev=${fW.cat.elev}`);
+  DM.stop();
+  // las imágenes de la puesta vuelven a «no cargadas»
+  [FIW.pareja, FIW.pareja2, FIW.pareja3, FIW.pollitoDeja, FIW.pollitoOrgulloso, FIW.tortaMesa, FIW.cartaSobre, ...FIW.pollitoWalk]
+    .forEach((im) => { im.naturalWidth = 0; im.naturalHeight = 0; im.width = 0; im.height = 0; });
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);
