@@ -26,7 +26,13 @@
       else G.input.touchUp('action', PID);
     }
     else if (m.t === 'menu') { if (G.setPaused && G.canPause && G.canPause() || (G.setPaused && G.paused)) G.setPaused(!G.paused); scheduleScan(); }
-    else if (m.t === 'pick') { const bs = curBox && curBox.querySelectorAll('button'); const b = bs && bs[m.i | 0]; if (b && !b.disabled) b.click(); scheduleScan(); }
+    else if (m.t === 'ctl') {
+      const els = curBox && curBox.querySelectorAll(SEL); const el = els && els[m.i | 0]; if (!el) return;
+      if (m.a === 'click') { if (!el.disabled) el.click(); }
+      else if (m.a === 'set') { el.value = m.v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }
+      else if (m.a === 'tog') { el.checked = !el.checked; el.dispatchEvent(new Event('change', { bubbles: true })); }
+      scheduleScan();
+    }
     if (m.t === 'hello' || m.t === 'joy' || m.t === 'act' || m.t === 'menu' || m.t === 'pick') setStatus(true);
   }
 
@@ -40,16 +46,23 @@
     if (dec.length) { const b = dec[dec.length - 1]; const ask = b.querySelector('.ask'); return { box: b, title: ask ? ask.textContent.trim() : 'Elige una opción' }; }
     return null;
   }
-  function label(btn) { const b = btn.querySelector('b'); let t = b ? b.textContent : btn.textContent; return (t || '').replace(/\s+/g, ' ').trim().slice(0, 70); }
+  const SEL = 'button, input[type=range], input[type=checkbox]'; // controles reflejables
+  function label(el) { const b = el.querySelector && el.querySelector('b'); let t = b ? b.textContent : el.textContent; return (t || '').replace(/\s+/g, ' ').trim().slice(0, 70); }
+  function ctlLabel(el) { const row = el.closest && el.closest('.optrow'); const b = row && row.querySelector('b'); const t = b ? b.textContent : (el.getAttribute('aria-label') || el.id || ''); return (t || '').replace(/\s+/g, ' ').trim().slice(0, 60); }
+  function ctlOf(el) {
+    if (el.tagName === 'BUTTON') return { k: 'btn', label: label(el), disabled: !!el.disabled };
+    if (el.type === 'range') return { k: 'range', label: ctlLabel(el), value: +el.value, min: +el.min || 0, max: +el.max || 100, step: +el.step || 1 };
+    if (el.type === 'checkbox') return { k: 'tog', label: ctlLabel(el), on: !!el.checked };
+    return null;
+  }
   function scan() {
     const r = pickBox();
     if (!r) { if (curBox) { curBox = null; lastSig = null; send({ t: 'ui-end' }); } return; }
-    const btns = Array.from(r.box.querySelectorAll('button'));
-    if (!btns.length) { if (curBox) { curBox = null; lastSig = null; send({ t: 'ui-end' }); } return; } // sin botones = no reflejar
-    const data = btns.map(b => ({ label: label(b), disabled: !!b.disabled }));
-    const sig = r.title + '|' + data.map(d => d.label + (d.disabled ? '*' : '')).join('|');
+    const controls = Array.from(r.box.querySelectorAll(SEL)).map(ctlOf).filter(Boolean);
+    if (!controls.length) { if (curBox) { curBox = null; lastSig = null; send({ t: 'ui-end' }); } return; }
+    const sig = r.title + '|' + controls.map(c => c.k + ':' + c.label + (c.disabled ? '*' : '')).join('|'); // sin valores: arrastrar un slider no re-envía
     if (sig === lastSig && curBox === r.box) return;
-    curBox = r.box; lastSig = sig; send({ t: 'ui', title: r.title, buttons: data });
+    curBox = r.box; lastSig = sig; send({ t: 'ui', title: r.title, controls });
   }
   let scanPend = false;
   function scheduleScan() { if (scanPend) return; scanPend = true; requestAnimationFrame(() => { scanPend = false; try { scan(); } catch (e) {} }); }

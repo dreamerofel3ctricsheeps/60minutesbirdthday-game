@@ -6,25 +6,36 @@
 <meta name="theme-color" content="#120f1b">
 <title>Mando · 1 Minuto para la Fiesta</title>
 <style>
+  :root{ --bg:#1a1626; --dark:#120f1b; --panel:#262036; --panel2:#322a47; --ink:#f4f0ff; --dim:#a79fc0;
+    --yellow:#ffd23f; --pink:#f08cc0; --purple:#b48cf0; --green:#7dff8a; --red:#ff6b7a;
+    --font:"Trebuchet MS","Segoe UI",Verdana,sans-serif; }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-  html,body{width:100%;height:100%;overflow:hidden;background:#120f1b;color:#e8e4f0;font-family:system-ui,sans-serif;touch-action:none;overscroll-behavior:none}
-  #status{position:fixed;top:8px;left:0;right:0;text-align:center;font-size:13px;color:#9a8fb8;pointer-events:none;z-index:5}
-  #status b{color:#6fd3ff}
-  #menuBtn{position:fixed;top:8px;right:12px;z-index:6;background:#1a1626;border:1px solid #3a3350;color:#e8e4f0;border-radius:10px;padding:8px 12px;font-size:16px}
-  #pad{position:fixed;inset:0;display:flex}.half{flex:1;position:relative}
-  #joyBase{position:absolute;width:150px;height:150px;border-radius:50%;border:2px solid #3a3350;background:rgba(255,255,255,.04);display:none}
-  #joyThumb{position:absolute;width:66px;height:66px;border-radius:50%;background:#6fd3ff;opacity:.85;transform:translate(-50%,-50%)}
-  .hint{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;color:#5a5270}
-  #act{position:absolute;right:7vw;bottom:50%;transform:translateY(50%);width:128px;height:128px;border-radius:50%;background:#ffb86b;color:#3a2a12;font-weight:800;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 0 #c98a3f}
-  #act.on{transform:translateY(calc(50% + 4px));box-shadow:0 2px 0 #c98a3f;background:#ffcf9a}
-  #pad,.half,#joyHalf,#actHalf,#act,#menuBtn,#ui{touch-action:none}
-  #uiList{touch-action:pan-y}.uiBtn{touch-action:manipulation}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:var(--ink);font-family:var(--font);touch-action:none;overscroll-behavior:none}
+  #status{position:fixed;top:7px;left:0;right:0;text-align:center;font-size:13px;color:var(--dim);pointer-events:none;z-index:5;font-weight:bold}
+  #status b{color:var(--yellow)}
+  #menuBtn{position:fixed;top:7px;right:12px;z-index:6;background:var(--panel2);color:var(--ink);border:2px solid var(--dark);border-radius:8px;padding:8px 14px;font-size:15px;font-weight:bold;font-family:var(--font);box-shadow:0 3px 0 var(--dark);touch-action:none}
+  #menuBtn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--dark)}
+  #pad{position:fixed;inset:0;display:flex}.half{flex:1;position:relative;touch-action:none}
+  #joyBase{position:absolute;width:150px;height:150px;border-radius:50%;border:3px solid var(--panel2);background:rgba(255,255,255,.05);display:none}
+  #joyThumb{position:absolute;width:64px;height:64px;border-radius:50%;background:var(--purple);border:3px solid var(--dark);transform:translate(-50%,-50%)}
+  .hint{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:12px;color:#5a5270;font-weight:bold}
+  #act{position:absolute;right:7vw;bottom:50%;transform:translateY(50%);width:132px;height:132px;border-radius:50%;background:var(--pink);color:var(--dark);font-weight:bold;letter-spacing:1px;font-size:19px;display:flex;align-items:center;justify-content:center;border:4px solid var(--dark);box-shadow:0 7px 0 var(--dark);touch-action:none}
+  #act.on{transform:translateY(calc(50% + 5px));box-shadow:0 2px 0 var(--dark);filter:brightness(1.08)}
   /* Ventana de opciones reflejadas */
-  #ui{position:fixed;inset:0;background:rgba(10,8,16,.92);z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;padding:18px;gap:10px}
-  #uiTitle{font-size:16px;color:#e8e4f0;text-align:center;margin-bottom:4px;max-width:92vw}
-  #uiList{display:flex;flex-direction:column;gap:10px;width:min(560px,92vw);max-height:76vh;overflow:auto}
-  .uiBtn{background:#6fd3ff;color:#0a1a22;font-weight:700;border:0;border-radius:12px;padding:16px;font-size:17px;text-align:left}
-  .uiBtn[disabled]{background:#2a2540;color:#6a6288}
+  #ui{position:fixed;inset:0;background:rgba(10,8,16,.94);z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:10px;touch-action:none}
+  #uiTitle{font-size:17px;font-weight:bold;color:var(--yellow);text-align:center;margin-bottom:2px;max-width:92vw}
+  #uiList{display:flex;flex-direction:column;gap:12px;width:min(560px,94vw);max-height:80vh;overflow:auto;touch-action:pan-y;padding:4px}
+  .uiBtn{background:var(--yellow);color:var(--dark);border:3px solid var(--dark);border-radius:12px;box-shadow:0 4px 0 var(--dark);padding:15px;font-size:17px;font-weight:bold;font-family:var(--font);text-align:center;letter-spacing:.5px;touch-action:manipulation}
+  .uiBtn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--dark)}
+  .uiBtn[disabled]{background:var(--panel2);color:var(--dim);box-shadow:0 4px 0 var(--dark);opacity:.6}
+  .uiTog{display:flex;align-items:center;justify-content:space-between;background:var(--panel2);color:var(--ink);border:3px solid var(--dark);border-radius:12px;box-shadow:0 4px 0 var(--dark);padding:14px;font-size:16px;font-weight:bold;font-family:var(--font);touch-action:manipulation}
+  .uiTog .dot{width:46px;height:26px;border-radius:999px;background:var(--dark);position:relative;flex:none}
+  .uiTog .dot::before{content:'';position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:var(--dim);transition:transform .15s,background .15s}
+  .uiTog.on .dot{background:#2f5a35}.uiTog.on .dot::before{transform:translateX(20px);background:var(--green)}
+  .uiRow{background:var(--panel2);border:3px solid var(--dark);border-radius:12px;box-shadow:0 4px 0 var(--dark);padding:12px 14px}
+  .uiRowHead{display:flex;justify-content:space-between;align-items:center;font-size:15px;font-weight:bold;margin-bottom:8px}
+  .uiRow .v{color:var(--yellow)}
+  .uiRange{width:100%;height:34px;accent-color:var(--yellow);touch-action:pan-x}
 </style>
 </head>
 <body>
@@ -38,59 +49,68 @@
 <script>
 (function () {
   'use strict';
-  // anti-zoom: touch-action:none en los controles (abajo) evita el doble-toque;
-  // aquí solo cubrimos el pinch de iOS y el dblclick, sin tocar los eventos de los botones.
-  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('gesturestart', (e) => e.preventDefault()); // pinch iOS
   document.addEventListener('dblclick', (e) => e.preventDefault());
-
   const room = new URLSearchParams(location.search).get('room') || 'default';
   const statusEl = document.getElementById('status');
   let connected = null;
   function post(obj) {
     return fetch('/send?room=' + encodeURIComponent(room) + '&from=pad', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) })
-      .then(r => r.json()).then(j => {
-        const c = j.peers > 0;
-        if (c !== connected) { connected = c; statusEl.innerHTML = c ? 'Conectado a <b>' + room + '</b>' : 'Esperando al juego (<b>' + room + '</b>)…'; }
-      }).catch(() => {});
+      .then(r => r.json()).then(j => { const c = j.peers > 0; if (c !== connected) { connected = c; statusEl.innerHTML = c ? 'Conectado a <b>' + room + '</b>' : 'Esperando al juego (<b>' + room + '</b>)…'; } }).catch(() => {});
   }
   post({ t: 'hello' }); setInterval(() => post({ t: 'ping' }), 2000);
 
-  // recibir del juego: opciones a reflejar
+  // ---- ventana de opciones reflejadas (botones / sliders / toggles) ----
   const uiEl = document.getElementById('ui'), uiTitle = document.getElementById('uiTitle'), uiList = document.getElementById('uiList');
-  function showUI(title, buttons) {
-    uiTitle.textContent = title || 'Elige una opción';
+  function showUI(title, controls) {
+    uiTitle.textContent = title || 'Opciones';
     uiList.innerHTML = '';
-    buttons.forEach((b, i) => {
-      const el = document.createElement('button'); el.className = 'uiBtn'; el.textContent = b.label || ('Opción ' + (i + 1));
-      if (b.disabled) el.disabled = true; else el.onclick = () => post({ t: 'pick', i });
-      uiList.appendChild(el);
+    (controls || []).forEach((c, i) => {
+      if (c.k === 'range') {
+        const row = document.createElement('div'); row.className = 'uiRow';
+        const head = document.createElement('div'); head.className = 'uiRowHead';
+        const lab = document.createElement('span'); lab.textContent = c.label || 'Nivel';
+        const val = document.createElement('span'); val.className = 'v'; val.textContent = c.value;
+        head.appendChild(lab); head.appendChild(val);
+        const r = document.createElement('input'); r.type = 'range'; r.className = 'uiRange';
+        r.min = c.min; r.max = c.max; r.step = c.step; r.value = c.value;
+        r.oninput = () => { val.textContent = r.value; post({ t: 'ctl', i: i, a: 'set', v: +r.value }); };
+        row.appendChild(head); row.appendChild(r); uiList.appendChild(row);
+      } else if (c.k === 'tog') {
+        const b = document.createElement('button'); b.className = 'uiTog' + (c.on ? ' on' : '');
+        b.innerHTML = '<span>' + (c.label || '') + '</span><span class="dot"></span>';
+        b.onclick = () => { b.classList.toggle('on'); post({ t: 'ctl', i: i, a: 'tog' }); };
+        uiList.appendChild(b);
+      } else {
+        const b = document.createElement('button'); b.className = 'uiBtn'; b.textContent = c.label || ('Opción ' + (i + 1));
+        if (c.disabled) b.disabled = true; else b.onclick = () => post({ t: 'ctl', i: i, a: 'click' });
+        uiList.appendChild(b);
+      }
     });
     uiEl.style.display = 'flex';
   }
   function hideUI() { uiEl.style.display = 'none'; uiList.innerHTML = ''; }
   const sse = new EventSource('/events?room=' + encodeURIComponent(room) + '&role=pad');
-  sse.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; }
-    if (m.t === 'ui') showUI(m.title, m.buttons || []); else if (m.t === 'ui-end') hideUI(); };
+  sse.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m.t === 'ui') showUI(m.title, m.controls); else if (m.t === 'ui-end') hideUI(); };
 
   document.getElementById('menuBtn').addEventListener('click', () => post({ t: 'menu' }));
 
-  // joystick (origen flotante, mitad izquierda)
+  // ---- joystick ----
   const base = document.getElementById('joyBase'), thumb = document.getElementById('joyThumb'), R = 72;
   let joyId = null, ox = 0, oy = 0, lastJoy = 0, pendingJoy = null;
   function sendJoy(x, y) { pendingJoy = { t: 'joy', x, y }; const now = performance.now(); if (now - lastJoy >= 40) { lastJoy = now; post(pendingJoy); pendingJoy = null; } }
   setInterval(() => { if (pendingJoy) { lastJoy = performance.now(); post(pendingJoy); pendingJoy = null; } }, 40);
   const joyHalf = document.getElementById('joyHalf');
-  joyHalf.addEventListener('pointerdown', e => { joyId = e.pointerId; ox = e.clientX; oy = e.clientY; base.style.display = 'block'; base.style.left = (ox - 75) + 'px'; base.style.top = (oy - 75) + 'px'; thumb.style.left = '75px'; thumb.style.top = '75px'; joyHalf.setPointerCapture(joyId); });
+  joyHalf.addEventListener('pointerdown', e => { joyId = e.pointerId; ox = e.clientX; oy = e.clientY; base.style.display = 'block'; base.style.left = (ox - 75) + 'px'; base.style.top = (oy - 75) + 'px'; thumb.style.left = '75px'; thumb.style.top = '75px'; try { joyHalf.setPointerCapture(joyId); } catch (x) {} });
   joyHalf.addEventListener('pointermove', e => { if (e.pointerId !== joyId) return; let dx = e.clientX - ox, dy = e.clientY - oy; const m = Math.hypot(dx, dy); if (m > R) { dx = dx / m * R; dy = dy / m * R; } thumb.style.left = (75 + dx) + 'px'; thumb.style.top = (75 + dy) + 'px'; sendJoy(dx / R, dy / R); });
   function joyEnd(e) { if (e.pointerId !== joyId) return; joyId = null; base.style.display = 'none'; sendJoy(0, 0); }
   joyHalf.addEventListener('pointerup', joyEnd); joyHalf.addEventListener('pointercancel', joyEnd);
 
-  // acción
+  // ---- acción ----
   const act = document.getElementById('act');
   act.addEventListener('pointerdown', e => { act.classList.add('on'); post({ t: 'act', down: true }); try { act.setPointerCapture(e.pointerId); } catch (x) {} });
   const up = () => { if (!act.classList.contains('on')) return; act.classList.remove('on'); post({ t: 'act', down: false }); };
-  act.addEventListener('pointerup', up); act.addEventListener('pointercancel', up);
-  act.addEventListener('pointerleave', up); act.addEventListener('lostpointercapture', up);
+  act.addEventListener('pointerup', up); act.addEventListener('pointercancel', up); act.addEventListener('pointerleave', up); act.addEventListener('lostpointercapture', up);
   document.addEventListener('visibilitychange', () => { if (document.hidden) { sendJoy(0, 0); up(); } });
 })();
 </script>
