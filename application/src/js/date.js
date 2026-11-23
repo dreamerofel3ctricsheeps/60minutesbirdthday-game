@@ -140,9 +140,15 @@
   const SUCK_DUR = 1.8, DOOR_CALL_T = 5, DOOR_OPEN_T = 2, JOSE_LAG = 0.15;
   const MAIN_DOOR = { x: 510, y: 566 }; // puerta principal: borde sur del pasillo
   // La CARTA del guion v2 espera sobre la mesa de centro de
-  // la sala (ctable en world.js: x 595–675, z 108–140; su
-  // centro y el radio del aviso «abrir la carta»).
-  const CARTA_POS = { x: 635, y: 124, r: 60 };
+  // la sala. Su posición se DERIVA de la huella del mueble en
+  // world.js (W.furn('ctable'): x 595–675, z 108–140) para que
+  // nunca vuelva a divergir de la mesa real, y CARTA_TOP es la
+  // altura de su tablero en la malla 3D de la casa (world.js:
+  // la caja de la mesa va de y=13 a y=16). El radio es el del
+  // aviso «abrir la carta».
+  const CARTA_MESA = W.furn('ctable');
+  const CARTA_TOP = 16;
+  const CARTA_POS = { x: CARTA_MESA.x + CARTA_MESA.w / 2, y: CARTA_MESA.y + CARTA_MESA.h / 2, r: 60 };
 
   // ---------- Los textos de la carta (guion v2, «la carta») ----------
   // BORRADOR (2026-11-22): los fragmentos de la carta que la cita
@@ -1021,6 +1027,16 @@
   // (D = dist × 1,324; eye sobre la esfera de pitch). El alto en
   // pantalla (coordenadas lógicas 640×360) no depende del aspecto,
   // así que la razón entre dos mediciones es robusta.
+  // ⚠️ OJO con el eje x del lookAt (bug del playtest de Jose,
+  // 2026-11-22): x = up × z con up = (0,1,0) da [z[2], 0, −z[0]].
+  // La primera versión llevaba el «1» del up en la ranura z —
+  // [−z[1], z[0], 0], el producto cruz con up = (0,0,1) — y la
+  // cámara analítica quedaba GIRADA ~90°: todo lo dibujado con
+  // projectHomePoint/drawHomeImg caía en un sitio sin relación
+  // con la casa 3D (la carta de la apertura se veía flotando en
+  // el borde inferior de la pantalla, sobre la pared sur, en vez
+  // de sobre la mesa de centro). La compensación de escala no lo
+  // delataba porque compara razones medidas con la MISMA matriz.
   function vpFromCam(cam) {
     const fov = (26 * Math.PI) / 180, asp = (G.R && G.R.w > 0 && G.R.h > 0) ? G.R.w / G.R.h : 16 / 9;
     const t = 1 / Math.tan(fov / 2), n = 140, f = 4200;
@@ -1029,7 +1045,7 @@
     const e = [cam.x, (cam.y || 0) + Math.sin(cam.pitch) * Dd, cam.z + Math.cos(cam.pitch) * Dd];
     const c = [cam.x, cam.y || 0, cam.z];
     let z = [e[0] - c[0], e[1] - c[1], e[2] - c[2]]; let l = Math.hypot(z[0], z[1], z[2]); z = z.map((v) => v / l);
-    let x = [0 * z[2] - 1 * z[1], 1 * z[0] - 0 * z[2], 0 * z[1] - 0 * z[0]]; l = Math.hypot(x[0], x[1], x[2]); x = x.map((v) => v / l);
+    let x = [1 * z[2] - 0 * z[1], 0 * z[0] - 0 * z[2], 0 * z[1] - 1 * z[0]]; l = Math.hypot(x[0], x[1], x[2]); x = x.map((v) => v / l);
     const y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
     const L = [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0,
       -(x[0] * e[0] + x[1] * e[1] + x[2] * e[2]), -(y[0] * e[0] + y[1] * e[1] + y[2] * e[2]), -(z[0] * e[0] + z[1] * e[1] + z[2] * e[2]), 1];
@@ -1112,6 +1128,37 @@
     const x = (640 - w) / 2, y = 360 - 12 - h;
     c.save();
     c.globalAlpha = a;
+    c.fillStyle = '#f7efdb';
+    c.beginPath(); c.roundRect(x, y, w, h, 7); c.fill();
+    c.strokeStyle = '#b98d4f'; c.lineWidth = 1.4;
+    c.beginPath(); c.roundRect(x, y, w, h, 7); c.stroke();
+    c.fillStyle = '#a84a41'; c.fillRect(x + 10, y + 4.5, w - 20, 1.6);
+    lines.forEach((l, i) => {
+      G.text(c, l, 320, y + 13 + i * 15, { size: 11.5, bold: false, color: '#3a2c22', stroke: false });
+    });
+    c.restore();
+  }
+  // La INSTRUCCIÓN DE OBJETIVO de la apertura (pedido de Jose
+  // en su playtest del 2026-11-22: «debería haber una
+  // instrucción que me diga busca la carta o algo así, para
+  // que el jugador sepa que tiene que buscar la carta»).
+  // Mientras la carta no se abra, la cita dice qué hay que
+  // hacer en una banda de papel ARRIBA (la banda de los
+  // fragmentos va abajo), PERSISTENTE: es espacio de pantalla,
+  // no del mundo, así que se ve desde cualquier rincón del
+  // depa, sin depender de la proximidad a la sala. Al abrir
+  // la carta se retira y la guía «a la plaza →» toma el relevo.
+  const CARTA_OBJETIVO = 'Hay una carta para ti en la sala: búscala sobre la mesa de centro y ábrela';
+  function objetivoCartaActivo(scene) {
+    return !!scene && scene.phase === 'depa' && !D.cartaAbierta;
+  }
+  function drawCartaObjetivo(c) {
+    const lines = wrapCartaText(c, CARTA_OBJETIVO, 11.5, 500);
+    c.font = `${11.5}px ${G.FONT}`;
+    const wLine = Math.max(...lines.map((l) => c.measureText(l).width));
+    const w = Math.min(580, wLine + 46), h = lines.length * 15 + 19;
+    const x = (640 - w) / 2, y = 10;
+    c.save();
     c.fillStyle = '#f7efdb';
     c.beginPath(); c.roundRect(x, y, w, h, 7); c.fill();
     c.strokeStyle = '#b98d4f'; c.lineWidth = 1.4;
@@ -1617,7 +1664,7 @@
         // gigante). Al abrirla desaparece de la mesa: la
         // lleva ella.
         if (!D.cartaAbierta) {
-          const p = projectHomePoint(this.home, CARTA_POS.x, 16, CARTA_POS.y);
+          const p = projectHomePoint(this.home, CARTA_POS.x, CARTA_TOP, CARTA_POS.y);
           if (p.ok) {
             const gl = 0.15 + 0.11 * (0.5 + 0.5 * Math.sin(this.t * 2.4));
             const grd = c.createRadialGradient(p.x, p.y, 2, p.x, p.y, 30);
@@ -1625,8 +1672,11 @@
             grd.addColorStop(1, 'rgba(255,224,150,0)');
             c.fillStyle = grd; c.beginPath(); c.arc(p.x, p.y, 30, 0, 6.3); c.fill();
           }
-          drawHomeImg(this.home, c, cartaSobreImg, CARTA_POS.x, 16, CARTA_POS.y, 20, false);
+          drawHomeImg(this.home, c, cartaSobreImg, CARTA_POS.x, CARTA_TOP, CARTA_POS.y, 20, false);
         }
+        // La instrucción de objetivo, mientras la carta no
+        // se abra: persistente y visible desde todo el depa.
+        if (objetivoCartaActivo(this)) drawCartaObjetivo(c);
         if (this.phase === 'depa' && this.nearCarta && !D.cartaAbierta) {
           const h = this.xi.head(46);
           if (h && isFinite(h.x)) G.prompt(c, 'ESPACIO: abrir la carta', h.x, h.y);
@@ -4356,6 +4406,12 @@
       // Ganchos de la carta (guion v2, secciones F/O/S): los
       // textos, la regla de lectura, la banda y su disparo.
       CARTA_TEXTOS, cartaReadTime, cartaBand, showCartaBand, updateCartaBand,
+      // Ganchos del playtest de la carta (sección U): la
+      // posición derivada de la mesa de centro, la altura de
+      // su tablero, la instrucción de objetivo con su
+      // predicado, y la proyección analítica de la casa (para
+      // fijar que coincide con la del motor, gl3d.js).
+      CARTA_POS, CARTA_TOP, CARTA_OBJETIVO, objetivoCartaActivo, projectHomePoint, vpFromCam,
       // Ganchos del álbum del cierre (sección T): la lista
       // de fotos en orden y la imagen de la carta (el humo
       // marca sus FakeImage como «cargadas» poniendo

@@ -2198,6 +2198,84 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   setLoadedT(DM.debug.cartaFinalImg, false);
   DM.debug.CLOSE_PHOTOS.forEach((p) => setLoadedT(p.img, false));
 
+  console.log('\nU) La carta SOBRE la mesa de centro y la instrucción de objetivo (playtest de Jose, 2026-11-22)');
+  // Regresión del playtest: la carta se veía FLOTANDO en el
+  // borde inferior de la pantalla, sobre la banda negra de la
+  // pared sur. La posición siempre fue el centro de la mesa;
+  // lo roto era la PROYECCIÓN analítica: vpFromCam traía el
+  // «1» del vector up en la ranura z, su lookAt construía una
+  // cámara con up +Z en vez de +Y (girada ~90°) y todo lo
+  // dibujado con projectHomePoint/drawHomeImg caía en un sitio
+  // sin relación con la casa 3D. Estos checks fijan la
+  // geometría contra el mueble real y contra la proyección
+  // del motor (gl3d.js), medida de forma independiente.
+  const DBG = DM.debug;
+  const mesaU = G.World.furn('ctable');
+  check('la posición de la carta se DERIVA de la mesa de centro de la sala (W.furn(\'ctable\') de world.js, no de constantes del finale)',
+    DBG.CARTA_POS.x === mesaU.x + mesaU.w / 2 && DBG.CARTA_POS.y === mesaU.y + mesaU.h / 2,
+    `carta=(${DBG.CARTA_POS.x},${DBG.CARTA_POS.y}) mesa=(${mesaU.x},${mesaU.y},${mesaU.w}×${mesaU.h})`);
+  const worldSrcU = fs.readFileSync(path.join(SRC, 'world.js'), 'utf8');
+  check('la altura del tablero (CARTA_TOP) es la de la caja de la mesa en la malla 3D (world.js: B(595, 13, 108, 80, 3, 32) → 13+3 = 16)',
+    DBG.CARTA_TOP === 16 && worldSrcU.includes('B(595, 13, 108, 80, 3, 32'),
+    'CARTA_TOP=' + DBG.CARTA_TOP);
+  // Con la cámara sobre la sala, el tablero de la mesa cae
+  // casi en el centro de la pantalla: (320, 149) medido con
+  // una réplica independiente de perspective/lookAt/mul de
+  // gl3d.js y de R.begin/R.project.
+  const pMesaU = DBG.projectHomePoint({ cam: { x: 635, y: 0, z: 150, dist: 560, pitch: 0.8 } }, DBG.CARTA_POS.x, DBG.CARTA_TOP, DBG.CARTA_POS.y);
+  check('con la cámara sobre la sala, la carta se proyecta SOBRE la mesa (cerca del centro de pantalla, como en el motor)',
+    pMesaU.ok && Math.abs(pMesaU.x - 320) <= 3 && Math.abs(pMesaU.y - 149) <= 6,
+    `proyección=(${pMesaU.x.toFixed(0)},${pMesaU.y.toFixed(0)})`);
+  // El encuadre exacto de la captura de Jose: Ximena junto a
+  // la puerta de su cuarto (cámara siguiéndola); la sala queda
+  // fuera de cuadro POR ARRIBA. Con la proyección rota la
+  // carta caía en (345, 373): flotando sobre la banda
+  // inferior. Ahora debe salir por el borde superior, con la
+  // mesa de verdad.
+  const pCapU = DBG.projectHomePoint({ cam: { x: 665, y: 0, z: 435, dist: 560, pitch: 0.8 } }, DBG.CARTA_POS.x, DBG.CARTA_TOP, DBG.CARTA_POS.y);
+  check('en el encuadre de la captura de Jose, la carta queda fuera de cuadro POR ARRIBA (con su mesa), no flotando abajo',
+    pCapU.ok && pCapU.y < 0, `proyección=(${pCapU.x.toFixed(0)},${pCapU.y.toFixed(0)})`);
+  // Sanidad de la cámara analítica: la punta de un segmento
+  // vertical va SOBRE su base (con el up roto salía DEBAJO:
+  // base y=157, punta y=258) y su alto es el del motor (~101).
+  const camSpawnU = { cam: { x: 800, y: 0, z: 440, dist: 560, pitch: 0.8 } };
+  const pBaseU = DBG.projectHomePoint(camSpawnU, 800, 0, 470), pTopU = DBG.projectHomePoint(camSpawnU, 800, 122, 470);
+  check('un segmento vertical se proyecta con la punta ARRIBA de la base y el alto del motor (la cámara analítica ya no está girada)',
+    pTopU.y < pBaseU.y && Math.abs((pBaseU.y - pTopU.y) - 101) <= 6,
+    `base=${pBaseU.y.toFixed(0)} punta=${pTopU.y.toFixed(0)} alto=${(pBaseU.y - pTopU.y).toFixed(0)}`);
+  // LA INSTRUCCIÓN DE OBJETIVO (el otro pedido del playtest):
+  // mientras la carta no se abra, la cita dice qué buscar, y
+  // es persistente (espacio de pantalla, no proximidad).
+  DM.start(() => {});
+  const scU = G.scene, xiU = scU && scU.xi;
+  check('al arrancar la cita, la instrucción de objetivo está ACTIVA (fase depa, carta sin abrir)',
+    !!scU && DBG.objetivoCartaActivo(scU) === true && DM.state.cartaAbierta === false);
+  check('el texto de la instrucción dice que hay una carta en la sala, sobre la mesa de centro, y que hay que abrirla',
+    /carta/.test(DBG.CARTA_OBJETIVO) && /sala/.test(DBG.CARTA_OBJETIVO) && /mesa de centro/.test(DBG.CARTA_OBJETIVO) && /ábrela/.test(DBG.CARTA_OBJETIVO),
+    DBG.CARTA_OBJETIVO);
+  // El dibujo del depa con la instrucción y la carta no
+  // explota (la casa 3D es WebGL real: su draw se sustituye
+  // por un stub, como hace la sección T con el finale, y se
+  // ejercita la capa 2D: halo, sobre e instrucción).
+  let depaDrawOk = true;
+  const homeDrawU = scU.home.draw;
+  scU.home.draw = () => {};
+  try { scU.draw(0.016); } catch (e) { depaDrawOk = false; }
+  scU.home.draw = homeDrawU;
+  check('el dibujo del depa con la instrucción de objetivo (y la carta sobre la mesa) no explota', depaDrawOk);
+  // Se abre la carta por la vía real (como la sección F) y la
+  // instrucción se retira: la guía «a la plaza →» toma el relevo.
+  xiU.x = DBG.CARTA_POS.x; xiU.y = DBG.CARTA_POS.y + 28; xiU.vx = xiU.vy = 0;
+  scU.update(0.016);
+  check('junto a la mesa de centro, el aviso de proximidad sigue anclado a la posición de la carta (nearCarta)', scU.nearCarta === true);
+  key('Space', true); scU.update(0.016); key('Space', false);
+  for (let i = 0; i < 20; i++) scU.update(0.05); // la toma (~0,8 s) → paso «lee»
+  key('Space', true); scU.update(0.016); key('Space', false);
+  check('abierta la carta por la vía real, la instrucción de objetivo se RETIRA',
+    DM.state.cartaAbierta === true && scU.phase === 'depa' && DBG.objetivoCartaActivo(scU) === false,
+    'cartaAbierta=' + DM.state.cartaAbierta + ' phase=' + scU.phase);
+  DM.stop();
+
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);
 
