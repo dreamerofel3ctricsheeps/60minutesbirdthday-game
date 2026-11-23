@@ -282,6 +282,11 @@
     cartaAbierta: false, // la carta ya se abrió en el depa: la salida despierta
     cartaFrag: { plaza: false, sanangel: false, aero: false, castillo: false }, // fragmentos ya mostrados (una sola vez por partida)
     completed: false, // el cierre total (carta + foto) ya se presentó en esta partida
+    // --- El menú final del cierre (pedido de Jose): al
+    // terminar todo, «Reintentar» o «Salir al título».
+    onDone: null, // el callback que game.js pasa a start(): la vía de salida al título del modo (lo invoca el menú final)
+    tapPos: null, // posición lógica (640×360) del último toque: el menú final la usa para saber QUÉ opción se tocó
+    endMenuCancel: false, // ESC con el menú final abierto (lo fija el listener de teclado; lo consume la escena del finale)
   };
 
   // ---------- Audio: la canción (fuera de git) ----------
@@ -566,7 +571,24 @@
         const dx = e.clientX - touchStart.x, dy = e.clientY - touchStart.y, m = Math.hypot(dx, dy);
         touchVec = m > 8 ? { x: dx / Math.max(m, 44), y: dy / Math.max(m, 44) } : { x: 0, y: 0 };
       });
-      const endTouch = () => { if (touchStart && touchVec && !touchVec.x && !touchVec.y) D.tap = true; touchStart = null; touchVec = null; };
+      const endTouch = () => {
+        if (touchStart && touchVec && !touchVec.x && !touchVec.y) {
+          D.tap = true;
+          // La posición del toque, en coordenadas lógicas
+          // 640×360 (el rect del canvas hace de marco): el
+          // menú final la usa para saber QUÉ opción se
+          // tocó. Sin rect medible, el toque solo confirma
+          // la selección (tapPos queda null), como siempre.
+          D.tapPos = null;
+          try {
+            const r = cv.getBoundingClientRect && cv.getBoundingClientRect();
+            if (r && r.width > 0 && r.height > 0) {
+              D.tapPos = { x: (touchStart.x - r.left) / r.width * 640, y: (touchStart.y - r.top) / r.height * 360 };
+            }
+          } catch (err) { /* sin rect: el toque confirma, sin posición */ }
+        }
+        touchStart = null; touchVec = null;
+      };
       cv.addEventListener('pointerup', endTouch);
       cv.addEventListener('pointercancel', endTouch);
     }
@@ -1096,6 +1118,19 @@
   // escucha por su cuenta y solo actúa en la fase 'free'.
   try {
     window.addEventListener('keydown', (e) => {
+      // ESC con el menú final de la cita ABIERTO lo descarta
+      // (quedarse en el depa final) en vez de abrir la pausa:
+      // este listener se registra ANTES que el de game.js
+      // (orden de módulos en main.js) y corta la propagación
+      // inmediata SOLO en ese caso; sin menú abierto, ESC
+      // sigue siendo la pausa de siempre.
+      if (e.code === 'Escape' && D.active && D.finaleScene && D.scene === D.finaleScene && D.finaleScene.endMenu) {
+        if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName || '')) return;
+        D.endMenuCancel = true;
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        return;
+      }
       // M = silencio de la canción (el mismo gesto que el botón
       // #dateMuteBtn), solo con el modo cita activo y sin robar
       // la tecla cuando se escribe en un campo (p. ej. el código).
@@ -3878,6 +3913,35 @@
     ],
   };
 
+  // ---------- El ritmo del trecho post-torta (playtest de Jose) ----------
+  // «Cuando se sientan a leer la carta y aparece Pollito
+  // con la torta, hay mucho espacio hasta que carga la
+  // escena de las fotos: debería ser un poco más rápido.»
+  // La medición del trecho (del fin de 'place' al álbum,
+  // con la carta avanzada al instante) daba 17,2 s:
+  // proud 1,0 + salida 14,0 + emotion 1,4 + fundido 0,8.
+  // El grueso NO era un tiempo de diseño: la salida de
+  // Pollito se CONGELABA en su trepada (ver catHome) y
+  // solo la red de seguridad de 14 s lo sacaba de ahí.
+  // Corregido eso, los beats fijos también se recortan:
+  const FINALE_PROUD_T = 0.6;   // el beat de orgullo de Pollito (antes 1,0 s sueltos)
+  const FINALE_EMOTION_T = 0.8; // la emoción de la pareja antes del cierre (antes 1,4 s)
+  const CLOSE_IN_T = 0.45;      // el fundido de entrada a la carta del cierre (antes 0,8 s)
+  // La vuelta de Pollito al armario: la normal (al
+  // sentarse la pareja) y la APURADA de tras la torta —
+  // un gato que ya cumplió se escabulle, no pasea.
+  const CAT_HOME_SPD = 140, CAT_CLIMB_T = 0.8;
+  const CAT_EXIT_SPD = 260, CAT_EXIT_CLIMB_T = 0.45;
+
+  // ---------- El menú final (pedido de Jose) ----------
+  // Al terminar el cierre total, sobre la sala (la pareja
+  // sigue sentada en el sofá detrás): revivir la cita o
+  // salir al título. Sin emojis: es UI del juego.
+  const END_MENU_OPTS = [
+    { id: 'retry', label: 'Reintentar', cx: 320, cy: 218, w: 236, h: 36 },
+    { id: 'title', label: 'Salir al título', cx: 320, cy: 260, w: 236, h: 36 },
+  ];
+
   class FinaleScene {
     constructor() {
       this.id = 'cita';
@@ -3899,6 +3963,10 @@
       // { step, t } o null; closeAct = la acción del jugador
       // en los pasos a su ritmo.
       this.close = null; this.closeAct = false;
+      // El menú final (tras la tarjeta de fin): { sel, t }
+      // o null. modeGone = el menú reinició el modo o salió
+      // al título a mitad de un update: la escena corta ahí.
+      this.endMenu = null; this.modeGone = false;
       const home = (this.home = new G.Scenes.HomeScene(G.PLAYABLE.slice()));
       this.xi = home.xi; this.jose = home.jose; this.cat = home.cat;
       // --- la configuración «noche de cita»: la variante de
@@ -3976,7 +4044,7 @@
       // servirla SE FUE (estado 'exit' de la cinemática), no
       // se queda orgulloso junto a la mesa para siempre.
       this.catVis = 'actor';
-      this.seatedPose = false; this.close = null; this.closeAct = false;
+      this.seatedPose = false; this.close = null; this.closeAct = false; this.endMenu = null;
       this.cine = { st: this.tortaShown ? 'done' : 'idle', t: 0 };
       W.closet.k = W.closet.target = W.CLOSET_PEEK;
       W.xDoorOpen = true;
@@ -4020,6 +4088,10 @@
         this.xi.vx = this.xi.vy = 0; this.xi.moving = false;
       }
       this.updateCine(dt);
+      // El menú final pudo reiniciar el modo o salir al
+      // título dentro de la cinemática: esta escena ya no
+      // es la activa y el update corta aquí.
+      if (this.modeGone) { this.modeGone = false; return; }
       home.update(dt);
       this.compensateScale();
       this.nearSofa = !cineOn && Math.hypot(this.xi.x - FINALE.sofa.cx, this.xi.y - FINALE.sofa.cz) < FINALE.promptR;
@@ -4092,19 +4164,44 @@
     }
     // Devuelve a Pollito a su escondite (para repetir la
     // cinemática): camina al pie del armario y trepa.
-    catHome(dt) {
+    // `apurada` = la vuelta de tras la torta (playtest de
+    // Jose: sobraba espacio muerto): camina y trepa a las
+    // velocidades CAT_EXIT_*, claramente más rápidas.
+    catHome(dt, apurada) {
       const c = this.cat;
       if (this.catIsHome()) return;
-      if (c.elev > 1) { c.x = FINALE.catHide.x; c.y = FINALE.catHide.y; c.route = null; return; }
-      if (c.arrived) {
-        if (Math.hypot(c.x - FINALE.catFloor.x, c.y - FINALE.catFloor.y) > 6) { c.goTo(FINALE.catFloor.x, FINALE.catFloor.y, 140); return; }
-        this.climbK = Math.min(1, this.climbK + dt / 0.8);
-        const e = this.climbK * this.climbK;
-        c.x = FINALE.catHide.x;
-        c.y = FINALE.catFloor.y + (FINALE.catHide.y - FINALE.catFloor.y) * e;
-        c.elev = FINALE.catHide.elev * e;
-        if (this.climbK >= 1) { this.climbK = 0; c.elev = FINALE.catHide.elev; c.y = FINALE.catHide.y; }
+      // Una trepada EMPEZADA siempre se completa: la
+      // versión anterior la evaluaba tras el atajo de
+      // elevación de aquí abajo, y en cuanto la trepada
+      // hacía pasar elev de 1, el atajo la interrumpía
+      // PARA SIEMPRE (congelada a elev ≈ 2, sin llegar
+      // nunca a su escondite): la salida de Pollito solo
+      // terminaba por la red de seguridad de 14 s. Ese
+      // era el «mucho espacio» del playtest de Jose.
+      if (this.climbK > 0) { this.catClimb(dt, apurada ? CAT_EXIT_CLIMB_T : CAT_CLIMB_T); return; }
+      if (c.elev > 1) {
+        // Ya está arriba (una trepada interrumpida por un
+        // salto de la cinemática): a su sitio Y completo —
+        // el atajo viejo no fijaba la elevación y lo dejaba
+        // a mitad de ninguna parte, igual de atascado.
+        c.x = FINALE.catHide.x; c.y = FINALE.catHide.y; c.elev = FINALE.catHide.elev; c.route = null;
+        return;
       }
+      if (c.arrived) {
+        if (Math.hypot(c.x - FINALE.catFloor.x, c.y - FINALE.catFloor.y) > 6) { c.goTo(FINALE.catFloor.x, FINALE.catFloor.y, apurada ? CAT_EXIT_SPD : CAT_HOME_SPD); return; }
+        this.catClimb(dt, apurada ? CAT_EXIT_CLIMB_T : CAT_CLIMB_T);
+      }
+    }
+    // La trepada al armario, paso a paso (la interpolación
+    // de siempre, con su duración como parámetro).
+    catClimb(dt, climbT) {
+      const c = this.cat;
+      this.climbK = Math.min(1, this.climbK + dt / climbT);
+      const e = this.climbK * this.climbK;
+      c.x = FINALE.catHide.x;
+      c.y = FINALE.catFloor.y + (FINALE.catHide.y - FINALE.catFloor.y) * e;
+      c.elev = FINALE.catHide.elev * e;
+      if (this.climbK >= 1) { this.climbK = 0; c.elev = FINALE.catHide.elev; c.y = FINALE.catHide.y; }
     }
     updateCine(dt) {
       const C = this.cine;
@@ -4210,7 +4307,7 @@
           break;
         }
         case 'proud': {
-          if (C.t > 1.0) {
+          if (C.t > FINALE_PROUD_T) {
             // Cumplido su beat de orgullo, Pollito SE VA: el
             // actor retoma el cuerpo (sin bandeja: vuelve con
             // su caminata definida) rumbo a su escondite.
@@ -4224,10 +4321,13 @@
         }
         case 'exit': {
           // Pollito vuelve al armario: camina al pie del
-          // mueble y trepa (el mismo catHome de 'seats').
-          // Al llegar queda en su escondite, espiando, y la
-          // cinemática sigue con la emoción de la pareja.
-          this.catHome(dt);
+          // mueble y trepa (el mismo catHome de 'seats'),
+          // pero APURADO: ya cumplió y se escabulle (el
+          // trecho post-torta era el «mucho espacio» del
+          // playtest de Jose). Al llegar queda en su
+          // escondite, espiando, y la cinemática sigue con
+          // la emoción de la pareja.
+          this.catHome(dt, true);
           if (this.catIsHome()) this.nextCine('emotion');
           else if (C.t > 14) { // red de seguridad: la cinemática nunca se atasca por él
             cat.x = FINALE.catHide.x; cat.y = FINALE.catHide.y; cat.elev = FINALE.catHide.elev; cat.route = null;
@@ -4238,10 +4338,15 @@
         case 'emotion': {
           // La pareja, ya con la torta en la mesa, se mira
           // un momento más (el compuesto de la mirada).
-          if (C.t > 1.4) this.startClosing();
+          if (C.t > FINALE_EMOTION_T) this.startClosing();
           break;
         }
-        case 'closing': this.updateClosing(dt); break;
+        case 'closing':
+          // Con el menú final abierto (tras la tarjeta de
+          // fin), el cierre ya no avanza: manda el menú.
+          if (this.endMenu) this.updateEndMenu(dt);
+          else this.updateClosing(dt);
+          break;
         case 'rise': {
           if (xi.arrived && jo.arrived) {
             xi.expr = null; jo.expr = null;
@@ -4305,7 +4410,7 @@
       cl.t += dt;
       const act = this.closeAct; this.closeAct = false;
       switch (cl.step) {
-        case 'cartaIn': if (cl.t >= 0.8) { cl.step = 'carta'; cl.t = 0; } break;
+        case 'cartaIn': if (cl.t >= CLOSE_IN_T) { cl.step = 'carta'; cl.t = 0; } break;
         case 'carta':
           // A ritmo del jugador: se queda hasta ESPACIO/clic.
           if (act) this.enterAlbum();
@@ -4333,12 +4438,109 @@
           break;
         case 'fin':
           if (cl.t >= 2.4) {
-            D.completed = true; // la cita queda completada (y rejugable)
-            this.close = null;
-            this.beginRise();
+            // La cita queda completada… y en vez de
+            // devolver el control en silencio, se abre el
+            // MENÚ FINAL (pedido de Jose): la pareja sigue
+            // sentada en el sofá mientras el jugador elige
+            // «Reintentar» o «Salir al título» (o se queda
+            // en el depa, descartándolo con ESC).
+            this.openEndMenu();
           }
           break;
       }
+    }
+    // ---------- el menú final (pedido de Jose) ----------
+    // Al terminar el cierre total, en vez de regresar solo
+    // al sofá con los personajes y el control devuelto en
+    // silencio, aparece el menú sobre la sala: la pareja
+    // SIGUE sentada en el sofá (seatedPose intacta), la
+    // torta en la mesa y Pollito en su escondite. El mundo
+    // no se toca mientras el menú vive.
+    openEndMenu() {
+      D.completed = true; // la cita queda completada (y rejugable)
+      this.close = null;
+      this.closeAct = false;
+      this.endMenu = { sel: 0, t: 0 };
+      if (G.input && G.input.flush) G.input.flush(); // sin pulsos viejos: el menú no hereda la acción que cerró la foto
+    }
+    dismissEndMenu() {
+      // Quedarse: la pareja se levanta y el control vuelve,
+      // el camino de siempre tras el cierre (el prompt del
+      // sofá sigue permitiendo repetir el finale, y si el
+      // cierre se completa otra vez, el menú reaparece).
+      this.endMenu = null;
+      this.beginRise();
+    }
+    updateEndMenu(dt) {
+      const M = this.endMenu;
+      M.t += dt;
+      // ESC (lo fijó el listener del módulo): descartar.
+      if (D.endMenuCancel) { D.endMenuCancel = false; this.dismissEndMenu(); return; }
+      // Flechas / joystick (el empuje deriva la flecha,
+      // como en los demás menús del juego).
+      if (G.input.hit('up')) M.sel = (M.sel + END_MENU_OPTS.length - 1) % END_MENU_OPTS.length;
+      if (G.input.hit('down')) M.sel = (M.sel + 1) % END_MENU_OPTS.length;
+      let confirm = false;
+      if (D.tap) {
+        // Toque/clic: si cae sobre una opción, la elige;
+        // si no, confirma la seleccionada (el toque ES la
+        // acción en este modo, como en el resto de escenas).
+        const p = D.tapPos;
+        if (p) {
+          const i = END_MENU_OPTS.findIndex((o) => Math.abs(p.x - o.cx) <= o.w / 2 && Math.abs(p.y - o.cy) <= o.h / 2);
+          if (i >= 0) M.sel = i;
+        }
+        confirm = true;
+      } else if (this.closeAct) { this.closeAct = false; confirm = true; }
+      if (confirm) this.chooseEndMenu();
+    }
+    chooseEndMenu() {
+      const opt = END_MENU_OPTS[this.endMenu.sel];
+      this.endMenu = null;
+      const cb = D.onDone;
+      if (opt.id === 'retry') {
+        // «Reintentar»: revivir la cita desde el principio
+        // con un start() nuevo y limpio — depa de apertura,
+        // carta sin abrir, fragmentos y banderas
+        // reiniciados y la canción lista para sonar en la
+        // plaza como la primera vez.
+        stop(); start(cb);
+      } else {
+        // «Salir al título»: la vía de salida del propio
+        // modo — el onDone que game.js entregó a start()
+        // (el mismo «título, limpio» del menú de pausa).
+        stop();
+        if (cb) cb();
+      }
+      this.modeGone = true; // esta escena ya no es la activa: update() corta en este frame
+    }
+    drawEndMenu(c) {
+      const M = this.endMenu;
+      const a = Math.min(1, M.t / 0.3); // entrada suave del velo y el panel
+      c.save();
+      c.globalAlpha = a;
+      c.fillStyle = 'rgba(13,9,18,0.55)';
+      c.fillRect(0, 0, 640, 360);
+      // El panel, en el estilo de la UI del juego (fondo
+      // oscuro #1c1826 y borde crema, como G.prompt/G.bubble;
+      // la seleccionada, en el dorado de los avisos).
+      c.fillStyle = '#1c1826';
+      c.beginPath(); c.roundRect(164, 172, 312, 132, 10); c.fill();
+      c.strokeStyle = 'rgba(255,233,196,0.85)'; c.lineWidth = 2;
+      c.beginPath(); c.roundRect(164, 172, 312, 132, 10); c.stroke();
+      END_MENU_OPTS.forEach((o, i) => {
+        const sel = M.sel === i;
+        if (sel) {
+          c.fillStyle = '#ffd23f';
+          c.beginPath(); c.roundRect(o.cx - o.w / 2, o.cy - o.h / 2, o.w, o.h, 7); c.fill();
+        } else {
+          c.strokeStyle = 'rgba(255,233,196,0.35)'; c.lineWidth = 1.5;
+          c.beginPath(); c.roundRect(o.cx - o.w / 2, o.cy - o.h / 2, o.w, o.h, 7); c.stroke();
+        }
+        G.text(c, o.label, o.cx, o.cy + 1, { size: 15, color: sel ? '#1c1826' : '#ffe9c4', stroke: false });
+      });
+      G.text(c, 'ESC: quedarse en el depa', 320, 292, { size: 8.5, color: 'rgba(255,233,196,0.55)', stroke: false });
+      c.restore();
     }
     skipCine() {
       // Salto de la cinemática (acción/ESPACIO, como las
@@ -4479,6 +4681,9 @@
       else if (!cineOn && this.nearDoor) { const p = this.xi.head(46); G.prompt(c, 'ESPACIO: salir a las praderas', p.x, p.y); }
       // el cierre total, a pantalla completa, sobre todo
       if (this.close) this.drawClosing(c);
+      // el menú final, sobre la sala (la pareja sigue
+      // sentada en el sofá detrás del panel)
+      if (this.endMenu) this.drawEndMenu(c);
     }
     // El cierre total a pantalla completa: la carta con su
     // texto COMPLETO renderizado encima (compuesto desde
@@ -4492,7 +4697,7 @@
       const cl = this.close;
       const fade = (t, dur) => Math.max(0, Math.min(1, t / dur));
       if (cl.step === 'cartaIn' || cl.step === 'carta') {
-        const a = cl.step === 'carta' ? 1 : fade(cl.t, 0.8);
+        const a = cl.step === 'carta' ? 1 : fade(cl.t, CLOSE_IN_T);
         if (imgOk(cartaFinalImg)) {
           c.save(); c.globalAlpha = a;
           c.drawImage(cartaFinalImg, 0, 0, 640, 360);
@@ -4663,6 +4868,11 @@
     D.cartaAbierta = false;
     D.cartaFrag = { plaza: false, sanangel: false, aero: false, castillo: false };
     D.completed = false;
+    // La vía de salida al título queda guardada: el menú
+    // final la invoca («Salir al título») y la reutiliza
+    // como callback del reinicio («Reintentar»).
+    D.onDone = onDone || null;
+    D.tap = false; D.tapPos = null; D.endMenuCancel = false;
     cartaBand.text = null; cartaBand.pending = null; cartaBand.t = 0; cartaBand.total = 0;
     if (G.S) G.S.phase = 'date';
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.add('date-mode');
@@ -4673,6 +4883,7 @@
   function stop() {
     D.active = false; D.state = 'idle'; D.clockRunning = false; D.clockStarted = false; fbRunning = false;
     D.cartaAbierta = false; D.completed = false;
+    D.tapPos = null; D.endMenuCancel = false;
     D.cartaFrag = { plaza: false, sanangel: false, aero: false, castillo: false };
     cartaBand.text = null; cartaBand.pending = null; cartaBand.t = 0; cartaBand.total = 0;
     skipArmed = false; // sin arranque en curso: el metadata tardío ya no debe saltar nada
@@ -4740,6 +4951,22 @@
       // naturalWidth, para ejercitar la pila con imágenes
       // y su degradación sin ellas) y los tiempos de la
       // animación.
-      CLOSE_PHOTOS, cartaFinalImg, ALBUM: { ENTER_T: ALBUM_ENTER_T, HOLD_MIN: ALBUM_HOLD_MIN, HOLD_AUTO: ALBUM_HOLD_AUTO, SOFA_BEAT: ALBUM_SOFA_BEAT, EXPAND_T: ALBUM_EXPAND_T } },
+      CLOSE_PHOTOS, cartaFinalImg, ALBUM: { ENTER_T: ALBUM_ENTER_T, HOLD_MIN: ALBUM_HOLD_MIN, HOLD_AUTO: ALBUM_HOLD_AUTO, SOFA_BEAT: ALBUM_SOFA_BEAT, EXPAND_T: ALBUM_EXPAND_T },
+      // Ganchos del ritmo post-torta y del menú final
+      // (sección X): las constantes del trecho, la geometría
+      // de las opciones (para el toque simulado) y la
+      // medición analítica del trecho — proud + la salida
+      // de Pollito por su ruta REAL de vuelta (World.path
+      // de catProud al pie del armario, a la velocidad
+      // apurada, más su trepada) + emotion + el fundido.
+      FINALE_TIMING: { PROUD_T: FINALE_PROUD_T, EMOTION_T: FINALE_EMOTION_T, CLOSE_IN_T, HOME_SPD: CAT_HOME_SPD, CLIMB_T: CAT_CLIMB_T, EXIT_SPD: CAT_EXIT_SPD, EXIT_CLIMB_T: CAT_EXIT_CLIMB_T },
+      END_MENU_OPTS,
+      postTortaSpan() {
+        const rp = W.path(FINALE.catProud.x, FINALE.catProud.y, FINALE.catFloor.x, FINALE.catFloor.y);
+        let len = 0, px = FINALE.catProud.x, py = FINALE.catProud.y;
+        for (const q of rp) { len += Math.hypot(q[0] - px, q[1] - py); px = q[0]; py = q[1]; }
+        const exitWalk = len / CAT_EXIT_SPD;
+        return { proud: FINALE_PROUD_T, exitPath: len, exitWalk, exit: exitWalk + CAT_EXIT_CLIMB_T, emotion: FINALE_EMOTION_T, cartaIn: CLOSE_IN_T, total: FINALE_PROUD_T + exitWalk + CAT_EXIT_CLIMB_T + FINALE_EMOTION_T + CLOSE_IN_T };
+      } },
   };
 })();

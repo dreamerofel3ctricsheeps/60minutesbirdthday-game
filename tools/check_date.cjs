@@ -180,6 +180,17 @@
      lateral, con fundido de entrada/salida y deriva al
      disolverse — mientras la instrucción de objetivo
      CONSERVA su recuadro de papel.
+   X) El ritmo post-torta y el MENÚ FINAL (playtest de
+     Jose, 2026-11-22): medido el tramo del fin de 'place'
+     al álbum (antes 17,2 s, con la salida de Pollito
+     CONGELADA en su trepada hasta la red de seguridad de
+     14 s), el tramo queda por debajo de un umbral nuevo
+     (salida apurada, trepada que siempre se completa y
+     beats recortados); y al terminar el cierre total
+     aparece el menú «Reintentar» / «Salir al título»
+     sobre la sala — navegable con flechas y toque,
+     descartable con ESC — en vez de devolver el control
+     en silencio.
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -280,6 +291,11 @@ function check(name, cond, extra) {
   else { failures++; console.log('  ✘ ' + name + (extra ? '  [' + extra + ']' : '')); }
 }
 const key = (code, down) => (handlers[down ? 'keydown' : 'keyup'] || []).forEach((h) => h({ code, target: { tagName: 'BODY' }, preventDefault() {} }));
+// Descarta el menú final de una escena (ESC, como el
+// jugador): los bombeos que llevan la cinemática hasta
+// 'done' lo usan, porque tras el FIN el control ya no
+// vuelve solo — vuelve al descartar el menú (sección X).
+const dismissEndMenu = (f) => { if (f && f.endMenu) { key('Escape', true); f.update(0.016); key('Escape', false); f.update(0.016); } };
 const tick = () => new Promise((r) => setImmediate(r));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1338,6 +1354,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const seen = [];
   let readingSeen = false;
   for (let i = 0; i < 700 && fin.cine.st !== 'done'; i++) {
+    dismissEndMenu(fin); // tras el FIN hay menú (sección X): se descarta para que la pareja se levante
     fin.update(0.05);
     if (!seen.length || seen[seen.length - 1] !== fin.cine.st) seen.push(fin.cine.st);
     if (fin.cine.st === 'reading' && fin.seatedPose === true && fxi.hidden === true && fjo.hidden === true) readingSeen = true;
@@ -2108,6 +2125,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // y deja correr lo automático (beats, expansión, fin).
   const pumpClosingT = (f, cap) => {
     for (let i = 0; i < cap && f.cine.st !== 'done'; i++) {
+      if (f.endMenu) { dismissEndMenu(f); continue; } // el menú final (sección X) se descarta: el bombeo busca el 'done'
       const cl = f.close;
       if (cl && cl.step === 'carta') pressActT(f);
       else if (cl && cl.step === 'album' && cl.pileIdx < cl.pile.length - 1 && cl.t >= ALB.ENTER_T + ALB.HOLD_MIN) pressActT(f);
@@ -2182,7 +2200,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   pressActT(fT); noteStepT();
   check('cumplida la permanencia, ESPACIO pasa a la tarjeta de FIN',
     !!fT.close && fT.close.step === 'fin', 'step=' + (fT.close && fT.close.step));
-  for (let i = 0; i < 900 && fT.cine.st !== 'done'; i++) fT.update(0.05);
+  for (let i = 0; i < 900 && fT.cine.st !== 'done'; i++) { dismissEndMenu(fT); fT.update(0.05); }
   check('el ORDEN del cierre fue carta → álbum → expansión → foto → FIN, y la cita quedó COMPLETADA',
     stepSeqT.join(',') === 'cartaIn,carta,album,expand,foto,fin' && DM.state.completed === true && fT.close === null,
     'orden: ' + stepSeqT.join(' → '));
@@ -2446,6 +2464,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   key('Space', true); fW.update(0.016); key('Space', false);
   const seenW = [];
   for (let i = 0; i < 900 && fW.cine.st !== 'done'; i++) {
+    dismissEndMenu(fW); // tras el FIN hay menú (sección X): se descarta para llegar a 'done'
     fW.update(0.05);
     if (!seenW.length || seenW[seenW.length - 1] !== fW.cine.st) seenW.push(fW.cine.st);
   }
@@ -2563,6 +2582,148 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);
+
+  console.log('\nX) El ritmo post-torta y el MENÚ FINAL (playtest de Jose, 2026-11-22)');
+  // Regresión del playtest: «cuando se sientan a leer la
+  // carta y aparece Pollito con la torta, hay mucho
+  // espacio hasta que carga la escena de las fotos».
+  // Medido con el código anterior (este mismo arnés,
+  // dt 0,05, la carta avanzada al instante), el tramo del
+  // fin de 'place' al inicio del álbum sumaba 17,2 s:
+  // proud 1,0 + salida 14,0 + emotion 1,4 + fundido 0,8.
+  // El grueso NO era un tiempo de diseño: la salida de
+  // Pollito se CONGELABA — catHome interrumpía su propia
+  // trepada en cuanto elev pasaba de 1 (el atajo de
+  // elevación se comía el estado de trepada) y solo la
+  // red de seguridad de 14 s lo sacaba de ahí. El arreglo:
+  // la trepada siempre se completa, la vuelta tras la
+  // torta va APURADA (260 u/s y trepada de 0,45 s) y los
+  // beats fijos se recortan (proud 0,6; emotion 0,8;
+  // fundido del cierre 0,45). La llegada CON la torta y
+  // la lectura en pareja NO se tocaron.
+  const POST_TORTA_ANTES_X = 17.2; // la medición anterior, documentada arriba
+  const TIMX = DM.debug.FINALE_TIMING;
+  check('los tiempos del tramo quedan como constantes recortadas (proud 0,6 < 1,0; emotion 0,8 < 1,4; fundido del cierre 0,45 < 0,8) y la vuelta de Pollito es la APURADA (más rápida que su vuelta normal; su trepada, más breve)',
+    TIMX.PROUD_T === 0.6 && TIMX.EMOTION_T === 0.8 && TIMX.CLOSE_IN_T === 0.45 &&
+    TIMX.EXIT_SPD > TIMX.HOME_SPD && TIMX.EXIT_CLIMB_T < TIMX.CLIMB_T,
+    JSON.stringify(TIMX));
+  const spanX = DM.debug.postTortaSpan();
+  check('la medición ANALÍTICA del tramo (proud + la salida por la ruta real de vuelta + emotion + fundido) queda bajo 4 s y bajo la MITAD del valor anterior (17,2 s)',
+    spanX.total < 4 && spanX.total < POST_TORTA_ANTES_X / 2,
+    `total=${spanX.total.toFixed(2)} s (proud ${spanX.proud} + salida ${spanX.exit.toFixed(2)} [ruta ${spanX.exitPath.toFixed(0)} u a ${TIMX.EXIT_SPD} u/s + trepada ${TIMX.EXIT_CLIMB_T}] + emotion ${spanX.emotion} + fundido ${spanX.cartaIn})`);
+  // --- la medición EMPÍRICA, sobre la máquina real ---
+  const setLoadedX = (img, ok) => { img.naturalWidth = ok ? 720 : 0; img.naturalHeight = ok ? 405 : 0; };
+  const pressActX = (sc) => { key('Space', true); sc.update(0.016); key('Space', false); sc.update(0.016); sc.update(0.016); };
+  const driveToMenuX = (onDone) => {
+    DM.start(onDone);
+    DM.debug.travelTo('cita');
+    const f = DM.state.finaleScene, FX = DM.debug.FINALE;
+    for (let i = 0; i < 25 && f.phase !== 'home'; i++) f.update(0.05);
+    f.xi.x = FX.sofa.cx; f.xi.y = 250; f.xi.vx = f.xi.vy = 0;
+    for (let i = 0; i < 40; i++) f.update(0.05);
+    pressActX(f); // arranca la cinemática
+    return f;
+  };
+  const pumpToMenuX = (f, cap) => {
+    for (let i = 0; i < cap && !f.endMenu; i++) {
+      const cl = f.close;
+      if (cl && cl.step === 'carta') pressActX(f);
+      else if (cl && cl.step === 'album' && cl.pileIdx < cl.pile.length - 1 && cl.t >= DM.debug.ALBUM.ENTER_T + DM.debug.ALBUM.HOLD_MIN) pressActX(f);
+      else if (cl && cl.step === 'foto' && cl.t >= 2.5) pressActX(f);
+      else f.update(0.05);
+    }
+  };
+  const confirmMenuX = (f) => { key('Space', true); f.update(0.016); key('Space', false); f.update(0.016); if (f.endMenu) f.update(0.016); };
+  setLoadedX(DM.debug.cartaFinalImg, true);
+  DM.debug.CLOSE_PHOTOS.forEach((p) => setLoadedX(p.img, true));
+  const fX = driveToMenuX(() => {});
+  const segX = {};
+  let tX = 0, prevStX = fX.cine.st;
+  for (let i = 0; i < 1200 && segX.album === undefined; i++) {
+    fX.update(0.05); tX += 0.05;
+    if (fX.cine.st !== prevStX) { segX[fX.cine.st] = tX; prevStX = fX.cine.st; }
+    if (fX.close && fX.close.step === 'carta') pressActX(fX); // la carta, avanzada al instante (como en la medición anterior)
+    if (fX.close && fX.close.step === 'album') segX.album = tX;
+  }
+  const tramoX = segX.album !== undefined && segX.proud !== undefined ? segX.album - segX.proud : NaN;
+  check('MEDIDO en la máquina: del fin de «place» al inicio del ÁLBUM el tramo queda en ≤4,5 s (antes: 17,2 s; el umbral nuevo es ~¼ del anterior)',
+    tramoX <= 4.5 && tramoX < POST_TORTA_ANTES_X / 2,
+    `tramo=${isNaN(tramoX) ? '—' : tramoX.toFixed(2)} s (proud ${segX.proud}, emotion ${segX.emotion}, álbum ${segX.album})`);
+  check('y la SALIDA de Pollito ya no se atasca: de «proud» a «emotion» (su beat + la vuelta completa, con trepada) pasan <3 s — sin red de seguridad de por medio (antes: 15,0 s)',
+    segX.emotion !== undefined && segX.proud !== undefined && segX.emotion - segX.proud < 3,
+    `proud+salida=${segX.emotion !== undefined && segX.proud !== undefined ? (segX.emotion - segX.proud).toFixed(2) : '—'} s`);
+  // --- el menú final, en la misma corrida ---
+  pumpToMenuX(fX, 1500);
+  check('al terminar el cierre total aparece el MENÚ FINAL: la cita completada, el cierre consumido y la pareja TODAVÍA SENTADA en el sofá detrás del menú (no se levantó sola)',
+    !!fX.endMenu && DM.state.completed === true && fX.close === null && fX.seatedPose === true && fX.cine.st === 'closing',
+    'endMenu=' + !!fX.endMenu + ' seated=' + fX.seatedPose + ' cine=' + fX.cine.st);
+  check('el mundo queda en su estado final consistente bajo el menú (la torta en la mesa y Pollito en su escondite del armario)',
+    fX.tortaOnTable === true && fX.catVis === 'actor' && fX.cat.elev > 90 &&
+    Math.abs(fX.cat.x - DM.debug.FINALE.catHide.x) < 4 && Math.abs(fX.cat.y - DM.debug.FINALE.catHide.y) < 4,
+    `cat(${fX.cat.x},${fX.cat.y}) elev=${fX.cat.elev}`);
+  // El dibujo del menú, con un ctx registrador (el
+  // FakeCtx del humo no registra llamadas).
+  const recMX = { fillText: [], roundRect: 0 };
+  const ctxMX = {
+    font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, globalAlpha: 1, textAlign: '', textBaseline: '',
+    measureText(s) { return { width: String(s).length * 6 }; },
+    save() {}, restore() {}, beginPath() {}, closePath() {}, fill() {}, stroke() {},
+    fillRect() {}, roundRect() { recMX.roundRect++; },
+    fillText(t) { recMX.fillText.push(String(t)); }, strokeText(t) { recMX.fillText.push(String(t)); },
+    setTransform() {}, drawImage() {},
+  };
+  const homeDrawX = fX.home.draw; fX.home.draw = () => {};
+  const ovX = G.ovCtx; G.ovCtx = ctxMX;
+  fX.nearSofa = false; fX.nearDoor = false;
+  let menuDrawOkX = true;
+  try { fX.draw(0.016); } catch (e) { menuDrawOkX = false; }
+  G.ovCtx = ovX; fX.home.draw = homeDrawX;
+  check('el menú se DIBUJA con las palabras de Jose — «Reintentar» y «Salir al título» — y su panel (sin emojis: texto y rectángulos de la UI)',
+    menuDrawOkX && recMX.fillText.includes('Reintentar') && recMX.fillText.includes('Salir al título') && recMX.roundRect >= 3,
+    recMX.fillText.join(' | '));
+  // DESCARTAR con ESC: quedarse en el depa final.
+  key('Escape', true); fX.update(0.016); key('Escape', false);
+  for (let i = 0; i < 200 && fX.cine.st !== 'done'; i++) fX.update(0.05);
+  check('ESC DESCARTA el menú: la pareja se levanta, el control vuelve (cinemática «done») y la cita SIGUE marcada completada',
+    fX.endMenu === null && fX.cine.st === 'done' && DM.state.completed === true && fX.seatedPose === false,
+    'cine=' + fX.cine.st + ' completed=' + DM.state.completed);
+  DM.stop();
+  // --- «Reintentar»: la cita revive desde el principio ---
+  let titleCallsX = 0;
+  const fRX = driveToMenuX(() => { titleCallsX++; });
+  pumpToMenuX(fRX, 1500);
+  check('el menú REAPARECE si el cierre se completa otra vez (segunda corrida completa)', !!fRX.endMenu);
+  confirmMenuX(fRX); // la selección por defecto es «Reintentar»
+  check('«Reintentar» revive la cita como un start() nuevo: modo activo en el depa de APERTURA, carta SIN abrir, ningún fragmento disparado, cita sin completar y sin finale en pie (la canción podrá sonar en la plaza como la primera vez)',
+    DM.state.active === true && DM.state.state === 'depa' && DM.state.cartaAbierta === false &&
+    DM.state.completed === false && Object.values(DM.state.cartaFrag).every((v) => v === false) &&
+    DM.state.finaleScene === null && DM.state.scene === DM.state.plazaScene && titleCallsX === 0,
+    'state=' + DM.state.state + ' cartaAbierta=' + DM.state.cartaAbierta + ' completed=' + DM.state.completed);
+  DM.stop();
+  // --- «Salir al título»: la vía de salida del modo ---
+  titleCallsX = 0;
+  const fTX = driveToMenuX(() => { titleCallsX++; });
+  pumpToMenuX(fTX, 1500);
+  key('ArrowDown', true); fTX.update(0.016); key('ArrowDown', false);
+  check('el menú se navega con FLECHAS (y el joystick, que deriva las flechas): ↓ mueve la selección a «Salir al título»',
+    !!fTX.endMenu && fTX.endMenu.sel === 1, 'sel=' + (fTX.endMenu && fTX.endMenu.sel));
+  confirmMenuX(fTX);
+  check('«Salir al título» invoca la vía de salida del modo (el onDone que game.js pasa a start(): el «título, limpio») y el modo queda detenido',
+    titleCallsX === 1 && DM.state.active === false, 'onDone=' + titleCallsX + ' active=' + DM.state.active);
+  // --- el toque sobre una opción la elige directamente ---
+  titleCallsX = 0;
+  const fTapX = driveToMenuX(() => { titleCallsX++; });
+  pumpToMenuX(fTapX, 1500);
+  const optTitleX = DM.debug.END_MENU_OPTS[1];
+  DM.state.tapPos = { x: optTitleX.cx, y: optTitleX.cy };
+  DM.state.tap = true;
+  fTapX.update(0.016);
+  check('el TOQUE/Clic sobre una opción la elige sin pasos previos: tocar «Salir al título» sale al título por la misma vía',
+    titleCallsX === 1 && DM.state.active === false, 'onDone=' + titleCallsX + ' active=' + DM.state.active);
+  DM.stop();
+  // El humo deja las imágenes como estaban: ninguna «carga».
+  setLoadedX(DM.debug.cartaFinalImg, false);
+  DM.debug.CLOSE_PHOTOS.forEach((p) => setLoadedX(p.img, false));
 
   console.log(`\n${failures ? '✘' : '✔'} check_date: ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
