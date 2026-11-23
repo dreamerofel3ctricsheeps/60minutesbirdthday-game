@@ -155,8 +155,8 @@
      movimiento ni detiene el reloj de la canción, y la
      regla de cola de la banda (las frases esperan sin
      solaparse) se respeta. Con el modelo de listas de la
-     sección AA, aquí los momentos llevan el borrador
-     único de siempre (la frase 1 de cada arreglo).
+     sección AA, aquí se ejercita la frase 1 de cada
+     arreglo del texto final de Jose.
    T) El álbum del cierre total (idea de Jose): tras la
      carta, las fotos del recorrido se colocan una encima
      de otra como una pila de fotos impresas (plaza → San
@@ -196,8 +196,8 @@
      en silencio.
    AA) La carta por LISTAS de frases (pedido de Jose,
      2026-11-22: «varias frases por escena y no solo
-     una»): CARTA_TEXTOS son arreglos por momento (los
-     borradores, la frase 1 de cada uno); la apertura se
+     una»): CARTA_TEXTOS son arreglos por momento (el
+     texto final de Jose, varias frases por momento); la apertura se
      lee frase a frase a ritmo del jugador y la salida
      solo despierta tras la última; las del paseo salen
      en orden en puntos repartidos parejos por el
@@ -478,7 +478,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('mientras lee, el reloj sigue en silencio (aún no hay canción)',
     DM.state.clockRunning === false && DM.dateNow() === 0);
   key('Space', true); sc.update(0.016); key('Space', false);
-  check('ESPACIO cierra la lectura: cartaAbierta queda en true y vuelve el control en el depa',
+  check('el primer avance pasa a la SIGUIENTE frase de la apertura y la carta sigue cerrada (el texto final trae varias)',
+    sc.phase === 'carta' && sc.cartaSeq && sc.cartaSeq.step === 'lee' && sc.cartaSeq.idx === 1 && DM.state.cartaAbierta === false,
+    'idx=' + (sc.cartaSeq && sc.cartaSeq.idx));
+  for (let i = 0; i < 12 && !DM.state.cartaAbierta; i++) { key('Space', true); sc.update(0.016); key('Space', false); }
+  check('al avanzar por TODAS las frases, la lectura cierra: cartaAbierta queda en true y vuelve el control en el depa',
     DM.state.cartaAbierta === true && sc.phase === 'depa' && sc.cartaSeq === null,
     'phase=' + sc.phase);
   // Ya con la carta, la salida despierta.
@@ -1116,6 +1120,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   key('Space', true); sc2.update(0.016); key('Space', false);
   for (let i = 0; i < 20; i++) sc2.update(0.05);
   key('Space', true); sc2.update(0.016); key('Space', false);
+  for (let i = 0; i < 12 && !DM.state.cartaAbierta; i++) { key('Space', true); sc2.update(0.016); key('Space', false); } // las demás frases de la apertura (texto final)
   xi2.x = 510; xi2.y = 560; xi2.vx = xi2.vy = 0;
   sc2.update(0.016);
   key('Space', true); sc2.update(0.016); key('Space', false);
@@ -1831,6 +1836,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   key('Space', true); scQ.update(0.016); key('Space', false);
   for (let i = 0; i < 20; i++) scQ.update(0.05);
   key('Space', true); scQ.update(0.016); key('Space', false);
+  for (let i = 0; i < 12 && !DM.state.cartaAbierta; i++) { key('Space', true); scQ.update(0.016); key('Space', false); } // las demás frases de la apertura (texto final)
   // Cruce depa → plaza: al ABRIR no suena nada; el cierre
   // suena UNA vez, al llegar (la puerta se cierra tras ella).
   xiQ.x = 510; xiQ.y = 560; xiQ.vx = xiQ.vy = 0;
@@ -1912,6 +1918,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   key('Space', true); scR.update(0.016); key('Space', false);
   for (let i = 0; i < 20; i++) scR.update(0.05);
   key('Space', true); scR.update(0.016); key('Space', false);
+  for (let i = 0; i < 12 && !DM.state.cartaAbierta; i++) { key('Space', true); scR.update(0.016); key('Space', false); } // las demás frases de la apertura (texto final)
   xiR.x = 510; xiR.y = 560; xiR.vx = xiR.vy = 0;
   scR.update(0.016);
   key('Space', true); scR.update(0.016); key('Space', false);
@@ -2022,6 +2029,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   key('Space', true); scS.update(0.016); key('Space', false);
   for (let i = 0; i < 20; i++) scS.update(0.05);
   key('Space', true); scS.update(0.016); key('Space', false);
+  for (let i = 0; i < 12 && !DM.state.cartaAbierta; i++) { key('Space', true); scS.update(0.016); key('Space', false); } // las demás frases de la apertura (texto final)
   check('la partida de S arranca con la carta abierta (cartaAbierta) y el control de vuelta en el depa',
     DM.state.cartaAbierta === true && scS.phase === 'depa', 'phase=' + scS.phase);
   xiS.x = 510; xiS.y = 560; xiS.vx = xiS.vy = 0;
@@ -2335,6 +2343,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   key('Space', true); scU.update(0.016); key('Space', false);
   for (let i = 0; i < 20; i++) scU.update(0.05); // la toma (~0,8 s) → paso «lee»
   key('Space', true); scU.update(0.016); key('Space', false);
+  for (let i = 0; i < 12 && !DM.state.cartaAbierta; i++) { key('Space', true); scU.update(0.016); key('Space', false); } // las demás frases de la apertura (texto final)
   check('abierta la carta por la vía real, la instrucción de objetivo se RETIRA',
     DM.state.cartaAbierta === true && scU.phase === 'depa' && DBG.objetivoCartaActivo(scU) === false,
     'cartaAbierta=' + DM.state.cartaAbierta + ' phase=' + scU.phase);
@@ -2978,9 +2987,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('\nAA) La carta por LISTAS de frases (pedido de Jose, 2026-11-22: «varias frases por escena y no solo una»)');
   // El modelo que se le prometió a Jose en el template de
   // la carta final: CARTA_TEXTOS pasa a ARREGLOS por
-  // momento (los borradores vigentes son la frase 1 de
-  // cada uno, así que el juego se comporta igual hasta
-  // que Jose entregue su texto). La apertura se lee frase
+  // momento (desde el 2026-11-22 llevan el TEXTO FINAL
+  // de Jose, varias frases por momento). La apertura se lee frase
   // a frase, a ritmo del jugador, y la salida solo
   // despierta tras la ÚLTIMA; las del paseo se reparten en
   // puntos parejos del recorrido de cada escena, esperan
@@ -3000,16 +3008,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // --- la estructura y la normalización (funciones puras) ---
   check('cada momento de CARTA_TEXTOS es un ARREGLO de frases y la firma sigue siendo una sola cadena',
     DM.debug.CARTA_MOMENTOS.every((id) => Array.isArray(CTA[id])) && typeof CTA.firma === 'string');
-  check('los borradores vigentes son la FRASE 1 de cada momento (una por momento: el juego se comporta como antes)',
-    DM.debug.CARTA_MOMENTOS.every((id) => frasesA(CTA[id]).length === 1) &&
-    CTA.plaza[0].startsWith('Primer lugar') && CTA.cierre[0].startsWith('¿Ves?'));
+  check('el TEXTO FINAL de Jose está cableado: varias frases por momento (apertura 4, plaza 3, San Ángel 3, aero 2, castillo 3, cierre 3) y la firma intacta',
+    frasesA(CTA.apertura).length === 4 && frasesA(CTA.plaza).length === 3 && frasesA(CTA.sanangel).length === 3 &&
+    frasesA(CTA.aero).length === 2 && frasesA(CTA.castillo).length === 3 && frasesA(CTA.cierre).length === 3 &&
+    CTA.plaza[0].startsWith('La monotonía') && CTA.cierre[0].startsWith('Y cuando terminemos') &&
+    CTA.castillo[0].endsWith('ambulante') && CTA.castillo[1].startsWith('te tomaré') && CTA.firma === 'Feliz cumpleaños, mi amor.');
   check('la normalización descarta vacíos y no-textos, acepta una cadena suelta sin corchetes, y un arreglo vacío da cero frases (sin romper)',
     frasesA(['una', '', '  ', 'dos']).join('|') === 'una|dos' && frasesA('suelta').join() === 'suelta' &&
     frasesA([]).length === 0 && frasesA(null).length === 0 && frasesA(undefined).length === 0);
+  const ptsUnoA = (() => { const sv = {}; for (const id of DM.debug.CARTA_MOMENTOS) { sv[id] = CTA[id]; CTA[id] = ['Frase única de prueba.']; }
+    const r = { plaza: puntosA('plaza'), sanangel: puntosA('sanangel'), aero: puntosA('aero'), castillo: puntosA('castillo') };
+    for (const id of DM.debug.CARTA_MOMENTOS) CTA[id] = sv[id]; return r; })();
   check('con UNA frase por escena, el único punto de disparo es el de siempre (plaza 430, San Ángel SA_VELAS_X0, aero 1750, praderas pan 2500)',
-    puntosA('plaza').join() === '430' && puntosA('sanangel').join() === String(DM.debug.SA_VELAS_X0) &&
-    puntosA('aero').join() === '1750' && puntosA('castillo').join() === '2500',
-    'plaza=' + puntosA('plaza') + ' sa=' + puntosA('sanangel') + ' aero=' + puntosA('aero') + ' cast=' + puntosA('castillo'));
+    ptsUnoA.plaza.join() === '430' && ptsUnoA.sanangel.join() === String(DM.debug.SA_VELAS_X0) &&
+    ptsUnoA.aero.join() === '1750' && ptsUnoA.castillo.join() === '2500',
+    'plaza=' + ptsUnoA.plaza + ' sa=' + ptsUnoA.sanangel + ' aero=' + ptsUnoA.aero + ' cast=' + ptsUnoA.castillo);
   // --- el reparto de puntos con varias frases ---
   CTA.plaza = ['Plaza frase uno.', 'Plaza frase dos.', 'Plaza frase tres.'];
   CTA.sanangel = ['Ángel frase uno.', 'Ángel frase dos.', 'Ángel frase tres.'];
@@ -3036,6 +3049,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   key('Space', true); scA.update(0.016); key('Space', false);
   for (let i = 0; i < 20; i++) scA.update(0.05);
   key('Space', true); scA.update(0.016); key('Space', false);
+  for (let i = 0; i < 12 && !DM.state.cartaAbierta; i++) { key('Space', true); scA.update(0.016); key('Space', false); } // las demás frases de la apertura (texto final)
   xiA.x = 510; xiA.y = 560; xiA.vx = xiA.vy = 0;
   scA.update(0.016);
   key('Space', true); scA.update(0.016); key('Space', false);
@@ -3203,12 +3217,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (const id of DM.debug.CARTA_MOMENTOS) CTA[id] = origTextosA[id];
   const fitDraftA = DM.debug.cartaFullFit(fitCtxA);
   const draftCharsA = DM.debug.CARTA_MOMENTOS.reduce((a, id) => a + frasesA(CTA[id]).join(' ').length, 0);
-  check('con los borradores (una frase por momento), la carta fullscreen cabe a tamaño COMPLETO (10,5) en la zona limpia',
-    fitDraftA.fits === true && fitDraftA.size === 10.5 && fitDraftA.firmaY <= DM.debug.CARTA_FULL.yMax,
-    `size=${fitDraftA.size} firmaY=${fitDraftA.firmaY.toFixed(0)}`);
+  check('con el TEXTO FINAL de Jose (varias frases por momento), la carta fullscreen CABE en la zona limpia (auto-ajuste por escalones hasta 7,5, fits en verdadero)',
+    fitDraftA.fits === true && fitDraftA.size === 7.5 && fitDraftA.firmaY <= DM.debug.CARTA_FULL.yMax,
+    `chars=${draftCharsA} size=${fitDraftA.size} firmaY=${fitDraftA.firmaY.toFixed(0)}`);
   check('la composición incluye las frases de los SEIS momentos, en el orden de la carta',
     (() => { const j = fitDraftA.items.map((it) => it.t || '').join(' ');
-      const ord = ['Esta carta', 'Primer lugar', 'Aquí la gente', 'Porque un día', 'Y si la vida', '¿Ves?'];
+      const ord = ['Esta carta', 'La monotonía', 'En San Ángel', 'Porque un día', 'Y si la vida', 'Y cuando terminemos'];
       return ord.every((s, i) => j.includes(s) && (i === 0 || j.indexOf(s) > j.indexOf(ord[i - 1]))); })());
   const fraseLargaA = 'El camino nos trajo hasta aquí, juntos y caminando. ';
   for (const id of DM.debug.CARTA_MOMENTOS) CTA[id] = [fraseLargaA.repeat(3), fraseLargaA.repeat(3)];
@@ -3232,7 +3246,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       return toks.every((s, i) => j.includes(s) && (i === 0 || j.indexOf(s) > j.indexOf(toks[i - 1]))); })());
   for (const id of DM.debug.CARTA_MOMENTOS) CTA[id] = origTextosA[id];
   CTA.firma = origFirmaA;
-  check('los textos de la carta quedan RESTAURADOS a los borradores al terminar la sección',
+  check('los textos de la carta quedan RESTAURADOS al texto final de Jose al terminar la sección',
     DM.debug.CARTA_MOMENTOS.every((id) => CTA[id] === origTextosA[id]) && CTA.firma === origFirmaA);
 
   console.log(`\n${failures ? '✘' : '✔'} check_date: ${checks - failures}/${checks} checks`);

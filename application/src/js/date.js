@@ -272,14 +272,14 @@
   }
 
   // ---------- Los textos de la carta (guion v2, «la carta») ----------
-  // BORRADOR (2026-11-22): los fragmentos de la carta que la cita
-  // muestra por entregas. La apertura se lee a ritmo del jugador
-  // en el depa, en silencio; plaza, sanangel, aero y castillo
-  // caen en banda inferior mientras la pareja camina, sin pausar
-  // la caminata ni la canción; el cierre se lee juntos en la
-  // sala, con su firma. Son textos BASE (los del guion v2)
-  // puestos a pedido de Jose: su versión definitiva la escribe
-  // él y se cambia SOLO aquí.
+  // TEXTO FINAL de Jose (2026-11-22), corregido solo en
+  // ortografía y coherencia: los fragmentos de la carta que
+  // la cita muestra por entregas. La apertura se lee a ritmo
+  // del jugador en el depa, en silencio; plaza, sanangel,
+  // aero y castillo caen en banda inferior mientras la pareja
+  // camina, sin pausar la caminata ni la canción; el cierre
+  // se lee juntos en la sala, con su firma. Se cambia SOLO
+  // aquí.
   // MODELO DE LISTAS (pedido de Jose, 2026-11-22: «voy a querer
   // agregar VARIAS frases por escena y no solo una»): cada
   // momento es un ARREGLO de frases, de cualquier largo ≥ 1, y
@@ -290,16 +290,40 @@
   // cierre total las compone TODAS, en orden, con la firma al
   // pie. Un arreglo vacío no rompe nada: ese momento no muestra
   // frases. (cartaFrases acepta también una cadena suelta, por
-  // si se escribe una sola sin corchetes.) Los borradores
-  // vigentes quedan como la frase 1 de cada momento: hasta que
-  // Jose entregue su texto final, el juego se comporta igual.
+  // si se escribe una sola sin corchetes.) Ojo: la frase 1 de
+  // castillo NO lleva punto final a propósito — continúa en
+  // la 2, que empieza en minúscula. Se respeta tal cual.
   const CARTA_TEXTOS = {
-    apertura: ['Esta carta no se lee en un sillón: se lee caminando. Sal — yo voy contigo.'],
-    plaza: ['Primer lugar: por donde todo el mundo pasa y nadie se detiene. Nosotros sí.'],
-    sanangel: ['Aquí la gente se declara desde hace cien años. Yo solo te miro, y ya está declarado.'],
-    aero: ['Porque un día volaremos a algún lado. Y el destino va a ser lo de menos.'],
-    castillo: ['Y si la vida nos pone un castillo en el cielo, lo cruzamos igual: caminando, y juntos.'],
-    cierre: ['¿Ves? La carta terminaba donde empezó: en casa, contigo.'],
+    apertura: [
+      'Esta carta la escribo para poder demostrar la belleza de estar enamorado de ti.',
+      'Con esto, pasar tiempo juntos al menos de esta manera.',
+      'Y de esta manera tomarte de las manos y sentirte cerca.',
+      'Cerca, al menos en píxeles, y cerca como en un lugar futuro estaremos.',
+    ],
+    plaza: [
+      'La monotonía de la ciudad, el tráfico y todo desaparece siempre que te siento a mi lado.',
+      'La ansiedad de pensar en qué mis futuros días serán se enmudece cuando escucho tu voz.',
+      'La oscuridad de aquellos días donde el sueño y mi cama eran mi todo evolucionó a esperar la noche y poder dormir soñándote.',
+    ],
+    sanangel: [
+      'En San Ángel, desde hace cientos de años, se mostraba y declaraba su amor; nosotros, en alguna vida pasada, seguro que también.',
+      'En tus ojitos lindos veo, pienso y repito que nuestro amor ya está declarado.',
+      'Y en tus brazos siento, respiro y acaricio esa declaración.',
+    ],
+    aero: [
+      'Porque un día no solo yo volaré para que seas tú mi destino.',
+      'Y luego de eso cualquier otro destino será lo de menos, porque te tengo a ti.',
+    ],
+    castillo: [
+      'Y si la vida, destino o el universo conspira contra nosotros y nos obliga a cruzar un castillo ambulante',
+      'te tomaré de la mano, acariciaré tu meñique con el mío, sentiré tu piel entrelazándose con la mía y cruzaremos todo.',
+      'Todo lo que me quiera alejar de ti, Tamalito.',
+    ],
+    cierre: [
+      'Y cuando terminemos de soñar, vivir, reír y disfrutar, anhelo poder volver contigo a nuestro futuro, pero no lejano, lugar donde pueda abrazarte.',
+      'Y con esta caminata, con esta carta y con esta canción quiero decirte que te amo, y desde el fondo de mi corazón.',
+      'Feliz cumpleaños.',
+    ],
     firma: 'Feliz cumpleaños, mi amor.',
   };
   // La lista de frases de un momento, normalizada: acepta el
