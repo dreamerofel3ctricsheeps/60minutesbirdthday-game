@@ -229,7 +229,10 @@
       if (song.addEventListener) {
         song.addEventListener('loadedmetadata', onSongMetadata);
         song.addEventListener('canplay', reapplySkip);
-        song.addEventListener('error', () => { songOk = false; }, true);
+        // Solo un fallo del PROPIO <audio> (todas las fuentes caidas) invalida
+        // la cancion; el 'error' del <source> .mp3 (404, no existe) se captura
+        // aqui pero NO debe tumbar songOk si el ogg suena bien.
+        song.addEventListener('error', (e) => { if (!e || e.target === song) songOk = false; }, true);
       }
     } catch (e) { song = null; }
     return song;
@@ -255,10 +258,17 @@
   function setPaused(v) {
     if (!D.active) return;
     if (v) {
-      if (songOk && song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
+      // La cancion se DETIENE siempre que exista: startClock la arranca
+      // sin exigir songOk (linea ~242), asi que exigirlo aqui la dejaba
+      // sonando al pausar —songOk puede quedar en false por el listener
+      // de 'error' en captura (el .mp3 404) aunque el ogg suene—. pause()
+      // es seguro aunque no este reproduciendo.
+      if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
       if (fbRunning) { fbElapsed = dateNow(); fbRunning = false; }
     } else {
-      if (songOk && song && typeof song.play === 'function') { try { const p = song.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+      // Reanudar: la cancion vuelve donde quedo (su currentTime no se
+      // toco al pausar), solo si el reloj de la cita esta corriendo.
+      if (D.clockRunning && song && typeof song.play === 'function') { try { const p = song.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
       if (D.clockRunning && !fbRunning) { fbStart = performance.now(); fbRunning = true; }
     }
   }
@@ -313,6 +323,49 @@
     elx.volume = 0.9 * (g == null ? 1 : g); // su volumen de siempre × la ganancia global de efectos
     try { elx.currentTime = 0; } catch (e) { /* aún sin metadata: play() parte del inicio igual */ }
     try { const p = elx.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* sin audio: el cruce sigue en silencio */ }
+  }
+
+  // ---------- Desbloqueo de audio (autoplay de móvil) ----------
+  // song y doorSfx son <audio> planos que NACEN al entrar a la cita
+  // (createSong/createDoorSfx), DESPUÉS del gesto con que music.js
+  // desbloquea el audio del juego. En móvil (iOS/Safari sobre todo)
+  // un <audio> creado tras ese gesto queda BLOQUEADO: su play(), que
+  // ocurre dentro del bucle de animación (startClock en la fase
+  // 'plaza', y playDoorClose al cruzar), lo rechaza el navegador y el
+  // .catch lo oculta en silencio. Por eso la música del juego suena
+  // pero la de la cita no. Aquí los CEBAMOS dentro del primer gesto
+  // real posterior a su creación (play() mudo -> pause -> reinicio),
+  // lo que marca el elemento como desbloqueado por el usuario; ese
+  // gesto SIEMPRE llega antes de la plaza (hay que caminar a la
+  // puerta y accionarla). Mismo patrón que el hook de music.js.
+  let audioPrimed = false;
+  function primeMediaEl(el) {
+    if (!el || typeof el.play !== 'function') return;
+    const wasMuted = el.muted;
+    try { el.muted = true; } catch (e) { /* tolerante */ }
+    const restore = () => {
+      try { el.pause(); el.currentTime = 0; } catch (e) { /* aun sin metadata */ }
+      try { el.muted = wasMuted; } catch (e) { /* tolerante */ }
+    };
+    try {
+      const pr = el.play();
+      if (pr && pr.then) pr.then(restore).catch(() => { try { el.muted = wasMuted; } catch (e) {} });
+      else restore();
+    } catch (e) { try { el.muted = wasMuted; } catch (e) {} }
+  }
+  function primeDateAudio() {
+    if (audioPrimed) return;
+    if (!song && !doorSfx) return; // aun no se ha entrado a la cita: nada que cebar
+    audioPrimed = true;
+    if (!D.clockStarted) primeMediaEl(song); // ya arrancada, cebarla pelearia con su reloj/pausa
+    primeMediaEl(doorSfx);
+    try { applySongSound(); } catch (e) { /* el estado real de la cancion lo re-fija su configuracion */ }
+  }
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    const onPrimeGesture = () => { primeDateAudio(); };
+    ['pointerdown', 'keydown', 'touchstart'].forEach((t) => {
+      try { window.addEventListener(t, onPrimeGesture); } catch (e) { /* tolerante */ }
+    });
   }
 
   // ---------- Botón de silencio (#dateMuteBtn) ----------
