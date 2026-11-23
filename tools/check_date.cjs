@@ -166,6 +166,20 @@
      para ejercitar la pila de verdad, y su degradación:
      una foto intermedia que falta se salta en la pila y
      sin la foto del sofá no hay álbum (directo a FIN).
+   W) El finale tras el playtest y la nueva presentación
+     de los textos de la carta (Jose, 2026-11-22): la
+     pareja sentada va en el pase GL con profundidad,
+     anclada en los asientos (detrás del respaldo del
+     sofá), Pollito se dimensiona por su actor definido,
+     su ruta de llegada es visible (delante del sofá) y
+     tras servir la torta SE VA al armario (estado 'exit';
+     el salto y la reentrada dejan ese mismo estado); y
+     los textos de la carta en escena (fragmentos,
+     apertura y cierre del finale) se presentan SIN
+     recuadro — texto flotante grande en una columna
+     lateral, con fundido de entrada/salida y deriva al
+     disolverse — mientras la instrucción de objetivo
+     CONSERVA su recuadro de papel.
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -2451,6 +2465,73 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // las imágenes de la puesta vuelven a «no cargadas»
   [FIW.pareja, FIW.pareja2, FIW.pareja3, FIW.pollitoDeja, FIW.pollitoOrgulloso, FIW.tortaMesa, FIW.cartaSobre, ...FIW.pollitoWalk]
     .forEach((im) => { im.naturalWidth = 0; im.naturalHeight = 0; im.width = 0; im.height = 0; });
+
+  // --- la NUEVA PRESENTACIÓN de los textos de la carta
+  // en escena (dirección de Jose): sin recuadro de papel,
+  // texto flotante grande a un lado, desvaneciéndose en
+  // el aire; el recuadro queda SOLO para la instrucción.
+  // Se ejercita el dibujo con un ctx registrador (el
+  // FakeCtx del humo no registra llamadas).
+  const mkRecW = () => {
+    const calls = { fillText: [], roundRect: 0, fillRect: 0 };
+    const ctx = {
+      font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, shadowColor: '', shadowBlur: 0, globalAlpha: 1,
+      measureText(s) { return { width: String(s).length * 6 }; },
+      save() {}, restore() {}, translate() {}, beginPath() {}, closePath() {}, fill() {}, stroke() {}, arc() {},
+      fillRect() { calls.fillRect++; }, roundRect() { calls.roundRect++; },
+      fillText(t, x, y) { calls.fillText.push({ t: String(t), x, y, a: ctx.globalAlpha }); },
+      strokeText(t, x, y) { calls.strokeText.push({ t: String(t), x, y, a: ctx.globalAlpha }); },
+    };
+    calls.strokeText = [];
+    return { ctx, calls };
+  };
+  const ESTW = DM.debug.CARTA_DISPLAY;
+  check('el estilo display de los textos de la carta: letra GRANDE (≥17 px), columna LATERAL (la columna vive en la mitad izquierda, sin tapar a la pareja) y color crema cálido',
+    ESTW.size >= 17 && ESTW.colX >= 0 && ESTW.colX + ESTW.colW <= 320 && ESTW.color === '#ffe9c4',
+    `size=${ESTW.size}, col=${ESTW.colX}+${ESTW.colW}`);
+  const fragW = DM.debug.CARTA_TEXTOS.plaza;
+  DM.debug.showCartaBand(fragW);
+  DM.debug.updateCartaBand(0.3); // en plena ENTRADA (0,8 s)
+  const fxInW = DM.debug.cartaBandFx();
+  check('el fundido de ENTRADA del fragmento es gradual: a los 0,3 s el alfa está entre 0 y 1 (nada de aparición instantánea a alfa pleno) y sin deriva aún',
+    fxInW.a > 0 && fxInW.a < 1 && fxInW.drift === 0, `a=${fxInW.a.toFixed(2)}`);
+  const recInW = mkRecW();
+  DM.debug.drawCartaBand(recInW.ctx);
+  check('el fragmento se dibuja SIN RECUADRO (ni roundRect ni fillRect de papel): texto desnudo en la columna lateral, con el alfa del fundido',
+    recInW.calls.roundRect === 0 && recInW.calls.fillRect === 0 && recInW.calls.fillText.length > 0 &&
+    recInW.calls.fillText.every((f) => f.a > 0 && f.a < 1) &&
+    recInW.calls.fillText.every((f) => f.x >= ESTW.colX && f.x <= ESTW.colX + ESTW.colW),
+    `fillText=${recInW.calls.fillText.length}, roundRect=${recInW.calls.roundRect}`);
+  check('el texto dibujado ES el fragmento (las líneas envueltas en la columna recomponen el texto de la carta)',
+    recInW.calls.fillText.map((f) => f.t).join(' ') === fragW,
+    recInW.calls.fillText.map((f) => f.t).join(' / '));
+  DM.debug.updateCartaBand(2.0); // permanencia plena
+  const fxMidW = DM.debug.cartaBandFx();
+  check('en la permanencia el fragmento está a alfa pleno y quieto (la permanencia sigue siendo la regla de lectura)',
+    fxMidW.a === 1 && fxMidW.drift === 0, `a=${fxMidW.a}`);
+  const bandW = DM.debug.cartaBand;
+  DM.debug.updateCartaBand(bandW.total - bandW.t - 0.5); // a 0,5 s del final: plena SALIDA
+  const fxOutW = DM.debug.cartaBandFx();
+  check('el fundido de SALIDA es gradual y con DERIVA ascendente: alfa entre 0 y 1 y el texto ya subió unos píxeles (se disuelve en el aire, sin corte seco)',
+    fxOutW.a > 0 && fxOutW.a < 1 && fxOutW.drift > 0, `a=${fxOutW.a.toFixed(2)}, drift=${fxOutW.drift.toFixed(1)}`);
+  const recOutW = mkRecW();
+  DM.debug.drawCartaBand(recOutW.ctx);
+  check('en la salida el dibujo sigue sin recuadro y con el alfa parcial del fundido',
+    recOutW.calls.roundRect === 0 && recOutW.calls.fillRect === 0 &&
+    recOutW.calls.fillText.length > 0 && recOutW.calls.fillText.every((f) => f.a > 0 && f.a < 1));
+  DM.debug.updateCartaBand(1.0); // se disuelve del todo
+  check('cumplido su tiempo, el fragmento se disolvió (la banda queda vacía, como mandaba la mecánica)',
+    DM.debug.cartaBand.text === null);
+  const recObjW = mkRecW();
+  DM.debug.drawCartaObjetivo(recObjW.ctx);
+  check('la INSTRUCCIÓN de objetivo CONSERVA su recuadro de papel (roundRect): el papel quedó solo para instrucciones, como pidió Jose',
+    recObjW.calls.roundRect >= 1, `roundRect=${recObjW.calls.roundRect}`);
+  const dateSrcW = fs.readFileSync(path.join(SRC, 'date.js'), 'utf8');
+  check('la apertura y el cierre del finale usan el MISMO texto flotante (drawCartaTexto) y el panel de papel quedó retirado del código',
+    dateSrcW.includes('drawCartaTexto(c, CARTA_TEXTOS.apertura') &&
+    dateSrcW.includes('drawCartaTexto(c, CARTA_TEXTOS.cierre') &&
+    !dateSrcW.includes('drawCartaPanel'),
+    '');
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);

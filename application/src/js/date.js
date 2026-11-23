@@ -1159,15 +1159,24 @@
   // pareja del regreso.
   const CARTA_READ_MIN = 2.4, CARTA_READ_PER_CHAR = 0.045;
   const cartaReadTime = (txt) => Math.max(CARTA_READ_MIN, CARTA_READ_PER_CHAR * (txt || '').length);
-  // La BANDA de la carta (Acto 2): banda inferior estilo carta
-  // (papel crema) que entra con fundido, permanece lo que
-  // manda la regla de lectura y se desvanece, SIN pausar el
+  // La BANDA de la carta (Acto 2): el fragmento en escena,
+  // que entra con fundido, permanece lo que manda la regla
+  // de lectura y se desvanece EN EL AIRE, SIN pausar el
   // movimiento, la música ni los obstáculos (su reloj corre
   // dentro de updateStripFree, el motor libre compartido).
-  // Regla de solape: si un fragmento llega con otra banda en
+  // Su PRESENTACIÓN ya no es un recuadro de papel (dirección
+  // de diseño de Jose, 2026-11-22: «los fragmentos estén en
+  // la misma escena, a un lado, con una tipografía grande
+  // que se vaya desvaneciendo en el aire»): es el texto
+  // flotante de CARTA_DISPLAY/drawCartaTexto, más abajo. El
+  // recuadro de papel queda SOLO para la instrucción de
+  // objetivo («las instrucciones con ese recuadro funcionan
+  // únicamente para eso»). La mecánica no cambia: mismos
+  // disparadores, misma regla de lectura, misma cola.
+  // Regla de solape: si un fragmento llega con otro en
   // curso, queda EN ESPERA (una sola en cola) y entra cuando
-  // la actual termina de desvanecerse — nunca se enciman.
-  const CARTA_BAND_IN = 0.45, CARTA_BAND_OUT = 0.6;
+  // el actual termina de desvanecerse — nunca se enciman.
+  const CARTA_BAND_IN = 0.8, CARTA_BAND_OUT = 1.4;
   const cartaBand = { text: null, t: 0, total: 0, pending: null };
   function showCartaBand(text) {
     if (!text) return;
@@ -1184,12 +1193,21 @@
       if (next) showCartaBand(next);
     }
   }
-  function cartaBandAlpha() {
-    if (!cartaBand.text) return 0;
+  // El fundido del fragmento en escena: entra suave
+  // (CARTA_BAND_IN), se queda pleno lo que manda la regla
+  // de lectura y SALE despacio (CARTA_BAND_OUT) subiendo
+  // unos píxeles mientras se disuelve — «desvanecerse en
+  // el aire», sin cortes secos. drift = la deriva
+  // ascendente de la salida, en píxeles lógicos.
+  function cartaBandFx() {
+    if (!cartaBand.text) return { a: 0, drift: 0 };
     const t = cartaBand.t;
-    if (t < CARTA_BAND_IN) return t / CARTA_BAND_IN;
-    if (t > cartaBand.total - CARTA_BAND_OUT) return Math.max(0, (cartaBand.total - t) / CARTA_BAND_OUT);
-    return 1;
+    if (t < CARTA_BAND_IN) return { a: t / CARTA_BAND_IN, drift: 0 };
+    if (t > cartaBand.total - CARTA_BAND_OUT) {
+      const k = Math.max(0, (cartaBand.total - t) / CARTA_BAND_OUT);
+      return { a: k, drift: 7 * (1 - k) };
+    }
+    return { a: 1, drift: 0 };
   }
   // Corte de líneas para los textos de la carta, medido con la
   // misma fuente con la que G.text los dibuja (sin negrita: es
@@ -1207,29 +1225,97 @@
     }
     return lines;
   }
-  // La banda inferior en sí: papel crema con su filete cálido,
-  // centrada abajo, sin tapar los pies de la pareja más que lo
-  // justo (es baja y breve).
+  // ---------- El texto de la carta EN ESCENA ----------
+  // (dirección de diseño de Jose, 2026-11-22). Los textos
+  // de la carta que viven DENTRO de las escenas — los 4
+  // fragmentos de la caminata, la apertura del depa y el
+  // cierre+ firma del finale — se presentan SIN recuadro:
+  // texto desnudo y GRANDE, a un lado de la pantalla, que
+  // aparece con fundido y se desvanece en el aire, fijado
+  // en la capa más alta de la escena (se dibuja al final
+  // de cada draw, como se dibujaba la banda de papel).
+  // TIPOGRAFÍA: el proyecto no tiene ninguna fuente pixel
+  // ni display (ni webfont ni archivo: solo la pila de
+  // G.FONT, «Trebuchet MS»…, que es también la de los
+  // textos grandes del juego — rótulos de 20–30 px en
+  // negrita con contorno grueso). Se compone con ella a
+  // 19 px en negrita, crema cálido sobre contorno oscuro
+  // suave y un resplandor dorado tenue (shadowBlur) que lo
+  // despega del fondo sin caja: lo más cercano a «pixel
+  // art bonita» que el motor puede dar sin traer una
+  // fuente nueva. Si un día entra una fuente pixel al
+  // proyecto, basta cambiar CARTA_DISPLAY.font.
+  // POSICIÓN: columna lateral IZQUIERDA fija (x 30,
+  // ancho 250), con el bloque centrado en vertical dentro
+  // de la columna: no tapa a la pareja, que camina por el
+  // centro/abajo, ni el botón de silencio (arriba a la
+  // derecha, en el DOM).
+  const CARTA_DISPLAY = {
+    font: '"Trebuchet MS", "Segoe UI", Verdana, sans-serif', // = G.FONT (la del motor)
+    size: 19, firmaSize: 13.5,
+    colX: 30, colW: 250,
+    color: '#ffe9c4', firmaColor: '#f2cd8d',
+    stroke: 'rgba(26,15,8,0.88)', glow: 'rgba(255,186,92,0.50)',
+  };
+  // Corte de líneas del texto display: se mide con la
+  // MISMA fuente con la que G.text lo dibuja (negrita),
+  // para que ninguna línea se salga de la columna.
+  function wrapCartaDisplay(c, text, size, maxW) {
+    c.font = `bold ${size}px ${CARTA_DISPLAY.font}`;
+    const lines = [];
+    for (const para of String(text).split('\n')) {
+      const words = para.split(' '); let cur = '';
+      for (const w of words) {
+        if (cur && c.measureText(cur + ' ' + w).width > maxW) { lines.push(cur); cur = w; }
+        else cur = cur ? cur + ' ' + w : w;
+      }
+      lines.push(cur);
+    }
+    return lines;
+  }
+  // Dibuja un texto de carta en escena: desnudo, grande,
+  // en la columna lateral, con el alfa y la deriva que le
+  // pase su escena (fundidos). o: { firma, hint, drift } —
+  // la firma va al pie en dorado más pequeño; el hint (el
+  // «ESPACIO: seguir» de la apertura) es una instrucción y
+  // va en letra pequeña y tenue bajo el texto.
+  function drawCartaTexto(c, text, alpha, o) {
+    o = o || {};
+    if (!text || !(alpha > 0)) return;
+    const D8 = CARTA_DISPLAY, size = D8.size, lh = size * 1.32;
+    const lines = wrapCartaDisplay(c, text, size, D8.colW);
+    const firmaLines = o.firma ? wrapCartaDisplay(c, o.firma, D8.firmaSize, D8.colW) : [];
+    const totalH = lines.length * lh + (firmaLines.length ? 8 + firmaLines.length * 18 : 0) + (o.hint ? 22 : 0);
+    const cx = D8.colX + D8.colW / 2;
+    let y = 180 - totalH / 2 + lh / 2;
+    c.save();
+    c.globalAlpha = Math.max(0, Math.min(1, alpha));
+    if (o.drift) c.translate(0, -o.drift);
+    c.shadowColor = D8.glow; c.shadowBlur = 13;
+    lines.forEach((l) => {
+      if (l) G.text(c, l, cx, y, { size, color: D8.color, lw: 5, stroke: D8.stroke });
+      y += lh;
+    });
+    if (firmaLines.length) {
+      y += 8;
+      firmaLines.forEach((l) => {
+        if (l) G.text(c, l, cx, y, { size: D8.firmaSize, color: D8.firmaColor, lw: 4, stroke: D8.stroke });
+        y += 18;
+      });
+    }
+    c.shadowBlur = 0; c.shadowColor = 'transparent';
+    if (o.hint) G.text(c, o.hint, cx, y + 10, { size: 9, bold: false, color: 'rgba(255,233,196,0.80)', lw: 3 });
+    c.restore();
+  }
+  // El fragmento de la caminata en curso, con su fundido
+  // (cartaBandFx): se llama AL FINAL del draw de cada
+  // escena del paseo — la capa más alta, por encima de
+  // escena, personajes y obstáculos.
   function drawCartaBand(c) {
     if (!cartaBand.text) return;
-    const a = cartaBandAlpha();
-    if (a <= 0) return;
-    const lines = wrapCartaText(c, cartaBand.text, 11.5, 500);
-    c.font = `${11.5}px ${G.FONT}`;
-    const wLine = Math.max(...lines.map((l) => c.measureText(l).width));
-    const w = Math.min(580, wLine + 46), h = lines.length * 15 + 19;
-    const x = (640 - w) / 2, y = 360 - 12 - h;
-    c.save();
-    c.globalAlpha = a;
-    c.fillStyle = '#f7efdb';
-    c.beginPath(); c.roundRect(x, y, w, h, 7); c.fill();
-    c.strokeStyle = '#b98d4f'; c.lineWidth = 1.4;
-    c.beginPath(); c.roundRect(x, y, w, h, 7); c.stroke();
-    c.fillStyle = '#a84a41'; c.fillRect(x + 10, y + 4.5, w - 20, 1.6);
-    lines.forEach((l, i) => {
-      G.text(c, l, 320, y + 13 + i * 15, { size: 11.5, bold: false, color: '#3a2c22', stroke: false });
-    });
-    c.restore();
+    const fx = cartaBandFx();
+    if (fx.a <= 0) return;
+    drawCartaTexto(c, cartaBand.text, fx.a, { drift: fx.drift });
   }
   // La INSTRUCCIÓN DE OBJETIVO de la apertura (pedido de Jose
   // en su playtest del 2026-11-22: «debería haber una
@@ -1262,31 +1348,11 @@
     });
     c.restore();
   }
-  // El PANEL estilo carta (la apertura a ritmo del jugador y
-  // la lectura en pareja): tarjeta de papel centrada, con su
-  // sello de cera, el texto envuelto y, si se pide, la firma
-  // al pie y el aviso de avance.
-  function drawCartaPanel(c, text, alpha, firma, hint) {
-    if (alpha <= 0) return;
-    const lines = wrapCartaText(c, text, 12, 420);
-    const w = 478, h = lines.length * 16.5 + (firma ? 24 : 0) + (hint ? 16 : 0) + 30;
-    const x = (640 - w) / 2, y = Math.max(18, (360 - h) / 2 - 6);
-    c.save();
-    c.globalAlpha = Math.max(0, Math.min(1, alpha));
-    c.fillStyle = 'rgba(16,10,18,0.30)'; c.fillRect(0, 0, 640, 360);
-    c.fillStyle = '#f7efdb';
-    c.beginPath(); c.roundRect(x, y, w, h, 9); c.fill();
-    c.strokeStyle = '#b98d4f'; c.lineWidth = 1.6;
-    c.beginPath(); c.roundRect(x, y, w, h, 9); c.stroke();
-    c.fillStyle = '#a84a41'; c.beginPath(); c.arc(x + w - 20, y + 18, 7, 0, 6.3); c.fill();
-    c.fillStyle = '#c9625a'; c.beginPath(); c.arc(x + w - 20, y + 18, 4.4, 0, 6.3); c.fill();
-    lines.forEach((l, i) => {
-      G.text(c, l, 320, y + 24 + i * 16.5, { size: 12, bold: false, color: '#3a2c22', stroke: false });
-    });
-    if (firma) G.text(c, firma, x + w - 18, y + h - 16, { size: 11.5, color: '#7a4a2b', align: 'right', stroke: false });
-    if (hint) G.text(c, hint, 320, y + h - 9, { size: 8.5, bold: false, color: '#97804f', stroke: false });
-    c.restore();
-  }
+  // (El PANEL de papel que antes presentaba la apertura y
+  // la lectura en pareja quedó retirado: esos textos ahora
+  // van en el sistema flotante de drawCartaTexto, como los
+  // fragmentos de la caminata. El recuadro de papel sobrevive
+  // solo en la instrucción de objetivo, drawCartaObjetivo.)
   // Un punto del mundo de la casa, proyectado a pantalla con
   // la cámara de ESA casa (la misma VP analítica de la
   // compensación de escala).
@@ -1748,7 +1814,12 @@
           const img = this.cartaPoseImg();
           if (imgOk(img)) drawHomeImg(this.home, c, img, this.xi.x, 0, this.xi.y, cartaPoseWorldH(this.xi.scale), false);
           if (this.cartaSeq && this.cartaSeq.step === 'lee') {
-            drawCartaPanel(c, CARTA_TEXTOS.apertura, Math.min(1, this.cartaSeq.t * 2 + 0.4), null, 'ESPACIO: seguir');
+            // La apertura se lee en el mismo idioma visual
+            // que los demás textos de la carta en escena:
+            // texto flotante a un lado, sin recuadro (el
+            // avance sigue a ritmo del jugador; el hint es
+            // la instrucción y va en letra pequeña al pie).
+            drawCartaTexto(c, CARTA_TEXTOS.apertura, Math.min(1, this.cartaSeq.t * 2 + 0.4), { hint: 'ESPACIO: seguir' });
           }
           return;
         }
@@ -4354,12 +4425,19 @@
       // profundidad de la casa (drawFinaleSprites, por el
       // gancho extraSprites), para que los muebles los
       // ocluyan como a los actores. En esta capa 2D solo
-      // quedan el panel de la lectura, los avisos y el
+      // quedan el texto de la lectura, los avisos y el
       // cierre total (pantalla completa).
-      // el panel de la lectura en pareja: el cierre de la
-      // carta y, al pie, la firma
+      // el texto de la lectura en pareja: el cierre de la
+      // carta y, al pie, la firma — en el idioma visual de
+      // los textos de la carta en escena (flotante, a un
+      // lado, sin recuadro). Entra con fundido durante
+      // 'reading' y se desvanece en el aire, subiendo un
+      // poco, al pasar a la mirada ('gaze').
       if (this.cine.st === 'reading') {
-        drawCartaPanel(c, CARTA_TEXTOS.cierre, Math.min(1, this.cine.t * 2), CARTA_TEXTOS.firma, null);
+        drawCartaTexto(c, CARTA_TEXTOS.cierre, Math.min(1, this.cine.t * 2), { firma: CARTA_TEXTOS.firma });
+      } else if (this.cine.st === 'gaze' && this.cine.t < 1.3) {
+        const k = this.cine.t / 1.3;
+        drawCartaTexto(c, CARTA_TEXTOS.cierre, 1 - k, { firma: CARTA_TEXTOS.firma, drift: 7 * k });
       }
       if (!cineOn && this.nearSofa) { const p = this.xi.head(44); G.prompt(c, 'ESPACIO: sentarse', p.x, p.y); }
       else if (!cineOn && this.nearDoor) { const p = this.xi.head(46); G.prompt(c, 'ESPACIO: salir a las praderas', p.x, p.y); }
@@ -4591,6 +4669,13 @@
       // Ganchos de la carta (guion v2, secciones F/O/S): los
       // textos, la regla de lectura, la banda y su disparo.
       CARTA_TEXTOS, cartaReadTime, cartaBand, showCartaBand, updateCartaBand,
+      // Ganchos de la presentación de los textos de la
+      // carta en escena (sección W): el estilo display, el
+      // fundido con su deriva, y los tres caminos de dibujo
+      // (el fragmento flotante, el texto genérico y la
+      // instrucción CON recuadro) para verificar que el
+      // papel quedó solo en la instrucción.
+      CARTA_DISPLAY, cartaBandFx, drawCartaTexto, drawCartaBand, drawCartaObjetivo,
       // Ganchos del playtest de la carta (sección U): la
       // posición derivada de la mesa de centro, la altura de
       // su tablero, la instrucción de objetivo con su
