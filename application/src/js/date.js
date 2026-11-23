@@ -139,6 +139,10 @@
   // disparos) hay que restarles esos 12 s.
   const SUCK_DUR = 1.8, DOOR_CALL_T = 5, DOOR_OPEN_T = 2, JOSE_LAG = 0.15;
   const MAIN_DOOR = { x: 510, y: 566 }; // puerta principal: borde sur del pasillo
+  // La CARTA del guion v2 espera sobre la mesa de centro de
+  // la sala (ctable en world.js: x 595–675, z 108–140; su
+  // centro y el radio del aviso «abrir la carta»).
+  const CARTA_POS = { x: 635, y: 124, r: 60 };
 
   // ---------- Los textos de la carta (guion v2, «la carta») ----------
   // BORRADOR (2026-11-22): los fragmentos de la carta que la cita
@@ -148,11 +152,12 @@
   // la caminata ni la canción; el cierre se lee juntos en la
   // sala, con su firma. Son textos BASE (los del guion v2)
   // puestos a pedido de Jose: su versión definitiva la escribe
-  // él y se cambia SOLO aquí. Todavía no los consume ninguna
-  // lógica: la mecánica (la carta como llave, la banda de
-  // fragmentos y el cierre con carta-final.png y
-  // foto-pareja.png) se implementa en la siguiente fase sobre
-  // estas constantes.
+  // él y se cambia SOLO aquí. La mecánica (guion v2) los
+  // consume tal cual: la apertura la lee Ximena a ritmo del
+  // jugador en el depa (Acto 1), los cuatro fragmentos caen en
+  // la banda de la carta durante la caminata (Acto 2) y el
+  // cierre se lee en pareja en la sala (Acto 3); el cierre
+  // total compone la carta completa con todos ellos.
   const CARTA_TEXTOS = {
     apertura: 'Esta carta no se lee en un sillón: se lee caminando. Sal — yo voy contigo.',
     plaza: 'Primer lugar: por donde todo el mundo pasa y nadie se detiene. Nosotros sí.',
@@ -173,6 +178,11 @@
     // cita (al activarse la plaza); start() lo reinicia para que
     // el arranque vuelva a ocurrir al re-entrar a la cita.
     muted: false, // preferencia de silencio del botón #dateMuteBtn (persiste entre escenas y reingresos de la sesión)
+    // --- La carta (guion v2): la llave de la cita y sus
+    // fragmentos. start() los reinicia en cada partida.
+    cartaAbierta: false, // la carta ya se abrió en el depa: la salida despierta
+    cartaFrag: { plaza: false, sanangel: false, aero: false, castillo: false }, // fragmentos ya mostrados (una sola vez por partida)
+    completed: false, // el cierre total (carta + foto) ya se presentó en esta partida
   };
 
   // ---------- Audio: la canción (fuera de git) ----------
@@ -532,6 +542,29 @@
   // arboleda se dibuja igual sin el recorte de Mononoke.
   const calciferImg = loadDateImg('assets/date/calcifer.png');
   const mononokeImg = loadDateImg('assets/date/mononoke.png');
+  // LA CARTA (guion v2): arte original del juego, versionado
+  // (ver FUENTES.md). El sobre cerrado que espera en la mesa
+  // de centro, las poses de lectura (sola y en pareja, con sus
+  // frames de vida), el servicio de Pollito (el ciclo de
+  // caminata con la torta, el gesto de dejarla, la torta ya en
+  // la mesa y su pose de orgullo) y las dos imágenes del
+  // cierre total a pantalla completa. Como todo el arte de la
+  // cita, cada pieza se dibuja SOLO si cargó (imgOk): sin la
+  // imagen, la mecánica corre igual con sus respaldos (la
+  // pose cae al sprite normal y el cierre salta la fase).
+  const cartaSobreImg = loadDateImg('assets/date/carta-sobre.png');
+  const ximenaSobreImg = loadDateImg('assets/date/ximena-sobre.png');
+  const lecturaSolaImg = loadDateImg('assets/date/lectura-sola.png');
+  const lecturaSola2Img = loadDateImg('assets/date/lectura-sola-2.png');
+  const lecturaParejaImg = loadDateImg('assets/date/lectura-pareja.png');
+  const lecturaPareja2Img = loadDateImg('assets/date/lectura-pareja-2.png');
+  const lecturaPareja3Img = loadDateImg('assets/date/lectura-pareja-3.png');
+  const pollitoWalkImgs = [1, 2, 3, 4].map((i) => loadDateImg(`assets/date/pollito-torta-walk-${i}.png`));
+  const pollitoDejaImg = loadDateImg('assets/date/pollito-deja-torta.png');
+  const tortaMesaImg = loadDateImg('assets/date/torta-mesa.png');
+  const pollitoOrgullosoImg = loadDateImg('assets/date/pollito-orgulloso.png');
+  const cartaFinalImg = loadDateImg('assets/date/carta-final.png');
+  const fotoParejaImg = loadDateImg('assets/date/foto-pareja.png');
 
   // Geometría y ciclos de los complementos. Las x de los elementos
   // fijos viven en el espacio de SU capa (pantalla con pan=0): la
@@ -880,6 +913,10 @@
     const camT = Math.max(0, Math.min(sc.worldW - 640, A.x - 320));
     sc.pan += (camT - sc.pan) * Math.min(1, dt * 6);
     if (Math.abs(camT - sc.pan) < 0.05) sc.pan = camT;
+    // --- la banda de la carta (guion v2) avanza con el motor
+    // libre: su reloj corre aquí para que ninguna escena de
+    // franja tenga que acordarse de ella ---
+    updateCartaBand(dt);
     D.tap = false;
   }
   // Índice del ciclo de caminata lateral según la distancia
@@ -960,6 +997,143 @@
     return { x: ((m[0] * x + m[4] * y + m[8] * z + m[12]) / w * 0.5 + 0.5) * 640, y: (1 - ((m[1] * x + m[5] * y + m[9] * z + m[13]) / w * 0.5 + 0.5)) * 360, ok: w > 0 };
   }
 
+  // ---------- La carta: banda, panel y dibujo en la casa ----------
+  // La regla de lectura es LA MISMA del juego (scenes.js, las
+  // cinemáticas de Leyendas): cada texto dura como mínimo
+  // 2,4 s y crece 0,045 s por carácter. Aquí se aplica a los
+  // fragmentos de la caminata (la banda) y a la lectura en
+  // pareja del regreso.
+  const CARTA_READ_MIN = 2.4, CARTA_READ_PER_CHAR = 0.045;
+  const cartaReadTime = (txt) => Math.max(CARTA_READ_MIN, CARTA_READ_PER_CHAR * (txt || '').length);
+  // La BANDA de la carta (Acto 2): banda inferior estilo carta
+  // (papel crema) que entra con fundido, permanece lo que
+  // manda la regla de lectura y se desvanece, SIN pausar el
+  // movimiento, la música ni los obstáculos (su reloj corre
+  // dentro de updateStripFree, el motor libre compartido).
+  // Regla de solape: si un fragmento llega con otra banda en
+  // curso, queda EN ESPERA (una sola en cola) y entra cuando
+  // la actual termina de desvanecerse — nunca se enciman.
+  const CARTA_BAND_IN = 0.45, CARTA_BAND_OUT = 0.6;
+  const cartaBand = { text: null, t: 0, total: 0, pending: null };
+  function showCartaBand(text) {
+    if (!text) return;
+    if (cartaBand.text) { cartaBand.pending = text; return; }
+    cartaBand.text = text; cartaBand.t = 0;
+    cartaBand.total = CARTA_BAND_IN + cartaReadTime(text) + CARTA_BAND_OUT;
+  }
+  function updateCartaBand(dt) {
+    if (!cartaBand.text) return;
+    cartaBand.t += dt;
+    if (cartaBand.t >= cartaBand.total) {
+      const next = cartaBand.pending;
+      cartaBand.text = null; cartaBand.pending = null; cartaBand.t = 0; cartaBand.total = 0;
+      if (next) showCartaBand(next);
+    }
+  }
+  function cartaBandAlpha() {
+    if (!cartaBand.text) return 0;
+    const t = cartaBand.t;
+    if (t < CARTA_BAND_IN) return t / CARTA_BAND_IN;
+    if (t > cartaBand.total - CARTA_BAND_OUT) return Math.max(0, (cartaBand.total - t) / CARTA_BAND_OUT);
+    return 1;
+  }
+  // Corte de líneas para los textos de la carta, medido con la
+  // misma fuente con la que G.text los dibuja (sin negrita: es
+  // una carta, no un rótulo). Respeta los saltos de párrafo.
+  function wrapCartaText(c, text, size, maxW) {
+    c.font = `${size}px ${G.FONT}`;
+    const lines = [];
+    for (const para of String(text).split('\n')) {
+      const words = para.split(' '); let cur = '';
+      for (const w of words) {
+        if (cur && c.measureText(cur + ' ' + w).width > maxW) { lines.push(cur); cur = w; }
+        else cur = cur ? cur + ' ' + w : w;
+      }
+      lines.push(cur);
+    }
+    return lines;
+  }
+  // La banda inferior en sí: papel crema con su filete cálido,
+  // centrada abajo, sin tapar los pies de la pareja más que lo
+  // justo (es baja y breve).
+  function drawCartaBand(c) {
+    if (!cartaBand.text) return;
+    const a = cartaBandAlpha();
+    if (a <= 0) return;
+    const lines = wrapCartaText(c, cartaBand.text, 11.5, 500);
+    c.font = `${11.5}px ${G.FONT}`;
+    const wLine = Math.max(...lines.map((l) => c.measureText(l).width));
+    const w = Math.min(580, wLine + 46), h = lines.length * 15 + 19;
+    const x = (640 - w) / 2, y = 360 - 12 - h;
+    c.save();
+    c.globalAlpha = a;
+    c.fillStyle = '#f7efdb';
+    c.beginPath(); c.roundRect(x, y, w, h, 7); c.fill();
+    c.strokeStyle = '#b98d4f'; c.lineWidth = 1.4;
+    c.beginPath(); c.roundRect(x, y, w, h, 7); c.stroke();
+    c.fillStyle = '#a84a41'; c.fillRect(x + 10, y + 4.5, w - 20, 1.6);
+    lines.forEach((l, i) => {
+      G.text(c, l, 320, y + 13 + i * 15, { size: 11.5, bold: false, color: '#3a2c22', stroke: false });
+    });
+    c.restore();
+  }
+  // El PANEL estilo carta (la apertura a ritmo del jugador y
+  // la lectura en pareja): tarjeta de papel centrada, con su
+  // sello de cera, el texto envuelto y, si se pide, la firma
+  // al pie y el aviso de avance.
+  function drawCartaPanel(c, text, alpha, firma, hint) {
+    if (alpha <= 0) return;
+    const lines = wrapCartaText(c, text, 12, 420);
+    const w = 478, h = lines.length * 16.5 + (firma ? 24 : 0) + (hint ? 16 : 0) + 30;
+    const x = (640 - w) / 2, y = Math.max(18, (360 - h) / 2 - 6);
+    c.save();
+    c.globalAlpha = Math.max(0, Math.min(1, alpha));
+    c.fillStyle = 'rgba(16,10,18,0.30)'; c.fillRect(0, 0, 640, 360);
+    c.fillStyle = '#f7efdb';
+    c.beginPath(); c.roundRect(x, y, w, h, 9); c.fill();
+    c.strokeStyle = '#b98d4f'; c.lineWidth = 1.6;
+    c.beginPath(); c.roundRect(x, y, w, h, 9); c.stroke();
+    c.fillStyle = '#a84a41'; c.beginPath(); c.arc(x + w - 20, y + 18, 7, 0, 6.3); c.fill();
+    c.fillStyle = '#c9625a'; c.beginPath(); c.arc(x + w - 20, y + 18, 4.4, 0, 6.3); c.fill();
+    lines.forEach((l, i) => {
+      G.text(c, l, 320, y + 24 + i * 16.5, { size: 12, bold: false, color: '#3a2c22', stroke: false });
+    });
+    if (firma) G.text(c, firma, x + w - 18, y + h - 16, { size: 11.5, color: '#7a4a2b', align: 'right', stroke: false });
+    if (hint) G.text(c, hint, 320, y + h - 9, { size: 8.5, bold: false, color: '#97804f', stroke: false });
+    c.restore();
+  }
+  // Un punto del mundo de la casa, proyectado a pantalla con
+  // la cámara de ESA casa (la misma VP analítica de la
+  // compensación de escala).
+  function projectHomePoint(home, x, y, z) {
+    return projectWithCam(vpFromCam(home.cam), x, y, z);
+  }
+  // Dibuja una imagen como billboard vertical en la casa 3D:
+  // su base apoyada en (x, yBase, z) y su alto = worldH
+  // unidades de mundo (con el estiramiento vertical del motor,
+  // para casar con los billboards de los actores). Devuelve
+  // true si dibujó (la imagen cargó y el punto se ve).
+  function drawHomeImg(home, c, img, x, yBase, z, worldH, flip) {
+    if (!imgOk(img)) return false;
+    const vp = vpFromCam(home.cam);
+    const p0 = projectWithCam(vp, x, yBase, z), p1 = projectWithCam(vp, x, yBase + worldH, z);
+    if (!p0.ok) return false;
+    const stretch = Math.min(1.4, 1 / Math.cos(home.cam.pitch || 0.8));
+    const hPx = Math.abs(p0.y - p1.y) * stretch;
+    if (!(hPx > 2)) return false;
+    const wPx = hPx * img.naturalWidth / img.naturalHeight;
+    c.fillStyle = 'rgba(20,14,26,0.20)';
+    c.beginPath(); c.ellipse(p0.x, p0.y, wPx * 0.34, Math.max(2, hPx * 0.04), 0, 0, 6.3); c.fill();
+    if (flip) {
+      c.save(); c.translate(p0.x, p0.y - hPx); c.scale(-1, 1);
+      c.drawImage(img, -wPx / 2, 0, wPx, hPx);
+      c.restore();
+    } else {
+      c.drawImage(img, p0.x - wPx / 2, p0.y - hPx, wPx, hPx);
+    }
+    return true;
+  }
+
   // =========================================================
   // ESCENA DEL EASTER EGG (Parte 1): depa → puerta → plaza
   // =========================================================
@@ -968,6 +1142,7 @@
       this.onDone = onDone || null;
       this.phase = 'depa'; this.t = 0; this.phaseT = 0;
       this.nearDoor = false; this.doneFired = false;
+      this.cartaSeq = null; this.nearCarta = false; // la secuencia de apertura de la carta (guion v2)
       this.pan = 0; this.joseReacted = false; this.joseExpr = null;
       // --- El depa con TODOS escondidos (staging de la llegada,
       // invertido): los 7 roomies DENTRO del armario, solo los
@@ -1071,13 +1246,66 @@
     }
     openDoor() {
       if (this.phase !== 'depa') return;
+      // La salida está DORMIDA hasta abrir la carta (guion
+      // v2): sin la carta no hay cita, y esta puerta es su
+      // cerradura — ni con ESPACIO ni con toque se abre.
+      if (!D.cartaAbierta) return;
       this.phase = 'door'; this.phaseT = 0; D.state = 'door';
       // Sin sonido al ABRIR: el cierre real de la puerta suena
       // una sola vez por cruce, al llegar a la plaza.
       this.xi.route = null; this.xi.vx = this.xi.vy = 0; this.xi.moving = false;
     }
+    // ---------- La carta (guion v2, Acto 1) ----------
+    // La secuencia de apertura: Ximena toma el sobre (pose
+    // ximena-sobre), lo abre y lee la hoja (las poses de
+    // lectura en bucle lento) mientras el fragmento de
+    // apertura espera en el panel, a ritmo del jugador. Al
+    // avanzar, la carta queda con ella y la salida despierta.
+    startCartaSeq() {
+      if (this.phase !== 'depa' || D.cartaAbierta) return;
+      this.phase = 'carta'; this.cartaSeq = { step: 'toma', t: 0 };
+      const xi = this.xi;
+      xi.route = null; xi.vx = xi.vy = 0; xi.moving = false;
+      xi.dir = 'up'; // frente a la mesa de centro
+      D.tap = false;
+    }
+    cartaPoseImg() {
+      const S = this.cartaSeq; if (!S) return null;
+      if (S.step === 'toma') return ximenaSobreImg;
+      return Math.floor(S.t / 1.4) % 2 === 0 ? lecturaSolaImg : lecturaSola2Img;
+    }
+    updateCartaSeq(dt) {
+      const S = this.cartaSeq;
+      if (!S) { this.phase = 'depa'; return; }
+      S.t += dt;
+      // La pose manda sobre el actor: si su imagen cargó, el
+      // actor se oculta y la pose lo reemplaza (draw); si no
+      // cargó, el actor queda visible como respaldo.
+      this.xi.hidden = imgOk(this.cartaPoseImg());
+      if (S.step === 'toma') {
+        if (S.t >= 0.8) { S.step = 'lee'; S.t = 0; }
+        return;
+      }
+      // 'lee': el fragmento se queda lo que dure SU lectura;
+      // se avanza con ESPACIO/toque, sin reloj que apure.
+      if (G.input.hit('action') || D.tap) {
+        D.cartaAbierta = true;
+        this.xi.hidden = false;
+        this.cartaSeq = null;
+        this.phase = 'depa';
+        D.tap = false;
+      }
+    }
     update(dt) {
       this.t += dt;
+      if (this.phase === 'carta') {
+        // Control bloqueado; la casa sigue viva detrás (los
+        // ojitos del armario no se congelan por una carta).
+        this.home.update(dt);
+        this.updateCartaSeq(dt);
+        D.tap = false;
+        return;
+      }
       if (this.phase === 'depa') {
         const ax = G.input.axis();
         const ix = ax.x || (touchVec ? touchVec.x : 0), iy = ax.y || (touchVec ? touchVec.y : 0);
@@ -1088,7 +1316,11 @@
         this.home.update(dt);
         this.compensateScale(); // tamaño en pantalla constante (solo modo cita)
         this.nearDoor = Math.hypot(this.xi.x - MAIN_DOOR.x, this.xi.y - MAIN_DOOR.y) < 52;
-        if (this.nearDoor && (G.input.hit('action') || D.tap)) this.openDoor();
+        this.nearCarta = !D.cartaAbierta &&
+          Math.hypot(this.xi.x - CARTA_POS.x, this.xi.y - CARTA_POS.y) < CARTA_POS.r;
+        const act = G.input.hit('action') || D.tap;
+        if (this.nearCarta && act) this.startCartaSeq();
+        else if (this.nearDoor && act) this.openDoor(); // dormida sin la carta: openDoor lo verifica
         D.tap = false;
         return;
       }
@@ -1189,6 +1421,15 @@
       this.updateEncuentros(dt);
       this.updateAutos(dt);
       updateStripFree(this, dt);
+      // El fragmento de la PLAZA (guion v2): cae al asomar la
+      // Catedral — unos pasos después de la llegada, ya en
+      // modo libre y lejos de las Puertas (junto a la de
+      // salida el disparo espera a que la pareja se aleje) —,
+      // una sola vez por partida.
+      if (!D.cartaFrag.plaza && !this.nearExit && A.x >= 430) {
+        D.cartaFrag.plaza = true;
+        showCartaBand(CARTA_TEXTOS.plaza);
+      }
     }
     // Los ENCUENTROS de la calle: el Alebrije y Teodora cruzan
     // de derecha a izquierda, alternando, con intervalos
@@ -1311,13 +1552,53 @@
     }
     animStep(ch, physically, dt) { animStepChar(ch, physically, dt); }
     draw(dt) {
-      if (this.phase === 'depa' || this.phase === 'door') {
+      if (this.phase === 'depa' || this.phase === 'door' || this.phase === 'carta') {
         this.home.draw(dt);
         const c = G.ovCtx; if (!c) return;
         c.setTransform(2, 0, 0, 2, 0, 0);
-        if (this.phase === 'depa' && this.nearDoor) {
+        if (this.phase === 'carta') {
+          // La pose de la secuencia reemplaza a Ximena en su
+          // sitio (si la imagen cargó; si no, el actor visible
+          // hace de respaldo y no se dibuja nada encima).
+          const img = this.cartaPoseImg();
+          if (imgOk(img)) drawHomeImg(this.home, c, img, this.xi.x, 0, this.xi.y, 122, false);
+          if (this.cartaSeq && this.cartaSeq.step === 'lee') {
+            drawCartaPanel(c, CARTA_TEXTOS.apertura, Math.min(1, this.cartaSeq.t * 2 + 0.4), null, 'ESPACIO: seguir');
+          }
+          return;
+        }
+        // La carta sobre la mesa de centro, con su brillo
+        // sutil pulsante (es un objeto íntimo: nada de cartel
+        // gigante). Al abrirla desaparece de la mesa: la
+        // lleva ella.
+        if (!D.cartaAbierta) {
+          const p = projectHomePoint(this.home, CARTA_POS.x, 16, CARTA_POS.y);
+          if (p.ok) {
+            const gl = 0.15 + 0.11 * (0.5 + 0.5 * Math.sin(this.t * 2.4));
+            const grd = c.createRadialGradient(p.x, p.y, 2, p.x, p.y, 30);
+            grd.addColorStop(0, `rgba(255,224,150,${gl.toFixed(3)})`);
+            grd.addColorStop(1, 'rgba(255,224,150,0)');
+            c.fillStyle = grd; c.beginPath(); c.arc(p.x, p.y, 30, 0, 6.3); c.fill();
+          }
+          drawHomeImg(this.home, c, cartaSobreImg, CARTA_POS.x, 16, CARTA_POS.y, 20, false);
+        }
+        if (this.phase === 'depa' && this.nearCarta && !D.cartaAbierta) {
+          const h = this.xi.head(46);
+          if (h && isFinite(h.x)) G.prompt(c, 'ESPACIO: abrir la carta', h.x, h.y);
+        } else if (this.phase === 'depa' && this.nearDoor && D.cartaAbierta) {
           const h = this.xi.head(46);
           if (h && isFinite(h.x)) G.prompt(c, 'ESPACIO: abrir la puerta', h.x, h.y);
+        }
+        // Ya con la carta abierta, la salida se anuncia sola:
+        // la guía hacia la puerta, en el lenguaje de la cita.
+        if (this.phase === 'depa' && D.cartaAbierta) {
+          const dp = projectHomePoint(this.home, MAIN_DOOR.x, 80, MAIN_DOOR.y);
+          if (dp.ok) {
+            c.save();
+            c.globalAlpha = 0.62 + 0.30 * Math.sin(this.t * 3);
+            G.text(c, 'a la plaza →', dp.x, dp.y, { size: 10.5, color: '#ffe9a8' });
+            c.restore();
+          }
         }
         if (this.phase === 'door') {
           const a = Math.min(1, this.phaseT / 1);
@@ -1552,6 +1833,8 @@
       if (this.phase === 'free' && this.nearExit) G.prompt(c, 'ESPACIO: cruzar la Puerta', this.exitDoorX - pan, groundY - 96);
       // luz del cruce hacia San Ángel (crece ~1 s)
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+      // la banda de la carta, sobre el paseo (guion v2)
+      drawCartaBand(c);
     }
     walkIdx(id, dist) { return walkIdxFor(id, dist); }
     drawChar2D(c, id, x, baseY, h, anim, idx, expr, flip, bobY) { drawChar2DAt(c, id, x, baseY, h, anim, idx, expr, flip, bobY); }
@@ -1733,6 +2016,14 @@
       this.speedK = this.frenoT > 0 ? SA_BOLAS.frenoK : 1;
       updateStripFree(this, dt);
       this.updateBolas(dt);
+      // El fragmento de SAN ÁNGEL (guion v2): al entrar en
+      // la zona del árbol (donde arranca el camino de velas,
+      // cerca del abrazo), lejos de las Puertas, una sola vez
+      // por partida.
+      if (!D.cartaFrag.sanangel && !this.nearDoor && A.x >= SA_VELAS_X0) {
+        D.cartaFrag.sanangel = true;
+        showCartaBand(CARTA_TEXTOS.sanangel);
+      }
     }
     // ---------- La acción de abrazo (solo San Ángel) ----------
     // Tres tiempos: acercamiento (ambos caminan a quedar frente
@@ -2022,6 +2313,8 @@
       // luz de la Puerta: se disipa al llegar, crece al salir
       if (this.phase === 'light') { c.fillStyle = `rgba(255,244,214,${(1 - Math.min(1, this.phaseT)).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+      // la banda de la carta, sobre el paseo (guion v2)
+      drawCartaBand(c);
     }
     // Una bola de paja rodando: el recorte de foto gira sobre
     // el centro de la bola (en el PNG de 370×259 la bola ocupa
@@ -2236,6 +2529,13 @@
       this.nearDoorX = dE <= dX ? this.entryDoorX : this.exitDoorX;
       if (this.nearDoor && (G.input.hit('action') || D.tap)) { this.beginExit(); return; }
       updateStripFree(this, dt);
+      // El fragmento del AEROPUERTO (guion v2): a mitad de la
+      // escena (x ≈ 1800 de 3600), en la parte en calma y
+      // lejos de las Puertas, una sola vez por partida.
+      if (!D.cartaFrag.aero && !this.nearDoor && A.x >= 1750) {
+        D.cartaFrag.aero = true;
+        showCartaBand(CARTA_TEXTOS.aero);
+      }
     }
     draw(dt) {
       const c = G.ovCtx; if (!c) return;
@@ -2372,6 +2672,8 @@
       // luz de la Puerta: se disipa al llegar, crece al salir
       if (this.phase === 'light') { c.fillStyle = `rgba(255,244,214,${(1 - Math.min(1, this.phaseT)).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+      // la banda de la carta, sobre el paseo (guion v2)
+      drawCartaBand(c);
     }
     // Una maleta con ruedas y asa, en el lenguaje plano con
     // borde de los props dibujados del juego.
@@ -2701,6 +3003,15 @@
       this.speedK = this.frenoT > 0 ? PRADERA.calcifer.frenoK : 1;
       updateStripFree(this, dt);
       this.updateCalcifers(dt);
+      // El fragmento de las PRADERAS (guion v2): cuando el
+      // castillo entra en cuadro. Su capa (PRADERA.castillo:
+      // centro 1432, parallax 0,25, ancho ≈ 325) asoma por la
+      // derecha cuando pan ≳ 2500; lejos de las Puertas y una
+      // sola vez por partida.
+      if (!D.cartaFrag.castillo && !this.nearDoor && this.pan >= 2500) {
+        D.cartaFrag.castillo = true;
+        showCartaBand(CARTA_TEXTOS.castillo);
+      }
     }
     // Los Calcifer de la vereda: quietos sobre su tronquito,
     // parpadeando. SOLO el personaje CONTROLADO puede
@@ -2978,6 +3289,8 @@
       // luz de la Puerta: se disipa al llegar, crece al salir
       if (this.phase === 'light') { c.fillStyle = `rgba(255,244,214,${(1 - Math.min(1, this.phaseT)).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
+      // la banda de la carta, sobre el paseo (guion v2)
+      drawCartaBand(c);
     }
     // El espantapájaros Cabeza de Nabo, DIBUJADO por código
     // (homenaje dibujado, sin usar la imagen de la película):
@@ -3189,39 +3502,54 @@
   // sigue; en esta escena no arranca nada.
 
   // EL TEXTO FINAL de la cita (pendiente P4 del documento
-  // técnico): aparece en el panel sereno que cierra la
-  // cinemática. Este valor es SOLO el inicial, de relleno:
-  // el texto definitivo lo escribe Jose — basta cambiar
-  // esta línea por la suya.
+  // técnico): cierra la tarjeta de fin del cierre total,
+  // bajo el «FIN». Este valor es SOLO el inicial, de
+  // relleno: el texto definitivo lo escribe Jose — basta
+  // cambiar esta línea por la suya. (La carta en sí vive en
+  // CARTA_TEXTOS: su firma es otro texto, el de la carta.)
   const FINAL_TEXT = 'Feliz cumpleaños, mi amor';
 
   const FINALE = {
-    // La mesa de fiesta de la sala (ptable en world.js:
-    // huella x 800–930, z 200–245, tablero a y=34) hace de
-    // mesa de la cita: la puesta (mantel, platos, copas,
-    // velas, pastel) se monta SOBRE ella como props 3D de
-    // esta escena, sin tocar la casa del juego principal.
-    table: { x: 800, z: 200, w: 130, d: 45, top: 34, cx: 865, cz: 222 },
-    // Los asientos quedan DENTRO de la huella de la mesa:
-    // con la cámara de seguimiento, el tablero ocluye la
-    // mitad inferior de los billboards y se lee «sentados»
-    // (el truco clásico del set). Ximena al norte (de frente
-    // a la cámara), Jose al sur (de espaldas), mirándose.
-    seatXi: { x: 848, y: 208 }, seatJose: { x: 882, y: 237 },
-    // Al levantarse salen por rutas (follow() ignora la
-    // colisión) a estos puntos libres al sur de la mesa; el
-    // control vuelve recién ahí: un actor CONTROLADO dentro
-    // de la huella no podría salir caminando (walk() frena
-    // contra el mueble en cada paso).
-    outXi: { x: 848, y: 266 }, outJose: { x: 886, y: 268 },
-    promptR: 84, // distancia al centro de la mesa para ofrecer «sentarse»
+    // La puesta del regreso es la SALA (guion v2): la mesa
+    // de centro (ctable en world.js: huella x 595–675,
+    // z 108–140, tablero a y=16) y el sofá que tiene
+    // enfrente (x 570–700, z 170–214; da la espalda a la
+    // cámara y mira a la TV). Todo se monta como props de
+    // ESTA escena, sin tocar la casa del juego principal:
+    // la versión anterior (la mesa de fiesta con el
+    // pastelito) quedó reemplazada por el guion v2.
+    ctable: { x: 595, z: 108, w: 80, d: 32, top: 16, cx: 635, cz: 124 },
+    sofa: { x: 570, z: 170, w: 130, d: 44, cx: 635, cz: 192 },
+    // Los asientos quedan SOBRE los cojines del sofá (los
+    // dos cojines de world.js: centros x 609 y 661, z
+    // 174–202): el respaldo ocluye la mitad inferior de los
+    // billboards y se lee «sentados», el mismo truco que la
+    // mesa usaba antes. Ximena en el cojín oeste, Jose en
+    // el este, como en los sprites de lectura en pareja.
+    seatXi: { x: 609, y: 188 }, seatJose: { x: 661, y: 188 },
+    // Antes de «sentarse», cada uno llega caminando a su
+    // punto de la franja libre entre la mesa de centro y el
+    // sofá (z 140–170); de ahí el sprite compuesto de la
+    // lectura toma el relevo. Al levantarse vuelven a esa
+    // franja (out*): un actor CONTROLADO dentro de la
+    // huella del sofá no podría salir caminando (walk()
+    // frena contra el mueble en cada paso).
+    preXi: { x: 609, y: 150 }, preJose: { x: 661, y: 150 },
+    outXi: { x: 596, y: 152 }, outJose: { x: 674, y: 152 },
+    promptR: 96, // distancia al centro del sofá para ofrecer «sentarse»
     // El escondite de Pollito: SOBRE el armario del pasillo
     // (el cuerpo del armario llega a y=98; elev 100 lo apoya
     // encima). Los roomies espían por la rendija (closetPeek,
     // como en la apertura); él, desde arriba del mueble.
     catHide: { x: 600, y: 330, elev: 100 }, catFloor: { x: 600, y: 354 },
-    catServe: { x: 800, y: 262 }, // junto a la mesa, ya servido el pastel
-    cake: { x: 865, z: 222 }, clocheAside: { x: 902, z: 222 },
+    // El servicio de la torta: Pollito baja del armario y
+    // CAMINA (su ciclo pollito-torta-walk) por el pasillo
+    // oeste del sofá hasta junto a la mesa de centro, deja
+    // la torta y se queda a un lado, orgulloso.
+    catPath: [[524, 308], [524, 176], [560, 146]],
+    catServe: { x: 560, y: 146 }, // junto a la mesa, en el gesto de dejar la torta
+    catProud: { x: 566, y: 162 }, // a un lado de la mesa, ya servida
+    torta: { x: 635, z: 124 }, // la torta, sobre la mesa de centro
     spawnXi: { x: 478, y: 534 }, spawnJose: { x: 540, y: 534 },
   };
   // Luz cálida y tenue de la noche de cita: ambiente bajo y
@@ -3232,7 +3560,7 @@
   const FINALE_LIGHT = {
     amb: [0.36, 0.28, 0.30], sun: [0.10, 0.08, 0.13], sky: '#17101f',
     points: [
-      { x: 865, y: 52, z: 222, r: 215, c: [0.80, 0.52, 0.22] }, // las velas de la mesa
+      { x: 635, y: 46, z: 124, r: 215, c: [0.80, 0.52, 0.22] }, // las velas de la mesa de centro
       { x: 798, y: 66, z: 80, r: 265, c: [0.52, 0.38, 0.20] },  // la lámpara de la sala
       { x: 510, y: 48, z: 430, r: 205, c: [0.30, 0.22, 0.16] }, // el pasillo, tenue
       { x: 839, y: 42, z: 352, r: 140, c: [0.32, 0.22, 0.36] }, // el cuarto de Ximena
@@ -3243,11 +3571,23 @@
     constructor() {
       this.id = 'cita';
       this.phase = 'light'; this.t = 0; this.phaseT = 0;
-      this.nearDoor = false; this.nearTable = false;
+      this.nearDoor = false; this.nearSofa = false;
       this.cine = { st: 'idle', t: 0 };
-      this.panelA = 0; this.climbK = 0;
-      this.tableCloche = false; this.cakeShown = false; this.clocheAside = false;
-      this.trayHeld = false; this.trayCloche = false; this.revealPuffed = false;
+      this.climbK = 0;
+      // La torta de la sala (guion v2): la trae Pollito y
+      // queda sobre la mesa de centro.
+      this.tortaShown = false; this.tortaOnTable = false;
+      // Cómo se dibuja a Pollito: 'actor' = el actor del
+      // armario (sobre él o volviendo a él); 'walk' / 'place'
+      // / 'proud' = los PNG del servicio de la torta.
+      this.catVis = 'actor'; this.catWalkT = 0; this.catPath = null; this.catPathI = 0; this.catFlip = false;
+      // La pareja «sentada»: el sprite compuesto de la
+      // lectura sustituye a los dos actores.
+      this.seatedPose = false;
+      // El cierre total a pantalla completa (guion v2):
+      // { step, t } o null; closeAct = la acción del jugador
+      // en los pasos a su ritmo.
+      this.close = null; this.closeAct = false;
       const home = (this.home = new G.Scenes.HomeScene(G.PLAYABLE.slice()));
       this.xi = home.xi; this.jose = home.jose; this.cat = home.cat;
       // --- la configuración «noche de cita»: la variante de
@@ -3264,7 +3604,7 @@
       const cat = this.cat;
       cat.x = FINALE.catHide.x; cat.y = FINALE.catHide.y; cat.elev = FINALE.catHide.elev;
       cat.dir = 'down'; cat.hidden = false; cat.route = null;
-      // La puesta de la mesa entra por el gancho de props de
+      // La puesta de la sala entra por el gancho de props de
       // la casa (extraBoxes): solo ESTA instancia lo usa, así
       // que ni el juego principal ni la apertura la ven.
       home.extraBoxes = (mb) => this.drawTableBoxes(mb);
@@ -3309,16 +3649,21 @@
       // lo dejó sirviendo junto a la mesa, espía de nuevo.
       cat.hidden = false; cat.x = FINALE.catHide.x; cat.y = FINALE.catHide.y; cat.elev = FINALE.catHide.elev;
       cat.route = null; cat.dir = 'down'; cat.moving = false;
-      this.trayHeld = false; this.trayCloche = false; this.climbK = 0;
-      // Si el pastel ya se sirvió en una visita anterior, la
-      // mesa queda como quedó (y la cinemática, repetible).
-      this.cine = { st: this.cakeShown ? 'done' : 'idle', t: 0 };
-      this.panelA = 0;
+      this.climbK = 0;
+      // Si la torta ya se sirvió en una visita anterior, la
+      // mesa queda como quedó (la cinemática, repetible) y
+      // Pollito se queda orgulloso a su lado, con su PNG.
+      this.catVis = this.tortaShown ? 'proud' : 'actor';
+      if (this.catVis === 'proud') {
+        cat.hidden = true; cat.x = FINALE.catProud.x; cat.y = FINALE.catProud.y; cat.elev = 0;
+      }
+      this.seatedPose = false; this.close = null; this.closeAct = false;
+      this.cine = { st: this.tortaShown ? 'done' : 'idle', t: 0 };
       W.closet.k = W.closet.target = W.CLOSET_PEEK;
       W.xDoorOpen = true;
       home.follow(xi, 560);
       home.cam.x = xi.x; home.cam.z = xi.y - 30; home.cam.dist = 560;
-      this.nearDoor = false; this.nearTable = false;
+      this.nearDoor = false; this.nearSofa = false;
     }
     // Salida SOLO PARA REVISIÓN: en la secuencia esta escena
     // es el final del easter egg; en modo libre, la puerta
@@ -3358,11 +3703,16 @@
       this.updateCine(dt);
       home.update(dt);
       this.compensateScale();
-      this.nearTable = !cineOn && Math.hypot(this.xi.x - FINALE.table.cx, this.xi.y - FINALE.table.cz) < FINALE.promptR;
+      this.nearSofa = !cineOn && Math.hypot(this.xi.x - FINALE.sofa.cx, this.xi.y - FINALE.sofa.cz) < FINALE.promptR;
       this.nearDoor = Math.hypot(this.xi.x - MAIN_DOOR.x, this.xi.y - MAIN_DOOR.y) < 52;
       if (act) {
-        if (cineOn) { if (this.cine.t > 0.4) this.skipCine(); }
-        else if (this.nearTable) this.startCine();
+        if (cineOn) {
+          // En el cierre total la acción NO salta: avanza la
+          // carta y la foto a ritmo del jugador.
+          if (this.cine.st === 'closing') this.closeAct = true;
+          else if (this.cine.t > 0.4) this.skipCine();
+        }
+        else if (this.nearSofa) this.startCine();
         else if (this.nearDoor) this.beginExit();
       }
       D.tap = false;
@@ -3383,36 +3733,33 @@
       } else if (d < 26) { jo.route = null; jo.moving = false; jo.vx = jo.vy = 0; }
     }
     // ---------- la cinemática de cierre ----------
-    // Estados: seats → pause → descend → serve → place →
-    // reveal → gaze → panelIn → panel → panelOut → rise →
-    // done. Saltable con la acción en cualquier estado
-    // (skipCine deja la escena en su estado posterior).
+    // Estados (guion v2): seats → reading → gaze → descend
+    // → walk → place → proud → emotion → closing → rise →
+    // done. Saltable con la acción en cualquier estado salvo
+    // 'closing' (skipCine deja la escena en su estado
+    // posterior); en 'closing' la acción avanza la carta y
+    // la foto a ritmo del jugador.
     startCine() {
-      // (Re)arranca: la mesa se «repone» (el pastel vuelve
-      // bajo la campana) y Pollito volverá a servirlo. Así
-      // la cinemática se puede repetir para revisión.
+      // (Re)arranca: la torta sale de la mesa (Pollito la
+      // traerá de nuevo caminando) y la pareja va a sentarse
+      // al sofá. Así la cinemática se puede repetir.
       this.cine = { st: 'seats', t: 0, placed: false };
-      this.panelA = 0; this.climbK = 0;
-      this.tableCloche = false; this.cakeShown = false; this.clocheAside = false;
-      this.trayHeld = false; this.trayCloche = false; this.revealPuffed = false;
+      this.climbK = 0;
+      this.tortaOnTable = false; this.tortaShown = false;
+      this.seatedPose = false; this.close = null; this.closeAct = false;
       this.xi.expr = null; this.jose.expr = null;
-      this.seatRoute(this.xi, FINALE.seatXi);
-      this.seatRoute(this.jose, FINALE.seatJose);
+      if (this.catVis === 'proud') { this.cat.hidden = false; this.catVis = 'actor'; }
+      this.sofaRoute(this.xi, FINALE.preXi);
+      this.sofaRoute(this.jose, FINALE.preJose);
     }
-    seatRoute(a, seat) {
+    sofaRoute(a, pre) {
       // La ruta sale de World.path (puertas entre cuartos,
-      // como los partners). Si el actor está del otro lado
-      // de la mesa, rodea primero por el extremo más
-      // cercano: la recta final cruzaría el tablero.
-      const T = FINALE.table;
-      const north = a.y < T.cz, seatNorth = seat.y < T.cz;
-      if (north !== seatNorth) {
-        const wx = a.x < T.cx ? T.x - 36 : T.x + T.w + 36;
-        a.route = W.path(a.x, a.y, wx, T.cz);
-        a.route.push([seat.x, seat.y]);
-      } else {
-        a.route = W.path(a.x, a.y, seat.x, seat.y);
-      }
+      // como los partners). Los puntos previos están en la
+      // franja libre al norte del sofá (world.js deja z
+      // 140–170 sin muebles entre la mesa de centro y el
+      // sofá), así que no hace falta rodeo de mueble: de ahí
+      // el sprite compuesto toma el relevo de «sentados».
+      a.route = W.path(a.x, a.y, pre.x, pre.y);
       a.speed = 132;
     }
     nextCine(st) { this.cine.st = st; this.cine.t = 0; }
@@ -3441,76 +3788,112 @@
       if (C.st === 'idle' || C.st === 'done') return;
       C.t += dt;
       const xi = this.xi, jo = this.jose, cat = this.cat;
-      const coupleSeated = () => xi.arrived && jo.arrived;
       switch (C.st) {
         case 'seats': {
-          this.catHome(dt); // Pollito a su escondite, si estaba sirviendo
-          if ((coupleSeated() && this.catIsHome()) || C.t > 9) {
-            if (!coupleSeated()) {
-              xi.x = FINALE.seatXi.x; xi.y = FINALE.seatXi.y; xi.route = null;
-              jo.x = FINALE.seatJose.x; jo.y = FINALE.seatJose.y; jo.route = null;
-            }
+          // La pareja camina a la franja frente al sofá y
+          // Pollito vuelve a su escondite, si estaba sirviendo.
+          this.catHome(dt);
+          const atSofa = Math.hypot(xi.x - FINALE.preXi.x, xi.y - FINALE.preXi.y) < 4 &&
+            Math.hypot(jo.x - FINALE.preJose.x, jo.y - FINALE.preJose.y) < 4;
+          if ((atSofa && this.catIsHome()) || C.t > 9) {
             if (!this.catIsHome()) { cat.x = FINALE.catHide.x; cat.y = FINALE.catHide.y; cat.elev = FINALE.catHide.elev; cat.route = null; }
-            xi.dir = 'down'; jo.dir = 'up'; // se miran
+            // «Se sientan»: los actores dejan el paso al
+            // sprite compuesto de la lectura en pareja.
+            xi.x = FINALE.seatXi.x; xi.y = FINALE.seatXi.y; xi.route = null;
+            jo.x = FINALE.seatJose.x; jo.y = FINALE.seatJose.y; jo.route = null;
             xi.moving = jo.moving = false; xi.vx = xi.vy = jo.vx = jo.vy = 0;
-            this.nextCine('pause');
+            xi.hidden = jo.hidden = true;
+            this.seatedPose = true;
+            this.nextCine('reading');
           }
           break;
         }
-        case 'pause': if (C.t > 0.6) this.nextCine('descend'); break;
+        case 'reading': {
+          // Terminan de leer la carta, en pareja: el panel
+          // con el cierre y la firma dura lo que manda la
+          // regla de lectura (cierre + firma + un respiro).
+          if (C.t > cartaReadTime(CARTA_TEXTOS.cierre) + cartaReadTime(CARTA_TEXTOS.firma) + 1.2) this.nextCine('gaze');
+          break;
+        }
+        case 'gaze': {
+          // Se miran sonriendo (el compuesto lectura-pareja-3,
+          // ~2 s). Al salir, la campanita anuncia el servicio.
+          if (C.t > 2.0) { G.sfx('bell'); this.nextCine('descend'); }
+          break;
+        }
         case 'descend': {
-          // Pollito baja del armario ya con la bandeja.
+          // Pollito baja del armario SIN bandeja esta vez: la
+          // torta la trae caminando, con su ciclo de sprites.
           const k = Math.min(1, C.t / 0.9), e = 1 - (1 - k) * (1 - k);
           cat.x = FINALE.catHide.x;
           cat.y = FINALE.catHide.y + (FINALE.catFloor.y - FINALE.catHide.y) * e;
           cat.elev = FINALE.catHide.elev * (1 - e);
           cat.dir = 'down';
-          this.trayHeld = true; this.trayCloche = true;
           if (k >= 1) {
             cat.elev = 0; cat.y = FINALE.catFloor.y;
-            cat.goTo(FINALE.catServe.x, FINALE.catServe.y, 128);
-            this.nextCine('serve');
+            cat.hidden = true; // desde aquí lo dibuja su ciclo de caminata
+            this.catVis = 'walk'; this.catWalkT = 0;
+            this.catPath = FINALE.catPath.map((p) => p.slice());
+            this.catPathI = 0; this.catFlip = false;
+            this.nextCine('walk');
           }
           break;
         }
-        case 'serve': {
-          if (cat.arrived || C.t > 9) {
-            cat.x = FINALE.catServe.x; cat.y = FINALE.catServe.y; cat.route = null; cat.moving = false;
-            cat.dir = 'up'; // frente a la mesa (y a la pareja)
-            this.nextCine('place');
+        case 'walk': {
+          // Pollito CAMINA hasta la mesa de centro con la
+          // torta: movimiento manual por sus puntos de paso
+          // (el corredor oeste del sofá, sin cruzar muebles),
+          // los frames del ciclo rotando a cadencia de
+          // caminata en draw(), espejado solo si el paso va
+          // hacia la izquierda (es tres cuartos: la
+          // convención de los caminantes del proyecto).
+          this.catWalkT += dt;
+          const target = this.catPath && this.catPath[this.catPathI];
+          if (!target) { this.nextCine('place'); break; }
+          const dx = target[0] - cat.x, dy = target[1] - cat.y;
+          const d = Math.hypot(dx, dy);
+          if (d < 3) {
+            cat.x = target[0]; cat.y = target[1];
+            this.catPathI++;
+            if (this.catPathI >= this.catPath.length) this.nextCine('place');
+          } else {
+            const step = Math.min(d, 128 * dt);
+            cat.x += dx / d * step; cat.y += dy / d * step;
+            if (Math.abs(dx) > 6) this.catFlip = dx < 0;
           }
           break;
         }
         case 'place': {
-          if (!C.placed && C.t > 0.45) {
+          // El gesto de dejar la torta (pollito-deja-torta):
+          // a mitad, la torta aparece sobre la mesa de
+          // centro y Pollito pasa a su pose de orgullo.
+          // NOTA: la vela de la torta queda ENCENDIDA y sin
+          // interacción — el soplido es una decisión
+          // pendiente de Jose; si se aprueba, se engancha en
+          // este punto o en el estado 'proud'.
+          if (C.t >= 0.1 && this.catVis !== 'place') this.catVis = 'place';
+          if (!C.placed && C.t >= 0.55) {
             C.placed = true;
-            this.tableCloche = true; this.trayCloche = false; // la campana pasa a la mesa
-            cat.hop(130);
-            W.puff(FINALE.cake.x, FINALE.cake.z, 4, true);
+            this.tortaOnTable = true; this.tortaShown = true;
+            W.puff(FINALE.torta.x, FINALE.torta.z, 4, true);
           }
-          if (C.t > 0.95) this.nextCine('reveal');
-          break;
-        }
-        case 'reveal': {
-          // La campana se levanta (el arco y el destino los
-          // dibuja drawTableBoxes desde el estado) y debajo
-          // está el pastelito con su vela encendida.
-          if (!this.revealPuffed && C.t > 0.6) {
-            this.revealPuffed = true; this.cakeShown = true;
+          if (C.t >= 0.75 && this.catVis === 'place') {
+            this.catVis = 'proud';
+            cat.x = FINALE.catProud.x; cat.y = FINALE.catProud.y;
             xi.expr = 'happy'; jo.expr = 'happy';
-            W.puff(FINALE.cake.x, FINALE.cake.z, 6, true);
             G.sfx('pop');
           }
-          if (C.t > 1.9) { this.clocheAside = true; this.nextCine('gaze'); }
+          if (C.t > 1.1) this.nextCine('proud');
           break;
         }
-        case 'gaze': if (C.t > 1.8) this.nextCine('panelIn'); break;
-        case 'panelIn': this.panelA = Math.min(1, C.t / 1.2); if (C.t >= 1.2) this.nextCine('panel'); break;
-        case 'panel': this.panelA = 1; if (C.t > 3.4) this.nextCine('panelOut'); break;
-        case 'panelOut':
-          this.panelA = Math.max(0, 1 - C.t / 1.2);
-          if (C.t >= 1.2) { this.panelA = 0; this.beginRise(); }
+        case 'proud': if (C.t > 1.0) this.nextCine('emotion'); break;
+        case 'emotion': {
+          // La pareja, ya con la torta en la mesa, se mira
+          // un momento más (el compuesto de la mirada).
+          if (C.t > 1.4) this.startClosing();
           break;
+        }
+        case 'closing': this.updateClosing(dt); break;
         case 'rise': {
           if (xi.arrived && jo.arrived) {
             xi.expr = null; jo.expr = null;
@@ -3522,104 +3905,107 @@
       }
     }
     beginRise() {
-      // Se levantan y salen de la huella de la mesa por
-      // rutas (follow ignora la colisión): el control vuelve
-      // al llegar, ya fuera del mueble.
+      // Se levantan: el compuesto se retira y los actores
+      // reaparecen en sus asientos, con rutas a la franja
+      // libre; el control vuelve al llegar, ya fuera del
+      // sofá.
+      this.seatedPose = false;
+      this.xi.hidden = false; this.jose.hidden = false;
+      this.xi.x = FINALE.seatXi.x; this.xi.y = FINALE.seatXi.y;
+      this.jose.x = FINALE.seatJose.x; this.jose.y = FINALE.seatJose.y;
       this.xi.route = [[FINALE.outXi.x, FINALE.outXi.y]]; this.xi.speed = 132;
       this.jose.route = [[FINALE.outJose.x, FINALE.outJose.y]]; this.jose.speed = 132;
       this.nextCine('rise');
     }
+    // ---------- el cierre total (guion v2) ----------
+    // Tras la cinemática y ANTES de devolver el control: la
+    // carta completa a pantalla completa (el papel de
+    // carta-final.png con el texto renderizado encima, ver
+    // drawClosing) y luego la «foto» de la pareja — la
+    // imagen que más tiempo se queda. Cada fase se salta si
+    // su imagen no cargó (el precedente del castillo).
+    startClosing() {
+      this.close = { step: 'cartaIn', t: 0 };
+      this.closeAct = false;
+      this.nextCine('closing');
+      this.advanceClosing(); // salta de entrada las fases sin imagen
+    }
+    advanceClosing() {
+      const cl = this.close; if (!cl) return;
+      cl.t = 0;
+      if (cl.step === 'cartaIn' && !imgOk(cartaFinalImg)) { cl.step = 'fotoIn'; this.advanceClosing(); }
+      else if (cl.step === 'fotoIn' && !imgOk(fotoParejaImg)) { cl.step = 'fin'; }
+    }
+    updateClosing(dt) {
+      const cl = this.close;
+      if (!cl) { this.beginRise(); return; }
+      cl.t += dt;
+      const act = this.closeAct; this.closeAct = false;
+      switch (cl.step) {
+        case 'cartaIn': if (cl.t >= 0.8) { cl.step = 'carta'; cl.t = 0; } break;
+        case 'carta':
+          // A ritmo del jugador: se queda hasta ESPACIO/clic.
+          if (act) { cl.step = 'fotoIn'; this.advanceClosing(); }
+          break;
+        case 'fotoIn': if (cl.t >= 0.8) { cl.step = 'foto'; cl.t = 0; } break;
+        case 'foto':
+          // Permanencia mínima breve; luego avanza el jugador.
+          if (cl.t >= 2.5 && act) { cl.step = 'fin'; cl.t = 0; }
+          break;
+        case 'fin':
+          if (cl.t >= 2.4) {
+            D.completed = true; // la cita queda completada (y rejugable)
+            this.close = null;
+            this.beginRise();
+          }
+          break;
+      }
+    }
     skipCine() {
       // Salto de la cinemática (acción/ESPACIO, como las
       // demás del juego): la escena queda en su estado
-      // posterior — mesa servida, pastel revelado, sin panel.
+      // posterior — la torta en la mesa, Pollito orgulloso a
+      // su lado, la pareja de pie y el cierre ya presentado
+      // (la cita cuenta como completada).
       if (this.cine.st === 'rise') {
         this.xi.x = FINALE.outXi.x; this.xi.y = FINALE.outXi.y; this.xi.route = null;
         this.jose.x = FINALE.outJose.x; this.jose.y = FINALE.outJose.y; this.jose.route = null;
         this.xi.expr = null; this.jose.expr = null;
+        this.seatedPose = false; this.xi.hidden = false; this.jose.hidden = false;
         this.cine = { st: 'done', t: 0, placed: true };
         return;
       }
-      this.tableCloche = true; this.cakeShown = true; this.clocheAside = true;
-      this.revealPuffed = true; this.panelA = 0;
-      this.trayHeld = true; this.trayCloche = false;
+      this.tortaShown = true; this.tortaOnTable = true;
+      this.close = null; this.closeAct = false;
+      D.completed = true;
       const cat = this.cat;
       cat.elev = 0; cat.route = null; cat.moving = false;
-      cat.x = FINALE.catServe.x; cat.y = FINALE.catServe.y; cat.dir = 'up';
+      cat.hidden = true; // lo dibuja su PNG de orgullo
+      cat.x = FINALE.catProud.x; cat.y = FINALE.catProud.y; cat.dir = 'down';
+      this.catVis = 'proud';
       this.xi.expr = null; this.jose.expr = null;
       this.beginRise();
     }
-    // ---------- la puesta de la mesa (props 3D) ----------
+    // ---------- la puesta de la sala (props 3D) ----------
     // Corre en el pase de props de la casa (extraBoxes) SOLO
-    // en esta escena: cajas y cilindros reales, con oclusión
-    // y luz de la escena. Las llamas usan candleGlow (el
-    // parpadeo de velas del modo) y `emit` para brillar.
-    drawCloche(mb, cx, yBase, cz, r) {
-      mb.cyl(cx, yBase, cz, r, 2.6, '#c3c9d4', { top: '#dde2ea', r2: r * 0.88 });
-      mb.cyl(cx, yBase + 2.6, cz, r * 0.88, 4.2, '#ccd2dc', { top: '#e6ebf2', r2: r * 0.52 });
-      mb.cyl(cx, yBase + 6.8, cz, r * 0.52, 2.0, '#d5dbe4', { top: '#eef1f6', r2: r * 0.18 });
-      mb.cyl(cx, yBase + 8.8, cz, r * 0.18 + 0.7, 1.6, '#8f96a3', { top: '#aab1bd' });
-    }
+    // en esta escena: los dos candelabros de la mesa de
+    // centro, con su llama parpadeante (candleGlow) y `emit`
+    // para brillar en la noche de velas. El resto de la
+    // puesta (la carta, la torta, la pareja sentada, el
+    // servicio de Pollito) son los PNG del guion v2 y se
+    // dibujan en draw() como billboards: meterlos en 3D
+    // rompería su estilo de recorte. (La puesta anterior —
+    // la mesa de fiesta con el pastelito y la campana —
+    // quedó retirada por el guion v2.)
     drawTableBoxes(mb) {
-      const T = FINALE.table, topY = T.top + 2.5, t = this.t;
-      // el mantel y el camino de mesa
-      mb.box(T.x - 4, T.top, T.z - 4, T.w + 8, 2.5, T.d + 8, '#efe6d0', { top: '#f7efdb' });
-      mb.box(T.x + 4, topY, T.cz - 13, T.w - 8, 1.2, 26, '#8e3b34', { top: '#a84a41' });
-      const surfY = topY + 1.2; // sobre el camino/mantel
-      // dos platos con su plato interior, frente a cada asiento
-      for (const [px, pz] of [[FINALE.seatXi.x, FINALE.seatXi.y + 10], [FINALE.seatJose.x, FINALE.seatJose.y - 10]]) {
-        mb.cyl(px, surfY, pz, 8.5, 1.5, '#e9e4d8', { top: '#fbf8ef', r2: 6.5 });
-        mb.cyl(px, surfY + 1.5, pz, 5.5, 0.8, '#f4efe2', { top: '#fffdf6', r2: 5.5 });
-      }
-      // dos copas
-      mb.cyl(FINALE.seatXi.x + 14, surfY, FINALE.seatXi.y + 3, 2.3, 5.5, '#b9d2de', { top: '#dceef6', r2: 1.9 });
-      mb.cyl(FINALE.seatJose.x - 14, surfY, FINALE.seatJose.y - 3, 2.3, 5.5, '#b9d2de', { top: '#dceef6', r2: 1.9 });
-      // dos candelabros con su llama parpadeante, flanqueando el centro
-      [836, 894].forEach((cx, i) => {
+      const T = FINALE.ctable, surfY = T.top + 2.5, t = this.t;
+      [612, 658].forEach((cx, i) => {
         mb.cyl(cx, surfY, T.cz, 3.2, 1.2, '#8a6f3c', { top: '#a8874c' });
         mb.cyl(cx, surfY + 1.2, T.cz, 1.4, 6.5, '#e7dcc2', { top: '#f4ecd8' });
         const fh = 2.4 + candleGlow(t, i * 3 + 1) * 1.8;
         mb.box(cx - 1, surfY + 7.7, T.cz - 1, 2, fh, 2, '#ffab3d', { emit: true });
         mb.box(cx - 0.5, surfY + 8.1, T.cz - 0.5, 1, fh * 0.6, 1, '#ffe9a8', { emit: true });
       });
-      // el pastelito (bajo la campana desde 'place'; visible
-      // al levantarse) con su vela encendida
-      if (this.tableCloche) {
-        const cx = FINALE.cake.x, cz = FINALE.cake.z;
-        mb.cyl(cx, surfY, cz, 8.5, 5.5, '#eec3d0', { top: '#f9e8ee' });
-        mb.cyl(cx, surfY + 5.5, cz, 6, 4, '#f9e8ee', { top: '#fff4f8', r2: 6 });
-        mb.cyl(cx, surfY + 9.5, cz, 0.9, 4.2, '#e23b4e', { top: '#f0566c' });
-        const fh = 2.2 + candleGlow(t, 7) * 1.4;
-        mb.box(cx - 0.8, surfY + 13.7, cz - 0.8, 1.6, fh, 1.6, '#ffab3d', { emit: true });
-      }
-      // la campana: en la bandeja de Pollito, sobre el pastel
-      // en la mesa, levantándose en 'reveal' o ya a un lado
-      if (this.trayHeld && this.trayCloche && !this.cat.hidden) {
-        const ty = this.trayY();
-        mb.box(this.cat.x - 13, ty, this.cat.y - 9, 26, 1.6, 18, '#aeb5c0', { top: '#ccd2dc' });
-        this.drawCloche(mb, this.cat.x, ty + 1.6, this.cat.y, 9);
-      } else if (this.trayHeld && !this.cat.hidden) {
-        // tras servir, Pollito se queda con la bandeja vacía
-        const ty = this.trayY();
-        mb.box(this.cat.x - 13, ty, this.cat.y - 9, 26, 1.6, 18, '#aeb5c0', { top: '#ccd2dc' });
-      }
-      if (this.tableCloche && !this.clocheAside) {
-        let cx = FINALE.cake.x, yB = surfY;
-        if (this.cine.st === 'reveal') {
-          const k = Math.min(1, this.cine.t / 1.4), e = k * k * (3 - 2 * k);
-          cx = FINALE.cake.x + (FINALE.clocheAside.x - FINALE.cake.x) * e;
-          yB = surfY + Math.sin(k * Math.PI) * 24;
-        }
-        this.drawCloche(mb, cx, yB, FINALE.cake.z, 11);
-      }
-      if (this.clocheAside) this.drawCloche(mb, FINALE.clocheAside.x, surfY, FINALE.clocheAside.z, 11);
-    }
-    // La altura de la bandeja de Pollito: sobre su cabeza,
-    // con el balanceo de su paso (o su respiración, quieto).
-    trayY() {
-      const cat = this.cat;
-      const bob = cat.moving ? Math.sin(cat.step * 2) * 1.1 : Math.sin(this.t * 2.2) * 0.5;
-      return 47 + cat.elev + (cat.jy || 0) + bob;
     }
     draw(dt) {
       this.home.draw(dt);
@@ -3633,24 +4019,94 @@
       }
       if (this.phase !== 'home') return;
       const cineOn = this.cine.st !== 'idle' && this.cine.st !== 'done';
-      if (!cineOn && this.nearTable) { const p = this.xi.head(44); G.prompt(c, 'ESPACIO: sentarse', p.x, p.y); }
+      // --- la puesta de la sala (los PNG del guion v2,
+      // billboards sobre la casa) ---
+      // la carta ya leída, sobre la mesa de centro (si la
+      // torta ya está puesta, se corre a un lado)
+      drawHomeImg(this.home, c, cartaSobreImg, this.tortaOnTable ? 604 : FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, 14, false);
+      // la torta: la pieza central de la mesa
+      if (this.tortaOnTable) drawHomeImg(this.home, c, tortaMesaImg, FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, 30, false);
+      // la pareja sentada: el compuesto de la lectura (en
+      // 'reading' alterna los dos frames de pasar la hoja;
+      // en la mirada y la emoción, el frame de mirarse)
+      if (this.seatedPose) {
+        const img = this.cine.st === 'reading'
+          ? (Math.floor(this.cine.t / 1.5) % 2 === 0 ? lecturaParejaImg : lecturaPareja2Img)
+          : lecturaPareja3Img;
+        drawHomeImg(this.home, c, img, FINALE.sofa.cx, 4, FINALE.sofa.cz + 6, 96, false);
+      }
+      // Pollito en su servicio (el actor del armario se
+      // dibuja solo; estos son sus PNG)
+      if (this.catVis === 'walk') {
+        const frame = pollitoWalkImgs[Math.floor(this.catWalkT / 0.13) % 4];
+        drawHomeImg(this.home, c, frame, this.cat.x, 0, this.cat.y, 76, this.catFlip);
+      } else if (this.catVis === 'place') {
+        drawHomeImg(this.home, c, pollitoDejaImg, this.cat.x, 0, this.cat.y, 76, this.catFlip);
+      } else if (this.catVis === 'proud') {
+        drawHomeImg(this.home, c, pollitoOrgullosoImg, this.cat.x, 0, this.cat.y, 62, false);
+      }
+      // el panel de la lectura en pareja: el cierre de la
+      // carta y, al pie, la firma
+      if (this.cine.st === 'reading') {
+        drawCartaPanel(c, CARTA_TEXTOS.cierre, Math.min(1, this.cine.t * 2), CARTA_TEXTOS.firma, null);
+      }
+      if (!cineOn && this.nearSofa) { const p = this.xi.head(44); G.prompt(c, 'ESPACIO: sentarse', p.x, p.y); }
       else if (!cineOn && this.nearDoor) { const p = this.xi.head(46); G.prompt(c, 'ESPACIO: salir a las praderas', p.x, p.y); }
-      if (this.panelA > 0) this.drawPanel(c);
+      // el cierre total, a pantalla completa, sobre todo
+      if (this.close) this.drawClosing(c);
     }
-    // El panel sereno del texto final: velo tenue, tarjeta
-    // oscura semitransparente y el texto centrado. Sin
-    // emojis: es el cierre del regalo.
-    drawPanel(c) {
-      const a = this.panelA;
-      c.globalAlpha = a;
-      c.fillStyle = 'rgba(10,7,16,0.45)'; c.fillRect(0, 0, 640, 360);
-      const w = 430, h = 92, x = (640 - w) / 2, y = 128;
-      c.fillStyle = 'rgba(18,13,26,0.88)';
-      c.beginPath(); c.roundRect(x, y, w, h, 10); c.fill();
-      c.strokeStyle = 'rgba(255,205,120,0.55)'; c.lineWidth = 1.5;
-      c.beginPath(); c.roundRect(x, y, w, h, 10); c.stroke();
-      G.text(c, FINAL_TEXT, 320, y + h / 2 + 1, { size: 17, color: '#ffe9c4', align: 'center' });
-      c.globalAlpha = 1;
+    // El cierre total a pantalla completa: la carta con su
+    // texto COMPLETO renderizado encima (compuesto desde
+    // CARTA_TEXTOS, en la zona limpia central del papel:
+    // corregir el texto no rehace el arte), la «foto» de la
+    // pareja y la tarjeta de fin. Sin emojis: es el cierre
+    // del regalo.
+    drawClosing(c) {
+      const cl = this.close;
+      const fade = (t, dur) => Math.max(0, Math.min(1, t / dur));
+      if (cl.step === 'cartaIn' || cl.step === 'carta') {
+        const a = cl.step === 'carta' ? 1 : fade(cl.t, 0.8);
+        if (imgOk(cartaFinalImg)) {
+          c.save(); c.globalAlpha = a;
+          c.drawImage(cartaFinalImg, 0, 0, 640, 360);
+          c.restore();
+        } else { c.fillStyle = '#17101f'; c.fillRect(0, 0, 640, 360); }
+        if (cl.step === 'carta') {
+          const paras = [CARTA_TEXTOS.apertura, CARTA_TEXTOS.plaza, CARTA_TEXTOS.sanangel,
+            CARTA_TEXTOS.aero, CARTA_TEXTOS.castillo, CARTA_TEXTOS.cierre];
+          const lines = [];
+          for (const p of paras) { lines.push(...wrapCartaText(c, p, 10.5, 292)); lines.push(''); }
+          lines.pop();
+          let y = 74;
+          for (const l of lines) {
+            if (l) G.text(c, l, 320, y, { size: 10.5, bold: false, color: '#4a3423', stroke: false });
+            y += 13.5;
+          }
+          G.text(c, CARTA_TEXTOS.firma, 470, y + 2, { size: 11, color: '#7a4a2b', align: 'right', stroke: false });
+          G.text(c, 'ESPACIO: seguir', 320, 344, { size: 9, bold: false, color: '#8a6f4d', stroke: false });
+        }
+        return;
+      }
+      if (cl.step === 'fotoIn' || cl.step === 'foto') {
+        const a = cl.step === 'foto' ? 1 : fade(cl.t, 0.8);
+        c.fillStyle = '#0d0912'; c.fillRect(0, 0, 640, 360);
+        if (imgOk(fotoParejaImg)) {
+          c.save(); c.globalAlpha = a;
+          c.drawImage(fotoParejaImg, 0, 0, 640, 360);
+          c.restore();
+        }
+        if (cl.step === 'foto' && cl.t >= 2.5) {
+          G.text(c, 'ESPACIO: seguir', 320, 344, { size: 9, bold: false, color: 'rgba(255,240,214,0.75)', stroke: false });
+        }
+        return;
+      }
+      // 'fin': la tarjeta de fin, sencilla
+      const a = fade(cl.t, 0.8);
+      c.fillStyle = '#0d0912'; c.fillRect(0, 0, 640, 360);
+      c.save(); c.globalAlpha = a;
+      G.text(c, 'FIN', 320, 168, { size: 30, color: '#ffe9c4' });
+      G.text(c, FINAL_TEXT, 320, 198, { size: 13, color: '#d8c49a', stroke: false });
+      c.restore();
     }
   }
 
@@ -3709,6 +4165,13 @@
     ensureMuteBtn(); // el botón de silencio vive con el modo (visible solo con body.date-mode)
     D.active = true; D.state = 'depa'; D.arrived = false; D.joseJoined = false; D.clockRunning = false;
     D.clockStarted = false; // re-entrar a la cita re-arma el arranque: volverá a ocurrir al llegar a la plaza
+    // La carta (guion v2): cada partida empieza con la carta
+    // sin abrir, ningún fragmento mostrado y la cita sin
+    // completar; la banda, vacía.
+    D.cartaAbierta = false;
+    D.cartaFrag = { plaza: false, sanangel: false, aero: false, castillo: false };
+    D.completed = false;
+    cartaBand.text = null; cartaBand.pending = null; cartaBand.t = 0; cartaBand.total = 0;
     if (G.S) G.S.phase = 'date';
     if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.add('date-mode');
     D.scene = new DateScene(onDone);
@@ -3717,6 +4180,9 @@
   }
   function stop() {
     D.active = false; D.state = 'idle'; D.clockRunning = false; D.clockStarted = false; fbRunning = false;
+    D.cartaAbierta = false; D.completed = false;
+    D.cartaFrag = { plaza: false, sanangel: false, aero: false, castillo: false };
+    cartaBand.text = null; cartaBand.pending = null; cartaBand.t = 0; cartaBand.total = 0;
     skipArmed = false; // sin arranque en curso: el metadata tardío ya no debe saltar nada
     if (song && typeof song.pause === 'function') { try { song.pause(); } catch (e) {} }
     if (doorSfx && typeof doorSfx.pause === 'function') { try { doorSfx.pause(); } catch (e) {} }
@@ -3744,6 +4210,9 @@
       // Gancho del SFX de la Puerta (sección Q): el elemento
       // propio de la grabación y su disparo, para contar
       // cuántas veces suena por cruce en el harness.
-      getDoorSfx: () => doorSfx, playDoorClose },
+      getDoorSfx: () => doorSfx, playDoorClose,
+      // Ganchos de la carta (guion v2, secciones F/O/S): los
+      // textos, la regla de lectura, la banda y su disparo.
+      CARTA_TEXTOS, cartaReadTime, cartaBand, showCartaBand, updateCartaBand },
   };
 })();
