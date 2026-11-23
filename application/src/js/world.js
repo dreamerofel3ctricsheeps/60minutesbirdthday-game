@@ -741,7 +741,7 @@
   G.FONT = '"Trebuchet MS", "Segoe UI", Verdana, sans-serif';
   G.text = function (ctx, str, x, y, o) {
     o = o || {};
-    ctx.font = `${o.bold === false ? '' : 'bold '}${o.size || 9}px ${G.FONT}`;
+    ctx.font = `${o.bold === false ? '' : 'bold '}${o.size || 9}px ${o.font || G.FONT}`;
     ctx.textAlign = o.align || 'center'; ctx.textBaseline = 'middle';
     if (o.stroke !== false) { ctx.lineWidth = o.lw || 3; ctx.strokeStyle = o.stroke || '#1c1826'; ctx.lineJoin = 'round'; ctx.strokeText(str, x, y); }
     ctx.fillStyle = o.color || '#fff'; ctx.fillText(str, x, y);

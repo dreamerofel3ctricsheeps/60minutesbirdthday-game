@@ -2533,6 +2533,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     !dateSrcW.includes('drawCartaPanel'),
     '');
 
+  // --- la FUENTE PIXEL de los textos de la carta
+  // (pedido de Jose: «una fuente pixel de verdad»):
+  // Pixelify Sans autoalojada, SOLO para los textos de
+  // la carta en escena; la instrucción y el resto de la
+  // UI no cambian de fuente.
+  check('el estilo display usa la fuente PIXEL (Pixelify Sans primera en la pila, con la del motor como respaldo elegante por si no carga)',
+    ESTW.font.includes('"Pixelify Sans"') && ESTW.font.includes('Trebuchet MS'),
+    `font=${ESTW.font}`);
+  const fontFileW = path.join(SRC, '..', 'assets', 'date', 'pixelify-sans.woff2');
+  const oflFileW = path.join(SRC, '..', 'assets', 'date', 'PixelifySans-OFL.txt');
+  check('la fuente pixel VIVE en el repo (assets/date/, la carpeta que la copia de runtime lleva a dist) y su licencia OFL la acompaña en la misma carpeta',
+    fs.existsSync(fontFileW) && fs.statSync(fontFileW).size > 5000 && fs.existsSync(oflFileW),
+    fontFileW);
+  check('la URL de carga es la del archivo del repo y start() dispara la carga al arrancar la cita (el primer fragmento la estrena cargada)',
+    DM.debug.CARTA_FONT_URL === 'assets/date/pixelify-sans.woff2' && dateSrcW.includes('loadCartaFont();'),
+    `url=${DM.debug.CARTA_FONT_URL}`);
+  const recFontW = mkRecW();
+  DM.debug.showCartaBand(fragW);
+  DM.debug.updateCartaBand(2.3); // permanencia plena (pasada la entrada de 0,8 s)
+  DM.debug.drawCartaBand(recFontW.ctx);
+  check('el DIBUJO del fragmento usa la fuente pixel a su tamaño y SIN negrita (la pixel no se falsifica)',
+    recFontW.ctx.font.includes('Pixelify Sans') && recFontW.ctx.font.includes(`${ESTW.size}px`) && !recFontW.ctx.font.includes('bold'),
+    `font=${recFontW.ctx.font}`);
+  check('la ENVOLTURA mide con EXACTAMENTE la misma cadena de fuente que el dibujo (la de CARTA_DISPLAY, sin negrita): sin regresión a la pila vieja en el camino de los fragmentos',
+    dateSrcW.includes('`${size}px ${CARTA_DISPLAY.font}`') && !dateSrcW.includes('bold ${size}px ${CARTA_DISPLAY.font}'),
+    '');
+  DM.debug.updateCartaBand(10); // la banda de la prueba queda vacía
+
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);
 

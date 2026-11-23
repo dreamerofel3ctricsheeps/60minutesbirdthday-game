@@ -1234,34 +1234,69 @@
   // aparece con fundido y se desvanece en el aire, fijado
   // en la capa más alta de la escena (se dibuja al final
   // de cada draw, como se dibujaba la banda de papel).
-  // TIPOGRAFÍA: el proyecto no tiene ninguna fuente pixel
-  // ni display (ni webfont ni archivo: solo la pila de
-  // G.FONT, «Trebuchet MS»…, que es también la de los
-  // textos grandes del juego — rótulos de 20–30 px en
-  // negrita con contorno grueso). Se compone con ella a
-  // 19 px en negrita, crema cálido sobre contorno oscuro
-  // suave y un resplandor dorado tenue (shadowBlur) que lo
-  // despega del fondo sin caja: lo más cercano a «pixel
-  // art bonita» que el motor puede dar sin traer una
-  // fuente nueva. Si un día entra una fuente pixel al
-  // proyecto, basta cambiar CARTA_DISPLAY.font.
+  // La FUENTE PIXEL de los textos de la carta (pedido de
+  // Jose, 2026-11-22: «añade una fuente pixel de verdad»).
+  // Pixelify Sans (The Pixelify Sans Project Authors;
+  // licencia OFL 1.1, que viaja en el repo:
+  // assets/date/PixelifySans-OFL.txt), AUTOALOJADA en
+  // assets/date/pixelify-sans.woff2 — sin CDN: el juego
+  // funciona local y offline, y la copia de runtime
+  // (tools/copy-runtime-assets.cjs) la lleva a
+  // dist/assets/date/ como al resto del arte de la cita.
+  // El archivo es la instancia REGULAR (wght 400) de la
+  // variable: los textos de la carta van SIN negrita (no
+  // se falsifica) en la medición y en el dibujo.
+  // Cobertura española verificada sobre el cmap del
+  // woff2 final con fontTools: á é í ó ú ü ñ ¡ ¿ y las
+  // mayúsculas acentuadas (Á É Í Ó Ú Ü Ñ), todas
+  // presentes (también «» — … y las comillas
+  // tipográficas).
+  // Tamaño: el píxel de diseño de la fuente mide ≈100
+  // de sus 1000 unidades por em (medido sobre el propio
+  // archivo: el bloque del punto es 101×101), así que
+  // rinde nítida en múltiplos de 10 px: 20 px para el
+  // cuerpo y para la firma.
+  const CARTA_FONT_URL = 'assets/date/pixelify-sans.woff2';
+  let cartaFontPedida = false;
+  // Se pide UNA vez, al arrancar la cita (start), para
+  // que el primer fragmento ya la estrene cargada. Si la
+  // FontFace API no está o la carga falla, los textos
+  // caen con elegancia a la pila de respaldo de
+  // CARTA_DISPLAY.font (la del motor): nunca se bloquea
+  // ni se rompe el dibujo por la fuente.
+  function loadCartaFont() {
+    if (cartaFontPedida) return;
+    cartaFontPedida = true;
+    try {
+      if (typeof FontFace === 'undefined' || typeof document === 'undefined' || !document.fonts) return;
+      const ff = new FontFace('Pixelify Sans', `url("${CARTA_FONT_URL}")`);
+      ff.load().then((loaded) => { try { document.fonts.add(loaded); } catch (e) {} }).catch(() => {});
+    } catch (e) { /* respaldo: la pila de CARTA_DISPLAY.font */ }
+  }
+  // TIPOGRAFÍA de los textos de la carta en escena:
+  // Pixelify Sans a 20 px SIN negrita, crema cálido
+  // sobre contorno oscuro suave (lw 3: el contorno
+  // grueso de los rótulos ensuciaría los píxeles) y un
+  // resplandor dorado tenue (shadowBlur 7) que lo
+  // despega del fondo sin caja.
   // POSICIÓN: columna lateral IZQUIERDA fija (x 30,
   // ancho 250), con el bloque centrado en vertical dentro
   // de la columna: no tapa a la pareja, que camina por el
   // centro/abajo, ni el botón de silencio (arriba a la
   // derecha, en el DOM).
   const CARTA_DISPLAY = {
-    font: '"Trebuchet MS", "Segoe UI", Verdana, sans-serif', // = G.FONT (la del motor)
-    size: 19, firmaSize: 13.5,
+    font: '"Pixelify Sans", "Trebuchet MS", "Segoe UI", Verdana, sans-serif', // la pixel de la carta + el respaldo del motor
+    size: 20, firmaSize: 20,
     colX: 30, colW: 250,
     color: '#ffe9c4', firmaColor: '#f2cd8d',
-    stroke: 'rgba(26,15,8,0.88)', glow: 'rgba(255,186,92,0.50)',
+    stroke: 'rgba(26,15,8,0.88)', glow: 'rgba(255,186,92,0.38)',
   };
   // Corte de líneas del texto display: se mide con la
-  // MISMA fuente con la que G.text lo dibuja (negrita),
-  // para que ninguna línea se salga de la columna.
+  // MISMA fuente con la que G.text lo dibuja (la cadena
+  // de CARTA_DISPLAY, SIN negrita), para que ninguna
+  // línea se salga de la columna.
   function wrapCartaDisplay(c, text, size, maxW) {
-    c.font = `bold ${size}px ${CARTA_DISPLAY.font}`;
+    c.font = `${size}px ${CARTA_DISPLAY.font}`;
     const lines = [];
     for (const para of String(text).split('\n')) {
       const words = para.split(' '); let cur = '';
@@ -1283,24 +1318,25 @@
     o = o || {};
     if (!text || !(alpha > 0)) return;
     const D8 = CARTA_DISPLAY, size = D8.size, lh = size * 1.32;
+    const firmaLh = Math.round(D8.firmaSize * 1.32);
     const lines = wrapCartaDisplay(c, text, size, D8.colW);
     const firmaLines = o.firma ? wrapCartaDisplay(c, o.firma, D8.firmaSize, D8.colW) : [];
-    const totalH = lines.length * lh + (firmaLines.length ? 8 + firmaLines.length * 18 : 0) + (o.hint ? 22 : 0);
+    const totalH = lines.length * lh + (firmaLines.length ? 8 + firmaLines.length * firmaLh : 0) + (o.hint ? 22 : 0);
     const cx = D8.colX + D8.colW / 2;
     let y = 180 - totalH / 2 + lh / 2;
     c.save();
     c.globalAlpha = Math.max(0, Math.min(1, alpha));
     if (o.drift) c.translate(0, -o.drift);
-    c.shadowColor = D8.glow; c.shadowBlur = 13;
+    c.shadowColor = D8.glow; c.shadowBlur = 7;
     lines.forEach((l) => {
-      if (l) G.text(c, l, cx, y, { size, color: D8.color, lw: 5, stroke: D8.stroke });
+      if (l) G.text(c, l, cx, y, { size, bold: false, font: D8.font, color: D8.color, lw: 3, stroke: D8.stroke });
       y += lh;
     });
     if (firmaLines.length) {
       y += 8;
       firmaLines.forEach((l) => {
-        if (l) G.text(c, l, cx, y, { size: D8.firmaSize, color: D8.firmaColor, lw: 4, stroke: D8.stroke });
-        y += 18;
+        if (l) G.text(c, l, cx, y, { size: D8.firmaSize, bold: false, font: D8.font, color: D8.firmaColor, lw: 3, stroke: D8.stroke });
+        y += firmaLh;
       });
     }
     c.shadowBlur = 0; c.shadowColor = 'transparent';
@@ -4617,6 +4653,7 @@
   function start(onDone) {
     createSong();
     createDoorSfx(); // la Puerta queda precargada: el primer cruce no espera al archivo
+    loadCartaFont(); // la fuente pixel de los textos de la carta se pide ya: el primer fragmento la estrena cargada
     ensureMuteBtn(); // el botón de silencio vive con el modo (visible solo con body.date-mode)
     D.active = true; D.state = 'depa'; D.arrived = false; D.joseJoined = false; D.clockRunning = false;
     D.clockStarted = false; // re-entrar a la cita re-arma el arranque: volverá a ocurrir al llegar a la plaza
@@ -4676,6 +4713,7 @@
       // instrucción CON recuadro) para verificar que el
       // papel quedó solo en la instrucción.
       CARTA_DISPLAY, cartaBandFx, drawCartaTexto, drawCartaBand, drawCartaObjetivo,
+      CARTA_FONT_URL, loadCartaFont,
       // Ganchos del playtest de la carta (sección U): la
       // posición derivada de la mesa de centro, la altura de
       // su tablero, la instrucción de objetivo con su

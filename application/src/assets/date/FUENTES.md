@@ -640,3 +640,28 @@
 - **Uso:** la cuarta foto de la pila del cierre
   total, justo debajo de la del sofá, en el orden
   del recorrido.
+
+## pixelify-sans.woff2 — La tipografía pixel de los textos de la carta
+- **Fuente:** Pixelify Sans, instancia regular (wght 400)
+- **Autores:** The Pixelify Sans Project Authors
+  (https://github.com/eifetx/Pixelify-Sans)
+- **Origen:** repo oficial de Google Fonts (`ofl/pixelifysans`),
+  descargada el 2026-11-22. Autoalojada: sin CDN, el juego
+  funciona local y offline.
+- **Licencia:** SIL Open Font License 1.1 — el texto completo
+  viaja junto a la fuente en `PixelifySans-OFL.txt`, en esta
+  misma carpeta.
+- **Procesado:** la fuente variable original se fijó en su
+  instancia regular (wght 400) y se convirtió a woff2 con
+  fontTools: 14,8 KB. Sin negrita (no se falsifica): los
+  textos de la carta se componen en regular.
+- **Cobertura española VERIFICADA** sobre el cmap del woff2
+  final con fontTools: á é í ó ú ü ñ ¡ ¿ y Á É Í Ó Ú Ü Ñ,
+  todas presentes (también « », —, … y las comillas
+  tipográficas).
+- **Uso:** SOLO los textos de la carta en escena de «La Cita»
+  (la apertura, los 4 fragmentos de la caminata y el
+  cierre+firma del finale), cargada con la FontFace API al
+  arrancar el modo. El resto de la UI — y la carta
+  fullscreen del cierre total — sigue con la fuente del
+  motor.
