@@ -506,7 +506,7 @@
   los frames de caminata y en `pollito-torta.png`.
 - **Procesado:** fondo magenta por clave de color,
   erosión de fleco y borde blanco por dilatación.
-  Salida: 236 × 181.
+  Salida: 236 × 252.
 - **Uso:** el ítem que queda sobre la mesa de centro
   de la sala tras el depósito de Pollito en el Acto 3;
   pieza central de la mesa (reemplaza al pastelito de
