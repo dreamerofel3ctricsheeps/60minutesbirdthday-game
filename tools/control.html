@@ -17,6 +17,8 @@
   .hint{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;color:#5a5270}
   #act{position:absolute;right:7vw;bottom:50%;transform:translateY(50%);width:128px;height:128px;border-radius:50%;background:#ffb86b;color:#3a2a12;font-weight:800;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 0 #c98a3f}
   #act.on{transform:translateY(calc(50% + 4px));box-shadow:0 2px 0 #c98a3f;background:#ffcf9a}
+  #pad,.half,#joyHalf,#actHalf,#act,#menuBtn,#ui{touch-action:none}
+  #uiList{touch-action:pan-y}.uiBtn{touch-action:manipulation}
   /* Ventana de opciones reflejadas */
   #ui{position:fixed;inset:0;background:rgba(10,8,16,.92);z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;padding:18px;gap:10px}
   #uiTitle{font-size:16px;color:#e8e4f0;text-align:center;margin-bottom:4px;max-width:92vw}
@@ -36,9 +38,8 @@
 <script>
 (function () {
   'use strict';
-  // anti-zoom (iOS ignora user-scalable=no)
-  let _lastTap = 0;
-  document.addEventListener('touchend', (e) => { const n = Date.now(); if (n - _lastTap < 350) e.preventDefault(); _lastTap = n; }, { passive: false });
+  // anti-zoom: touch-action:none en los controles (abajo) evita el doble-toque;
+  // aquí solo cubrimos el pinch de iOS y el dblclick, sin tocar los eventos de los botones.
   document.addEventListener('gesturestart', (e) => e.preventDefault());
   document.addEventListener('dblclick', (e) => e.preventDefault());
 
@@ -86,9 +87,10 @@
 
   // acción
   const act = document.getElementById('act');
-  act.addEventListener('pointerdown', e => { e.preventDefault(); act.classList.add('on'); post({ t: 'act', down: true }); act.setPointerCapture(e.pointerId); });
-  const up = () => { act.classList.remove('on'); post({ t: 'act', down: false }); };
+  act.addEventListener('pointerdown', e => { act.classList.add('on'); post({ t: 'act', down: true }); try { act.setPointerCapture(e.pointerId); } catch (x) {} });
+  const up = () => { if (!act.classList.contains('on')) return; act.classList.remove('on'); post({ t: 'act', down: false }); };
   act.addEventListener('pointerup', up); act.addEventListener('pointercancel', up);
+  act.addEventListener('pointerleave', up); act.addEventListener('lostpointercapture', up);
   document.addEventListener('visibilitychange', () => { if (document.hidden) { sendJoy(0, 0); up(); } });
 })();
 </script>
