@@ -460,9 +460,11 @@
 - **Decisión de Jose (2026-11-22):** la foto del cierre
   es esta pieza en pixel art, parte del juego — no es un
   marcador de posición para una foto real.
-- **Uso:** última imagen del cierre total del guion v2,
-  después de la imagen de la carta; tras ella, fundido y
-  tarjeta de fin.
+- **Uso:** la quinta y última foto de la PILA del
+  cierre total (el álbum que sigue a la carta): queda
+  arriba de la pila y se expande a pantalla completa
+  — la imagen que más tiempo se queda —; tras ella,
+  fundido y tarjeta de fin.
 
 ## pollito-torta-walk-1.png … pollito-torta-walk-4.png — Pollito trae la torta (ciclo de caminata)
 - **Arte original del juego**: ciclo de caminata de 4
@@ -586,3 +588,55 @@
 - **Uso:** el Acto 3 del guion v2: el beat justo
   después de terminar la carta (cierre y firma) y
   antes de que Pollito llegue con la torta.
+
+## foto-plaza.png — La «foto» de la plaza (álbum del cierre total)
+- **Arte original del juego**: la foto del recorrido
+  en la plaza, en el mismo pixel art detallado y
+  cálido de `foto-pareja.png` — la Catedral con sus
+  dos torres dominando el fondo, el puesto de tacos
+  con su toldo a rayas a un lado, el vocho azul
+  pasando por la calle, papel picado sobre la calle
+  empedrada y la pareja caminando de la mano y
+  sonriendo hacia la cámara —. Salida: 1280 × 720.
+- **Uso:** la primera foto de la pila del cierre
+  total (el álbum tras la carta): se coloca sobre
+  la mesa como foto impresa, en el orden del
+  recorrido.
+
+## foto-sanangel.png — La «foto» de San Ángel (álbum del cierre total)
+- **Arte original del juego**: la foto del recorrido
+  en San Ángel al atardecer, en el mismo pixel art
+  detallado de `foto-pareja.png` — la pileta de
+  piedra, las casas coloniales de colores, el árbol
+  grande con su anillo de velitas encendidas en la
+  base, pétalos rosas en el aire crepuscular y la
+  pareja juntita bajo el árbol, casi abrazándose —.
+  Salida: 1280 × 720.
+- **Uso:** la segunda foto de la pila del cierre
+  total, en el orden del recorrido.
+
+## foto-aeropuerto.png — La «foto» del aeropuerto (álbum del cierre total)
+- **Arte original del juego**: la foto del recorrido
+  en el aeropuerto, en el mismo pixel art detallado
+  de `foto-pareja.png` — el ventanal de la terminal
+  con el 737 blanco estacionado fuera, los letreros
+  de «Salidas» colgando del techo, las maletas y el
+  carrito a un lado, y la pareja de espaldas junto
+  al ventanal, señalando el avión —. Salida:
+  1280 × 720.
+- **Uso:** la tercera foto de la pila del cierre
+  total, en el orden del recorrido.
+
+## foto-praderas.png — La «foto» de las praderas (álbum del cierre total)
+- **Arte original del juego**: la foto del recorrido
+  en las praderas, en el mismo pixel art detallado
+  de `foto-pareja.png` — el prado verde lleno de
+  flores con el pasto al viento, el castillo
+  flotante de patas mecánicas derivando entre las
+  nubes al fondo, un Calcifer sobre su tronquito a
+  un lado y la pareja en primer plano mirando
+  hacia el castillo, sonriendo —. Salida:
+  1280 × 720.
+- **Uso:** la cuarta foto de la pila del cierre
+  total, justo debajo de la del sofá, en el orden
+  del recorrido.
