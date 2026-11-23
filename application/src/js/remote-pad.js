@@ -1,20 +1,27 @@
-/* Mando móvil (LAN): empareja un teléfono por bus SSE (relay tools/relay.cjs) y:
+/* Mando móvil: empareja un teléfono por bus SSE y:
    - alimenta el input del juego (G.input.joySet + touchDown/Up('action')),
    - abre el menú de pausa desde el teléfono (G.setPaused),
    - REFLEJA al teléfono los menús/decisiones clic-only (pausa, overlays y los
      bloques .decision del chat) como botones; al elegir en el teléfono, hace
      clic en el botón real del navegador.
-   Requiere: npm run build && npm run relay. */
+   Dos modos con el MISMO protocolo: en LAN (http) manda el relay local
+   (tools/relay.cjs: npm run build && npm run relay, sirve todo desde el
+   mismo origen); en internet (https) manda el relay online, un Worker de
+   Cloudflare con su Durable Object por sala (cloudflare/relay-worker.js),
+   y el juego lo consume con CORS desde su propio origen. */
 (function (root) {
   'use strict';
   const G = (root.G = root.G || {});
   if (typeof document === 'undefined') { G.RemotePad = { open() {}, hide() {}, disconnect() {} }; return; }
   const PID = 'remote';
-  function code() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += a[Math.random() * a.length | 0]; return s; }
+  // Base del relay: '' en LAN (mismo origen) o el origen del Worker online.
+  const RELAY = location.protocol === 'https:' ? 'https://1mtp-relay.dreamerofel3ctricsheeps.workers.dev' : '';
+  // 8 caracteres: en internet la sala es la única llave del mando (en LAN da igual, nadie teclea el código).
+  function code() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 8; i++) s += a[Math.random() * a.length | 0]; return s; }
 
   let es = null, room = null, panel = null, curBox = null, lastSig = null, mo = null;
 
-  function send(obj) { if (!room) return; fetch('/send?room=' + room + '&from=game', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) }).catch(() => {}); }
+  function send(obj) { if (!room) return; fetch(RELAY + '/send?room=' + room + '&from=game', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) }).catch(() => {}); }
 
   // ---- recibir del teléfono ----
   function fromPad(m) {
@@ -69,11 +76,17 @@
 
   async function open() {
     if (panel) { panel.style.display = 'flex'; return; }
-    let lan = null; try { lan = await fetch('/lan').then(r => r.json()); } catch (e) {}
-    if (!lan) { alert('El mando necesita el servidor relay.\nEn tu computadora:\n  npm run build && npm run relay'); return; }
     room = code();
-    build('http://' + lan.ip + ':' + lan.port + '/control?room=' + room);
-    es = new EventSource('/events?room=' + room + '&role=game');
+    if (RELAY) {
+      // Online: la página del mando vive en el origen del Worker.
+      build(RELAY + '/control?room=' + room);
+    } else {
+      // LAN: el relay local reporta su IP en /lan y sirve la página.
+      let lan = null; try { lan = await fetch('/lan').then(r => r.json()); } catch (e) {}
+      if (!lan) { alert('El mando necesita el servidor relay.\nEn tu computadora:\n  npm run build && npm run relay'); return; }
+      build('http://' + lan.ip + ':' + lan.port + '/control?room=' + room);
+    }
+    es = new EventSource(RELAY + '/events?room=' + room + '&role=game');
     es.onmessage = (e) => { try { fromPad(JSON.parse(e.data)); } catch (x) {} };
     mo = new MutationObserver(scheduleScan);
     for (const id of ['msgs', 'pauseov', 'overlay']) { const n = document.getElementById(id); if (n) mo.observe(n, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] }); }
@@ -89,12 +102,12 @@
     panel = document.createElement('div'); panel.className = 'rp-panel';
     panel.innerHTML =
       '<div class="rp-box"><div class="rp-title">📱 Tu teléfono como mando</div>' +
-      '<div class="rp-sub">Escanea con la cámara del teléfono (<b>misma Wi-Fi</b>):</div>' +
+      '<div class="rp-sub">Escanea con la cámara del teléfono' + (location.protocol === 'https:' ? '' : ' (<b>misma Wi-Fi</b>)') + ':</div>' +
       '<img class="rp-qr" alt="QR del mando"><div class="rp-sub">o abre la dirección a mano:</div>' +
       '<div class="rp-url"></div><div class="rp-status">Esperando teléfono…</div>' +
       '<button class="rp-close">Empezar a jugar</button></div>';
     panel.querySelector('.rp-url').textContent = url;
-    panel.querySelector('.rp-qr').src = '/qr?data=' + encodeURIComponent(url);
+    panel.querySelector('.rp-qr').src = RELAY + '/qr?data=' + encodeURIComponent(url);
     panel.querySelector('.rp-close').onclick = hide;
     document.body.appendChild(panel);
   }
