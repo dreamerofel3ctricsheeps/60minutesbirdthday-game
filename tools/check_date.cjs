@@ -2505,9 +2505,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     return { ctx, calls };
   };
   const ESTW = DM.debug.CARTA_DISPLAY;
-  check('el estilo display de los textos de la carta: letra GRANDE (≥17 px), columna LATERAL (la columna vive en la mitad izquierda, sin tapar a la pareja) y color crema cálido',
-    ESTW.size >= 17 && ESTW.colX >= 0 && ESTW.colX + ESTW.colW <= 320 && ESTW.color === '#ffe9c4',
-    `size=${ESTW.size}, col=${ESTW.colX}+${ESTW.colW}`);
+  check('el estilo display de los textos de la carta: letra GRANDE (≥17 px), columna LATERAL (la columna vive en la mitad izquierda, sin tapar a la pareja) y texto BLANCO (dirección de Jose: tono serio y cinematográfico)',
+    ESTW.size >= 17 && ESTW.colX >= 0 && ESTW.colX + ESTW.colW <= 320 && ESTW.color === '#ffffff' && ESTW.firmaColor === '#ffffff',
+    `size=${ESTW.size}, col=${ESTW.colX}+${ESTW.colW}, color=${ESTW.color}`);
   const fragW = DM.debug.CARTA_TEXTOS.plaza;
   DM.debug.showCartaBand(fragW);
   DM.debug.updateCartaBand(0.3); // en plena ENTRADA (0,8 s)
@@ -2552,32 +2552,44 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     !dateSrcW.includes('drawCartaPanel'),
     '');
 
-  // --- la FUENTE PIXEL de los textos de la carta
-  // (pedido de Jose: «una fuente pixel de verdad»):
-  // Pixelify Sans autoalojada, SOLO para los textos de
-  // la carta en escena; la instrucción y el resto de la
-  // UI no cambian de fuente.
-  check('el estilo display usa la fuente PIXEL (Pixelify Sans primera en la pila, con la del motor como respaldo elegante por si no carga)',
-    ESTW.font.includes('"Pixelify Sans"') && ESTW.font.includes('Trebuchet MS'),
+  // --- la TIPOGRAFÍA de los textos de la carta
+  // (dirección de Jose, que REVIERTE la fuente de
+  // estilo arcade añadida antes: «la tipografía tipo
+  // pixel art le quita el tono cinematográfico; quita
+  // ese tipo de letra del proyecto; debería ser algo
+  // más serio y con texto de color blanco»): pila
+  // serif elegante de sistema, texto blanco, firma en
+  // itálica — y la fuente retirada no deja rastro.
+  check('el estilo display usa la pila SERIF elegante de sistema (Georgia…serif), SIN la fuente retirada, y el tratamiento es sobrio: blanco en cuerpo y firma, sin resplandor dorado',
+    ESTW.font.includes('Georgia') && ESTW.font.includes('serif') && !/pixelify/i.test(ESTW.font) &&
+    ESTW.color === '#ffffff' && ESTW.firmaColor === '#ffffff' && ESTW.glow === undefined,
     `font=${ESTW.font}`);
   const fontFileW = path.join(SRC, '..', 'assets', 'date', 'pixelify-sans.woff2');
   const oflFileW = path.join(SRC, '..', 'assets', 'date', 'PixelifySans-OFL.txt');
-  check('la fuente pixel VIVE en el repo (assets/date/, la carpeta que la copia de runtime lleva a dist) y su licencia OFL la acompaña en la misma carpeta',
-    fs.existsSync(fontFileW) && fs.statSync(fontFileW).size > 5000 && fs.existsSync(oflFileW),
+  check('la fuente retirada YA NO está en el repo: ni su woff2 ni su licencia OFL quedan en assets/date/',
+    !fs.existsSync(fontFileW) && !fs.existsSync(oflFileW),
     fontFileW);
-  check('la URL de carga es la del archivo del repo y start() dispara la carga al arrancar la cita (el primer fragmento la estrena cargada)',
-    DM.debug.CARTA_FONT_URL === 'assets/date/pixelify-sans.woff2' && dateSrcW.includes('loadCartaFont();'),
-    `url=${DM.debug.CARTA_FONT_URL}`);
+  check('sin rastro de la fuente retirada en el código del juego: ni su nombre ni su carga (loadCartaFont / CARTA_FONT_URL) en date.js, y los ganchos de depuración ya no la exponen',
+    !/pixelify/i.test(dateSrcW) && !dateSrcW.includes('loadCartaFont') && !dateSrcW.includes('CARTA_FONT_URL') &&
+    DM.debug.CARTA_FONT_URL === undefined && DM.debug.loadCartaFont === undefined,
+    '');
   const recFontW = mkRecW();
   DM.debug.showCartaBand(fragW);
   DM.debug.updateCartaBand(2.3); // permanencia plena (pasada la entrada de 0,8 s)
   DM.debug.drawCartaBand(recFontW.ctx);
-  check('el DIBUJO del fragmento usa la fuente pixel a su tamaño y SIN negrita (la pixel no se falsifica)',
-    recFontW.ctx.font.includes('Pixelify Sans') && recFontW.ctx.font.includes(`${ESTW.size}px`) && !recFontW.ctx.font.includes('bold'),
+  check('el DIBUJO del fragmento usa la pila serif a su tamaño y SIN negrita (la serif se compone en regular)',
+    recFontW.ctx.font.includes('Georgia') && recFontW.ctx.font.includes(`${ESTW.size}px`) && !recFontW.ctx.font.includes('bold'),
     `font=${recFontW.ctx.font}`);
-  check('la ENVOLTURA mide con EXACTAMENTE la misma cadena de fuente que el dibujo (la de CARTA_DISPLAY, sin negrita): sin regresión a la pila vieja en el camino de los fragmentos',
-    dateSrcW.includes('`${size}px ${CARTA_DISPLAY.font}`') && !dateSrcW.includes('bold ${size}px ${CARTA_DISPLAY.font}'),
+  check('la ENVOLTURA mide con EXACTAMENTE la misma cadena de fuente que el dibujo (la de CARTA_DISPLAY, sin negrita; la firma, con su prefijo de itálica): sin regresión a otra pila en el camino de los fragmentos',
+    dateSrcW.includes('${size}px ${CARTA_DISPLAY.font}') && dateSrcW.includes("italic ? 'italic ' : ''") && !dateSrcW.includes('bold ${size}px ${CARTA_DISPLAY.font}'),
     '');
+  const recFirmaW = mkRecW();
+  DM.debug.drawCartaTexto(recFirmaW.ctx, DM.debug.CARTA_TEXTOS.cierre, 1, { firma: DM.debug.CARTA_TEXTOS.firma });
+  check('la FIRMA se dibuja en ITÁLICA de la misma serif y en blanco (una firma manuscrita sobria): la última fuente fijada es la itálica, el último color el blanco, y la firma está entre lo dibujado',
+    recFirmaW.ctx.font.includes('italic') && recFirmaW.ctx.font.includes('Georgia') &&
+    recFirmaW.ctx.fillStyle === '#ffffff' &&
+    recFirmaW.calls.fillText.some((f) => f.t.includes('Feliz cumpleaños')),
+    `font=${recFirmaW.ctx.font}, fill=${recFirmaW.ctx.fillStyle}`);
   DM.debug.updateCartaBand(10); // la banda de la prueba queda vacía
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
