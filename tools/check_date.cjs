@@ -2337,7 +2337,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     Math.abs(DBG.cartaPoseWorldH(1.25) / DBG.cartaPoseWorldH(1) - 1.25) < 0.001);
   const dateSrcV = fs.readFileSync(path.join(SRC, 'date.js'), 'utf8');
   check('el dibujo de la pose de la carta usa el alto corregido (sin el 122 fijo) y el del compuesto del finale usa el suyo (sin el 96 fijo)',
-    dateSrcV.includes('cartaPoseWorldH(this.xi.scale)') && !dateSrcV.includes('this.xi.y, 122, false') &&
+    dateSrcV.includes('cartaPoseWorldH(this.xi.scale, med.frac)') && !dateSrcV.includes('this.xi.y, 122, false') &&
     dateSrcV.includes('parejaWorldH(this.xi.scale)') && !dateSrcV.includes('FINALE.sofa.cz + 6, 96, false'));
   // El compuesto del finale: las figuras están SENTADAS y
   // salían a ~92 u (96 × 0,956), más altas que la Ximena de
@@ -2724,6 +2724,109 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // El humo deja las imágenes como estaban: ninguna «carga».
   setLoadedX(DM.debug.cartaFinalImg, false);
   DM.debug.CLOSE_PHOTOS.forEach((p) => setLoadedX(p.img, false));
+
+  console.log('\nY) La pose de la carta en el pase GL y ADAPTADA a la orientación (playtest de Jose, 2026-11-22)');
+  // Regresión del playtest: «cuando Ximena lee la carta a
+  // veces se sobrepone en la mesa o los objetos cercanos;
+  // además, cuando estoy de espaldas o de lado, la
+  // animación de leer la carta no se adapta». La pose (y
+  // el sobre de la mesa) iban en la capa 2D posterior,
+  // sin profundidad — el defecto ya corregido en el
+  // finale — y la pose era siempre la frontal. El
+  // arreglo: ambas imágenes van en el pase GL de la casa
+  // del depa (extraSprites → spriteHomeImg) y hay un set
+  // de poses por orientación (frontal / espaldas /
+  // perfil espejable), elegido por el dir CON EL QUE
+  // Ximena llega a la carta y fijo toda la secuencia.
+  const DIY = DM.debug.depaImgs, MEDY = DM.debug.CARTA_POSE_MED;
+  const setImgY = (img, w, h) => { img.naturalWidth = w; img.naturalHeight = h; img.width = w; img.height = h; };
+  [DIY.tomaFront, DIY.leeFront, DIY.leeFront2, DIY.tomaBack, DIY.leeBack, DIY.leeBack2, DIY.tomaSide, DIY.leeSide, DIY.leeSide2]
+    .forEach((im) => setImgY(im, 320, 384));
+  setImgY(DIY.cartaSobre, 256, 224);
+  const charTopY = G.Sprites.charTop('ximena');
+  // --- la selección dir → set/espejo, como función pura ---
+  const oDownY = DM.debug.cartaOrientDe('down'), oUpY = DM.debug.cartaOrientDe('up'),
+    oLeftY = DM.debug.cartaOrientDe('left'), oRightY = DM.debug.cartaOrientDe('right');
+  check('la selección de orientación mapea el facing: de frente (down) → set frontal; de espaldas (up) → set de espaldas; de lado (right) → perfil sin espejo; de lado (left) → perfil ESPEJADO',
+    oDownY.set === 'front' && oDownY.flip === false &&
+    oUpY.set === 'back' && oUpY.flip === false &&
+    oRightY.set === 'side' && oRightY.flip === false &&
+    oLeftY.set === 'side' && oLeftY.flip === true,
+    JSON.stringify({ down: oDownY, up: oUpY, left: oLeftY, right: oRightY }));
+  // --- las medidas de cada imagen: las documentadas en
+  // los PNG (figura 370/384, margen 7/384), por set ---
+  const setsY = { frontal: [DIY.tomaFront, DIY.leeFront, DIY.leeFront2], espaldas: [DIY.tomaBack, DIY.leeBack, DIY.leeBack2], perfil: [DIY.tomaSide, DIY.leeSide, DIY.leeSide2] };
+  for (const [nombre, imgs] of Object.entries(setsY)) {
+    check(`la figura del set ${nombre} mide lo que el actor de Ximena con SU fracción medida (±12 %): ni cambia de tamaño al cambiar de orientación`,
+      imgs.every((im) => { const m = MEDY.get(im); return m && Math.abs(DM.debug.cartaPoseWorldH(1, m.frac) * m.frac / charTopY - 1) <= 0.12; }),
+      imgs.map((im) => { const m = MEDY.get(im); return m ? (DM.debug.cartaPoseWorldH(1, m.frac) * m.frac).toFixed(1) : '¿sin medida?'; }).join('/') + ' u vs actor ' + charTopY.toFixed(1) + ' u');
+    check(`las medidas del set ${nombre} son las medidas en los PNG (frac 370/384, margen bajo los pies 7/384)`,
+      imgs.every((im) => { const m = MEDY.get(im); return m && Math.abs(m.frac - 370 / 384) < 0.001 && Math.abs(m.bot - 7 / 384) < 0.001; }));
+  }
+  // --- el registro GL, capturado (como la sección W) ---
+  const RY = G.R, sprY = [];
+  const origSpriteY = RY.sprite;
+  RY.sprite = (img, x, y, z, o) => { sprY.push({ img, x, y, z, o }); };
+  DM.start(() => {});
+  let scY = G.scene, xiY = scY && scY.xi;
+  check('la casa del depa registra su gancho extraSprites (la pose y el sobre van en el pase GL con profundidad, como los actores)',
+    !!scY && typeof scY.home.extraSprites === 'function');
+  // el sobre, esperando en la mesa durante el depa
+  sprY.length = 0; scY.home.extraSprites();
+  const sobY = sprY.find((s) => s.img === DIY.cartaSobre);
+  check('el SOBRE de la mesa se registra en el pase GL, apoyado en el tablero (CARTA_TOP) y centrado en la mesa de centro',
+    !!sobY && sobY.x === DM.debug.CARTA_POS.x && sobY.z === DM.debug.CARTA_POS.y && sobY.y === DM.debug.CARTA_TOP,
+    sobY ? `(${sobY.x}, y=${sobY.y}, z=${sobY.z})` : 'sin registro');
+  // la secuencia en las cuatro orientaciones de llegada
+  const casosY = [
+    { dir: 'down', toma: DIY.tomaFront, lee: DIY.leeFront, flip: false, nombre: 'de frente' },
+    { dir: 'up', toma: DIY.tomaBack, lee: DIY.leeBack, flip: false, nombre: 'de espaldas' },
+    { dir: 'right', toma: DIY.tomaSide, lee: DIY.leeSide, flip: false, nombre: 'de lado (derecha)' },
+    { dir: 'left', toma: DIY.tomaSide, lee: DIY.leeSide, flip: true, nombre: 'de lado (izquierda, espejada)' },
+  ];
+  for (const caso of casosY) {
+    xiY.x = DM.debug.CARTA_POS.x; xiY.y = DM.debug.CARTA_POS.y + 28; xiY.vx = xiY.vy = 0;
+    xiY.dir = caso.dir;
+    scY.startCartaSeq();
+    sprY.length = 0; scY.home.extraSprites();
+    const tomaY = sprY.find((s) => s.img === caso.toma);
+    const medTomaY = MEDY.get(caso.toma);
+    check(`llegando ${caso.nombre}: la «toma» usa la pose de SU orientación, con su espejo, plantada en su punto (base = −margen × alto) y a su medida (figura = el actor, ±12 %)`,
+      scY.cartaSeq && scY.cartaSeq.orient === DM.debug.cartaOrientDe(caso.dir).set &&
+      !!tomaY && tomaY.o.flip === caso.flip && tomaY.x === xiY.x && tomaY.z === xiY.y &&
+      Math.abs(tomaY.y + medTomaY.bot * tomaY.o.h) < 0.3 &&
+      Math.abs(tomaY.o.h * medTomaY.frac / (charTopY * (xiY.scale || 1)) - 1) <= 0.12,
+      tomaY ? `img ok, flip=${tomaY.o.flip}, figura=${(tomaY.o.h * medTomaY.frac).toFixed(1)} u` : 'sin registro de la toma');
+    scY.updateCartaSeq(0.85); // la toma (~0,8 s) → paso «lee», MISMA orientación
+    sprY.length = 0; scY.home.extraSprites();
+    const leeY = sprY.find((s) => s.img === caso.lee);
+    check(`llegando ${caso.nombre}: la LECTURA mantiene la orientación de la toma (mismo set y mismo espejo, sin saltos)`,
+      scY.cartaSeq && scY.cartaSeq.step === 'lee' && !!leeY && leeY.o.flip === caso.flip,
+      leeY ? `flip=${leeY.o.flip}` : 'sin registro de la lectura');
+    // se cierra la secuencia por la vía real para la siguiente vuelta
+    key('Space', true); scY.updateCartaSeq(0.016); key('Space', false);
+    DM.start(() => {}); // estado limpio: carta sin abrir, fase depa
+    scY = G.scene; xiY = scY && scY.xi;
+  }
+  RY.sprite = origSpriteY;
+  // --- y NADA de esto se dibuja ya en la capa 2D ---
+  const ocY = G.ovCtx, diY = [];
+  const origDiY = ocY.drawImage;
+  ocY.drawImage = (...a) => { diY.push(a[0]); };
+  const homeDrawY = scY.home.draw;
+  scY.home.draw = () => {};
+  xiY.x = DM.debug.CARTA_POS.x; xiY.y = DM.debug.CARTA_POS.y + 28; xiY.dir = 'up';
+  scY.startCartaSeq();
+  let drawYOk = true;
+  try { scY.draw(0.016); } catch (e) { drawYOk = false; }
+  scY.home.draw = homeDrawY; ocY.drawImage = origDiY;
+  const posesY = [DIY.tomaFront, DIY.leeFront, DIY.leeFront2, DIY.tomaBack, DIY.leeBack, DIY.leeBack2, DIY.tomaSide, DIY.leeSide, DIY.leeSide2, DIY.cartaSobre];
+  check('el draw() de la escena ya NO dibuja ni la pose ni el sobre en la capa 2D (todo va por el pase GL con profundidad)',
+    drawYOk && !diY.some((im) => posesY.includes(im)), 'drawImage en overlay: ' + diY.length);
+  DM.stop();
+  // El humo deja las imágenes como estaban: ninguna «carga».
+  [DIY.tomaFront, DIY.leeFront, DIY.leeFront2, DIY.tomaBack, DIY.leeBack, DIY.leeBack2, DIY.tomaSide, DIY.leeSide, DIY.leeSide2, DIY.cartaSobre]
+    .forEach((im) => setImgY(im, 0, 0));
 
   console.log(`\n${failures ? '✘' : '✔'} check_date: ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);

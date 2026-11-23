@@ -152,7 +152,7 @@
 
   // ---------- La proporción de las poses de lectura ----------
   // (playtest de Jose, 2026-11-22: «el personaje se hace
-  // inmenso cuando lee la carta»). drawHomeImg dibuja el
+  // inmenso cuando lee la carta»). El billboard dibuja el
   // LIENZO ENTERO de la imagen a worldH unidades de mundo,
   // así que lo que manda es cuánto del lienzo ocupa LA
   // FIGURA (medido con PIL sobre el canal alfa):
@@ -172,9 +172,37 @@
   // temprano —, así que vale la última escala calculada en
   // su sitio, que es la que el actor llevaría).
   const CARTA_POSE_FRAC = 370 / 384;
-  function cartaPoseWorldH(scale) {
-    return (Sp.charTop('ximena') || 67) / CARTA_POSE_FRAC * (scale || 1);
+  function cartaPoseWorldH(scale, frac) {
+    return (Sp.charTop('ximena') || 67) / (frac || CARTA_POSE_FRAC) * (scale || 1);
   }
+  // El margen del lienzo BAJO la figura de las poses
+  // (medido: el contenido llena las filas 7..376 de 384
+  // → 7 px bajo sus pies). Al anclar la pose en el suelo
+  // se descuenta (base = −BOT × alto) para que los pies
+  // apoyen en el punto del actor, como en el finale.
+  const CARTA_POSE_BOT = 7 / 384;
+  // ---------- La orientación de la pose (playtest) ----------
+  // (playtest de Jose, 2026-11-22: «cuando estoy de
+  // espaldas o de lado, la animación de leer la carta no
+  // se adapta»). La pose ya no es siempre la frontal: hay
+  // un set por orientación — frontal, de espaldas y de
+  // perfil (un solo lado, el derecho; el izquierdo se
+  // espeja, la convención del proyecto para perfiles,
+  // como en los ciclos walk_right/idle_right) — y la
+  // secuencia usa el set de la orientación CON LA QUE
+  // Ximena LLEGA a la carta (su dir vigente al abrir la
+  // secuencia), fijo durante toda la secuencia para que
+  // la «toma» y la lectura sean coherentes entre sí.
+  // Las medidas de cada imagen (fracción de figura y
+  // margen inferior, con PIL sobre el alfa de los PNG
+  // finales, umbral 32) viven en CARTA_POSE_MED, junto a
+  // los loaders: las seis poses nuevas se compusieron
+  // en el mismo lienzo 320×384 y con la figura en las
+  // mismas filas 7..376 que el set frontal, así que hoy
+  // todas comparten 370/384 y 7/384 — la tabla queda por
+  // imagen para que un arte futuro pueda diferir sin
+  // tocar el dibujo. La selección dir → set/espejo es
+  // cartaOrientDe (junto a los sets).
   // El compuesto del finale iba a 96: sus figuras salían a
   // ~92 u, MÁS ALTAS SENTADAS que la Ximena de pie (67 u).
   // En el arte, la figura sentada (344 px) mide el 93 % de
@@ -677,6 +705,46 @@
   const ximenaSobreImg = loadDateImg('assets/date/ximena-sobre.png');
   const lecturaSolaImg = loadDateImg('assets/date/lectura-sola.png');
   const lecturaSola2Img = loadDateImg('assets/date/lectura-sola-2.png');
+  // Los sets de orientación de la pose de la carta
+  // (playtest de Jose): la misma lectura vista de
+  // espaldas y de perfil, y la «toma» en esas dos
+  // orientaciones (arte original, ver FUENTES.md).
+  const lecturaEspaldaImg = loadDateImg('assets/date/lectura-espalda-1.png');
+  const lecturaEspalda2Img = loadDateImg('assets/date/lectura-espalda-2.png');
+  const lecturaLadoImg = loadDateImg('assets/date/lectura-lado-1.png');
+  const lecturaLado2Img = loadDateImg('assets/date/lectura-lado-2.png');
+  const sobreEspaldaImg = loadDateImg('assets/date/sobre-espalda.png');
+  const sobreLadoImg = loadDateImg('assets/date/sobre-lado.png');
+  // Un set por orientación: la «toma» (el sobre cerrado
+  // en las manos) y los dos frames de la lectura. El de
+  // perfil mira a la DERECHA; mirando a la izquierda se
+  // dibuja espejado (flip), como sus ciclos del motor.
+  const CARTA_POSE_SETS = {
+    front: { toma: ximenaSobreImg, lee: [lecturaSolaImg, lecturaSola2Img] },
+    back: { toma: sobreEspaldaImg, lee: [lecturaEspaldaImg, lecturaEspalda2Img] },
+    side: { toma: sobreLadoImg, lee: [lecturaLadoImg, lecturaLado2Img] },
+  };
+  // La selección por el facing vigente (el dir del
+  // actor: 'down' = de frente a la cámara, 'up' = de
+  // espaldas, 'left'/'right' = de perfil):
+  function cartaOrientDe(dir) {
+    if (dir === 'up') return { set: 'back', flip: false };
+    if (dir === 'left') return { set: 'side', flip: true };
+    if (dir === 'right') return { set: 'side', flip: false };
+    return { set: 'front', flip: false }; // 'down' y cualquier otro
+  }
+  // Las medidas de cada pose (fracción de figura y
+  // margen bajo los pies), medidas con PIL sobre el
+  // alfa de los PNG finales (umbral 32): las nueve
+  // comparten lienzo 320×384 y figura en las filas
+  // 7..376 → 370/384 y 7/384 (las tres frontales ya
+  // constaban así; las seis nuevas se compusieron con
+  // la misma convención y la medición lo confirma).
+  const CARTA_POSE_MED = new Map();
+  [ximenaSobreImg, lecturaSolaImg, lecturaSola2Img,
+    sobreEspaldaImg, lecturaEspaldaImg, lecturaEspalda2Img,
+    sobreLadoImg, lecturaLadoImg, lecturaLado2Img,
+  ].forEach((im) => CARTA_POSE_MED.set(im, { frac: 370 / 384, bot: 7 / 384 }));
   const lecturaParejaImg = loadDateImg('assets/date/lectura-pareja.png');
   const lecturaPareja2Img = loadDateImg('assets/date/lectura-pareja-2.png');
   const lecturaPareja3Img = loadDateImg('assets/date/lectura-pareja-3.png');
@@ -1430,31 +1498,10 @@
   function projectHomePoint(home, x, y, z) {
     return projectWithCam(vpFromCam(home.cam), x, y, z);
   }
-  // Dibuja una imagen como billboard vertical en la casa 3D:
-  // su base apoyada en (x, yBase, z) y su alto = worldH
-  // unidades de mundo (con el estiramiento vertical del motor,
-  // para casar con los billboards de los actores). Devuelve
-  // true si dibujó (la imagen cargó y el punto se ve).
-  function drawHomeImg(home, c, img, x, yBase, z, worldH, flip) {
-    if (!imgOk(img)) return false;
-    const vp = vpFromCam(home.cam);
-    const p0 = projectWithCam(vp, x, yBase, z), p1 = projectWithCam(vp, x, yBase + worldH, z);
-    if (!p0.ok) return false;
-    const stretch = Math.min(1.4, 1 / Math.cos(home.cam.pitch || 0.8));
-    const hPx = Math.abs(p0.y - p1.y) * stretch;
-    if (!(hPx > 2)) return false;
-    const wPx = hPx * img.naturalWidth / img.naturalHeight;
-    c.fillStyle = 'rgba(20,14,26,0.20)';
-    c.beginPath(); c.ellipse(p0.x, p0.y, wPx * 0.34, Math.max(2, hPx * 0.04), 0, 0, 6.3); c.fill();
-    if (flip) {
-      c.save(); c.translate(p0.x, p0.y - hPx); c.scale(-1, 1);
-      c.drawImage(img, -wPx / 2, 0, wPx, hPx);
-      c.restore();
-    } else {
-      c.drawImage(img, p0.x - wPx / 2, p0.y - hPx, wPx, hPx);
-    }
-    return true;
-  }
+  // (El billboard 2D drawHomeImg quedó retirado: las dos
+  // imágenes que lo usaban — la pose de la carta y el sobre
+  // de la mesa — pasaron al pase GL con profundidad
+  // (spriteHomeImg, vía extraSprites), como el finale.)
 
   // =========================================================
   // ESCENA DEL EASTER EGG (Parte 1): depa → puerta → plaza
@@ -1484,6 +1531,11 @@
       home.follow(xi, 560);
       home.cam.x = xi.x; home.cam.z = xi.y - 30; home.cam.dist = 560;
       this.home = home; this.xi = xi;
+      // Los billboards del depa en el pase GL de la casa
+      // (con prueba de profundidad, como los actores): el
+      // sobre que espera en la mesa y la pose de la
+      // secuencia de la carta (drawDepaSprites).
+      home.extraSprites = () => this.drawDepaSprites();
       // --- Compensación de escala de Ximena en el depa (SOLO modo
       // cita): el render 3D proyecta con perspectiva y al bajar
       // hacia la cámara su sprite se ve MÁS GRANDE (en el juego
@@ -1585,7 +1637,14 @@
     // avanzar, la carta queda con ella y la salida despierta.
     startCartaSeq() {
       if (this.phase !== 'depa' || D.cartaAbierta) return;
-      this.phase = 'carta'; this.cartaSeq = { step: 'toma', t: 0 };
+      // La pose se adapta a la orientación CON LA QUE
+      // Ximena llega a la carta (playtest de Jose: con
+      // la frontal fija, si venía de espaldas o de lado
+      // la lectura quedaba falsa): el set se elige por
+      // su dir vigente y queda fijo toda la secuencia —
+      // la «toma» y la lectura comparten orientación.
+      const o = cartaOrientDe(this.xi.dir);
+      this.phase = 'carta'; this.cartaSeq = { step: 'toma', t: 0, orient: o.set, flip: o.flip };
       const xi = this.xi;
       xi.route = null; xi.vx = xi.vy = 0; xi.moving = false;
       xi.dir = 'up'; // frente a la mesa de centro
@@ -1593,8 +1652,44 @@
     }
     cartaPoseImg() {
       const S = this.cartaSeq; if (!S) return null;
-      if (S.step === 'toma') return ximenaSobreImg;
-      return Math.floor(S.t / 1.4) % 2 === 0 ? lecturaSolaImg : lecturaSola2Img;
+      const set = CARTA_POSE_SETS[S.orient] || CARTA_POSE_SETS.front;
+      if (S.step === 'toma') return set.toma;
+      return Math.floor(S.t / 1.4) % 2 === 0 ? set.lee[0] : set.lee[1];
+    }
+    // Los billboards del depa, en el pase GL de la casa
+    // (gancho extraSprites de ESTA HomeScene): con
+    // prueba de profundidad, como los actores — la mesa
+    // de centro y los objetos cercanos ocluyen la pose
+    // cuando quedan entre ella y la cámara, y ella
+    // ocluye lo que tenga detrás, según su posición real
+    // junto a la mesa. (Antes la pose y el sobre iban en
+    // la capa 2D posterior, sin profundidad, y la pose
+    // «se sobreponía en la mesa o los objetos cercanos»:
+    // el mismo defecto ya corregido en el finale;
+    // playtest de Jose, 2026-11-22.) El brillo pulsante
+    // del sobre sigue en la capa 2D: es luz, no un
+    // objeto.
+    drawDepaSprites() {
+      // el sobre cerrado, esperando sobre la mesa de
+      // centro (al tomarlo, la secuencia lo reemplaza
+      // por la pose; al abrirla, ya no está en la mesa)
+      if (!D.cartaAbierta && this.phase === 'depa') {
+        spriteHomeImg(cartaSobreImg, CARTA_POS.x, CARTA_TOP, CARTA_POS.y, 20, false);
+      }
+      // la pose de la secuencia, en el sitio de Ximena y
+      // a SU medida: el lienzo se dimensiona por la
+      // fracción medida de ESA imagen (la figura = el
+      // actor) y se apoya descontando el margen bajo
+      // sus pies — los pies quedan plantados en su
+      // punto en las tres orientaciones.
+      if (this.phase === 'carta' && this.cartaSeq) {
+        const img = this.cartaPoseImg();
+        if (imgOk(img)) {
+          const med = CARTA_POSE_MED.get(img) || { frac: CARTA_POSE_FRAC, bot: CARTA_POSE_BOT };
+          const h = cartaPoseWorldH(this.xi.scale, med.frac);
+          spriteHomeImg(img, this.xi.x, -med.bot * h, this.xi.y, h, !!this.cartaSeq.flip);
+        }
+      }
     }
     updateCartaSeq(dt) {
       const S = this.cartaSeq;
@@ -1879,11 +1974,10 @@
         const c = G.ovCtx; if (!c) return;
         c.setTransform(2, 0, 0, 2, 0, 0);
         if (this.phase === 'carta') {
-          // La pose de la secuencia reemplaza a Ximena en su
-          // sitio (si la imagen cargó; si no, el actor visible
-          // hace de respaldo y no se dibuja nada encima).
-          const img = this.cartaPoseImg();
-          if (imgOk(img)) drawHomeImg(this.home, c, img, this.xi.x, 0, this.xi.y, cartaPoseWorldH(this.xi.scale), false);
+          // La pose de la secuencia ya NO se dibuja en
+          // esta capa: va en el pase GL de la casa
+          // (drawDepaSprites, con prueba de profundidad).
+          // Aquí solo queda el texto de la apertura.
           if (this.cartaSeq && this.cartaSeq.step === 'lee') {
             // La apertura se lee en el mismo idioma visual
             // que los demás textos de la carta en escena:
@@ -1894,10 +1988,12 @@
           }
           return;
         }
-        // La carta sobre la mesa de centro, con su brillo
-        // sutil pulsante (es un objeto íntimo: nada de cartel
-        // gigante). Al abrirla desaparece de la mesa: la
-        // lleva ella.
+        // La carta sobre la mesa de centro: el SOBRE va
+        // en el pase GL (drawDepaSprites, con profundidad,
+        // como la pose); en esta capa queda solo su brillo
+        // sutil pulsante, que es luz (es un objeto íntimo:
+        // nada de cartel gigante). Al abrirla desaparece
+        // de la mesa: la lleva ella.
         if (!D.cartaAbierta) {
           const p = projectHomePoint(this.home, CARTA_POS.x, CARTA_TOP, CARTA_POS.y);
           if (p.ok) {
@@ -1907,7 +2003,6 @@
             grd.addColorStop(1, 'rgba(255,224,150,0)');
             c.fillStyle = grd; c.beginPath(); c.arc(p.x, p.y, 30, 0, 6.3); c.fill();
           }
-          drawHomeImg(this.home, c, cartaSobreImg, CARTA_POS.x, CARTA_TOP, CARTA_POS.y, 20, false);
         }
         // La instrucción de objetivo, mientras la carta no
         // se abra: persistente y visible desde todo el depa.
@@ -4936,6 +5031,12 @@
       // altos de mundo corregidos de la pose de la carta y
       // del compuesto del finale.
       CARTA_POSE_FRAC, cartaPoseWorldH, PAREJA_FRAC, PAREJA_SENTADA, parejaWorldH,
+      // Ganchos de la orientación de la pose y de su
+      // registro GL (sección Y): la selección dir → set,
+      // los sets con sus imágenes, las medidas por imagen
+      // y el margen bajo los pies.
+      CARTA_POSE_BOT, CARTA_POSE_SETS, CARTA_POSE_MED, cartaOrientDe,
+      depaImgs: { tomaFront: ximenaSobreImg, leeFront: lecturaSolaImg, leeFront2: lecturaSola2Img, tomaBack: sobreEspaldaImg, leeBack: lecturaEspaldaImg, leeBack2: lecturaEspalda2Img, tomaSide: sobreLadoImg, leeSide: lecturaLadoImg, leeSide2: lecturaLado2Img, cartaSobre: cartaSobreImg },
       // Ganchos del playtest del finale (sección W): la
       // proporción de Pollito (su alto efectivo de actor y
       // las fracciones/márgenes medidos de sus PNG), el

@@ -562,6 +562,102 @@
   `lectura-sola.png` mientras Ximena lee el primer
   fragmento a ritmo del jugador.
 
+## lectura-espalda-1.png — Ximena leyendo la carta, DE ESPALDAS (frame 1)
+- **Arte original del juego**: la lectura sola vista
+  desde atrás — se le ve la nuca y el pelo largo, el
+  moño y las orejas de conejo moradas desde atrás, la
+  espalda del abrigo blanco y la hoja desplegada
+  asomando por ambos lados de sus brazos, con la
+  cabeza inclinada hacia el papel —, generada desde
+  `lectura-sola.png` como referencia de identidad y
+  estilo.
+- **Procesado:** fondo magenta por clave de color
+  (flood-fill desde los bordes), erosión de fleco y
+  borde blanco por dilatación; compuesta en el mismo
+  lienzo que el set frontal (figura en las filas
+  7..376). Salida: 320 × 384.
+- **Uso:** el Acto 1 del guion v2 cuando Ximena llega
+  a la carta DE ESPALDAS a la cámara: la pose de
+  lectura se adapta a su orientación (la frontal era
+  falsa en ese caso; playtest de Jose, 2026-11-22).
+
+## lectura-espalda-2.png — Ximena ajusta la hoja, de espaldas (frame 2)
+- **Arte original del juego**: segundo frame de la
+  lectura de espaldas — gira un poco el cuerpo y la
+  hoja va inclinada hacia un lado, como ajustándola
+  —, generado junto a `lectura-espalda-1.png` en la
+  misma tira, para alternar con él en el bucle sutil
+  de lectura.
+- **Procesado:** el mismo de `lectura-espalda-1.png`.
+  Salida: 320 × 384.
+- **Uso:** el Acto 1, en bucle con
+  `lectura-espalda-1.png` en la orientación de
+  espaldas.
+
+## lectura-lado-1.png — Ximena leyendo la carta, DE PERFIL (frame 1)
+- **Arte original del juego**: la lectura sola en
+  perfil completo mirando a la DERECHA — una oreja de
+  conejo y el moño de lado, los lentes de perfil, la
+  cara inclinada hacia la hoja desplegada que
+  sostiene frente al pecho —, generada desde
+  `lectura-sola.png` como referencia de identidad y
+  estilo. El perfil contrario se obtiene ESPEJANDO
+  (la convención del proyecto para perfiles, como en
+  sus ciclos `walk_right`).
+- **Procesado:** fondo magenta por clave de color
+  (flood-fill desde los bordes), erosión de fleco y
+  borde blanco por dilatación; mismo lienzo que el
+  set frontal (figura en las filas 7..376). Salida:
+  320 × 384.
+- **Uso:** el Acto 1 cuando Ximena llega a la carta
+  DE LADO: la pose de lectura se adapta a su
+  orientación, espejada si mira a la izquierda.
+
+## lectura-lado-2.png — Ximena ajusta la hoja, de perfil (frame 2)
+- **Arte original del juego**: segundo frame de la
+  lectura de perfil — la hoja va más inclinada y la
+  mirada más baja, como ajustándola —, generado
+  junto a `lectura-lado-1.png` en la misma tira,
+  para alternar con él en el bucle sutil de lectura.
+- **Procesado:** el mismo de `lectura-lado-1.png`.
+  Salida: 320 × 384.
+- **Uso:** el Acto 1, en bucle con
+  `lectura-lado-1.png` en la orientación de perfil
+  (espejado con él si mira a la izquierda).
+
+## sobre-espalda.png — Ximena toma la carta, de espaldas
+- **Arte original del juego**: el beat «toma la
+  carta» visto desde atrás — sostiene el SOBRE
+  CERRADO crema con sello de corazón asomando junto
+  a sus brazos, con el moño, las orejas moradas y el
+  pelo vistos desde atrás —, generada desde
+  `ximena-sobre.png` como referencia de identidad.
+- **Procesado:** fondo magenta por clave de color
+  (flood-fill desde los bordes), erosión de fleco y
+  borde blanco por dilatación; mismo lienzo que el
+  set frontal (figura en las filas 7..376). Salida:
+  320 × 384.
+- **Uso:** la fase «toma» del Acto 1 en la
+  orientación de espaldas (la `toma` y la lectura de
+  una misma secuencia comparten orientación).
+
+## sobre-lado.png — Ximena toma la carta, de perfil
+- **Arte original del juego**: el beat «toma la
+  carta» en perfil completo mirando a la DERECHA —
+  el sobre cerrado con su sello de corazón frente a
+  su pecho, los lentes de perfil y la mirada baja
+  hacia el sobre —, generada desde
+  `ximena-sobre.png` como referencia de identidad.
+  El perfil contrario se obtiene espejando.
+- **Procesado:** fondo magenta por clave de color
+  (flood-fill desde los bordes), erosión de fleco y
+  borde blanco por dilatación; mismo lienzo que el
+  set frontal (figura en las filas 7..376). Salida:
+  320 × 384.
+- **Uso:** la fase «toma» del Acto 1 en la
+  orientación de perfil (espejada si mira a la
+  izquierda).
+
 ## lectura-pareja-2.png — La pareja pasa la hoja (lectura en pareja, frame 2)
 - **Arte original del juego**: segundo frame de la
   lectura en pareja — Ximena pasa la hoja (el papel
