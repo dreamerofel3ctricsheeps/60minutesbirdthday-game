@@ -1421,39 +1421,109 @@
   // Se compone con TODAS las frases en orden (un párrafo
   // por momento: sus frases unidas con un espacio) y la
   // firma al pie, en la zona limpia del papel de
-  // carta-final.png. Con varias frases el texto crece: la
-  // composición se AUTO-AJUSTA bajando el tamaño de letra
-  // por escalones hasta que la firma cabe sobre el papel
-  // (yMax); el mínimo legible es el último escalón — si ni
-  // así cupiera, se dibuja a ese mínimo y cartaFullFit lo
-  // REPORTA con fits:false (el presupuesto orientativo de
-  // la carta final es ~1800 caracteres totales).
+  // carta-final.png.
+  // PAGINACIÓN (playtest de Jose en el móvil, 2026-11-23:
+  // «al final de la carta el texto se ve muy muy pequeño
+  // desde un móvil»): en una sola página, las 18 frases +
+  // la firma (1 538 caracteres) obligaban al auto-ajuste a
+  // caer a 7,5 px — ilegible en el teléfono —. La carta se
+  // lee ahora en DOS páginas dentro de la misma fase
+  // 'carta' del cierre, cada una con su propio auto-ajuste
+  // (cartaPageFit): página 1 = apertura, plaza y San
+  // Ángel; página 2 = aeropuerto, praderas y cierre, con
+  // la firma. Con el texto final, la página 1 compone a
+  // 10 px y la 2 a 10,5 px (medido; la meta era ≥ 9,5 px
+  // en ambas — el corte alternativo, San Ángel en la
+  // página 2, la dejaba a 9 px). El avance del jugador
+  // pasa de la página 1 a la 2 y de la 2 al álbum, como
+  // antes pasaba de la carta al álbum.
+  const CARTA_PAGES = [['apertura', 'plaza', 'sanangel'], ['aero', 'castillo', 'cierre']];
+  // EL SELLO DEL ARTE (la otra mitad de esa captura): el
+  // corazón de cera de la esquina inferior derecha del
+  // papel TAPABA el final del último párrafo y la firma,
+  // que se componían encima de él. Su caja, medida sobre
+  // carta-final.png (1280×720: x 870–985, y 500–645) y
+  // pasada a coordenadas lógicas (640×360), con margen:
+  const CARTA_SEAL = { x0: 428, y0: 243, x1: 500, y1: 330 };
+  // La composición respeta el sello dos veces: las líneas
+  // cuyo trecho vertical cruza su zona se envuelven con el
+  // ancho angosto (wrapWLow: el texto, centrado en x=320,
+  // se detiene antes del sello), y la firma se alinea a
+  // la derecha contra el borde izquierdo del sello, con
+  // margen (firmaX) — antes terminaba en x=470, dentro de
+  // la caja del corazón —.
   const CARTA_FULL = {
     sizes: [10.5, 10, 9.5, 9, 8.5, 8, 7.5, 7], // escalones del auto-ajuste; el último (7) es el mínimo legible
     y0: 74, yMax: 330, // la primera línea y el tope de la firma, sobre el papel
-    wrapW: 292, lhK: 13.5 / 10.5, gapK: 0.55, // interlineado (× tamaño) y respiro entre párrafos (× interlineado)
+    wrapW: 292, // el ancho de línea normal, centrado en x=320
+    wrapWLow: 212, // el ancho de las líneas que cruzan la zona del sello: su borde derecho queda en 320 + 212/2 = 426 < 428
+    firmaX: 424, // el borde derecho de la firma: a la izquierda del sello (x0 = 428), con margen
+    lhK: 13.5 / 10.5, gapK: 0.55, // interlineado (× tamaño) y respiro entre párrafos (× interlineado)
   };
-  function cartaFullCompose(c, size) {
-    const paras = CARTA_MOMENTOS
+  // ¿El trecho vertical de una línea cruza la zona del
+  // sello? (El texto se dibuja con el baseline en el
+  // medio: su caja vertical es y ± tamaño/2.) Si sí, esa
+  // línea se envuelve con el ancho angosto para no pisarlo.
+  function cartaLineaTocaSello(y, size) {
+    return y + size / 2 > CARTA_SEAL.y0 && y - size / 2 < CARTA_SEAL.y1;
+  }
+  // El corte de líneas de una página de la carta: como
+  // wrapCartaText, pero el ancho de cada línea depende de
+  // SU posición — al entrar en la zona del sello, el
+  // renglón se acorta —. Devuelve cada línea con su
+  // centro (y) y su ancho medido (w): el dibujo no
+  // recalcula nada y los checks verifican con esas cajas
+  // que ninguna línea invade el sello.
+  function cartaWrapEnZona(c, text, size, yLinea, lh) {
+    c.font = `${size}px ${G.FONT}`;
+    const words = String(text).split(' ');
+    const lines = [];
+    let cur = '', y = yLinea;
+    const maxW = () => (cartaLineaTocaSello(y, size) ? CARTA_FULL.wrapWLow : CARTA_FULL.wrapW);
+    for (const w of words) {
+      if (cur && c.measureText(cur + ' ' + w).width > maxW()) {
+        lines.push({ t: cur, y, w: c.measureText(cur).width });
+        cur = w; y += lh;
+      } else cur = cur ? cur + ' ' + w : w;
+    }
+    if (cur) lines.push({ t: cur, y, w: c.measureText(cur).width });
+    return lines;
+  }
+  // La composición de UNA página a un tamaño dado: los
+  // párrafos de sus momentos, en orden, cada línea con su
+  // y ya fijada; y la posición de la firma (firmaY) con su
+  // ancho medido (firmaW), para la página que la lleva.
+  function cartaPageCompose(c, size, page) {
+    const momentos = CARTA_PAGES[page] || [];
+    const paras = momentos
       .map((id) => cartaFrases(CARTA_TEXTOS[id]).join(' '))
       .filter((p) => p.length > 0);
-    const items = []; // { t: línea } | { gap: true }
-    paras.forEach((p, i) => {
-      if (i) items.push({ gap: true });
-      for (const l of wrapCartaText(c, p, size, CARTA_FULL.wrapW)) items.push({ t: l });
-    });
     const lh = size * CARTA_FULL.lhK;
-    const advance = items.reduce((a, it) => a + (it.gap ? lh * CARTA_FULL.gapK : lh), 0);
-    return { items, lh, advance, firmaY: CARTA_FULL.y0 + advance + 2 };
+    const items = []; // { t, y, w } | { gap: true }
+    let y = CARTA_FULL.y0;
+    paras.forEach((p, i) => {
+      if (i) { items.push({ gap: true }); y += lh * CARTA_FULL.gapK; }
+      for (const l of cartaWrapEnZona(c, p, size, y, lh)) { items.push(l); y = l.y + lh; }
+    });
+    c.font = `${size + 0.5}px ${G.FONT}`;
+    return { items, lh, firmaY: y + 2, firmaW: c.measureText(CARTA_TEXTOS.firma).width };
   }
-  function cartaFullFit(c) {
+  // El auto-ajuste de UNA página: el mayor escalón con el
+  // que la composición cabe sobre el papel (la firma —
+  // real en la última página, hipotética en las demás: el
+  // criterio es el mismo — queda a firmaY ≤ yMax). Si ni
+  // al mínimo cupiera, se compone a ese mínimo y el
+  // cálculo lo REPORTA con fits:false (el presupuesto
+  // orientativo de la carta final es ~1800 caracteres
+  // totales, ahora repartidos entre las dos páginas).
+  function cartaPageFit(c, page) {
     for (const size of CARTA_FULL.sizes) {
-      const comp = cartaFullCompose(c, size);
-      if (comp.firmaY <= CARTA_FULL.yMax) return { size, items: comp.items, lh: comp.lh, firmaY: comp.firmaY, fits: true };
+      const comp = cartaPageCompose(c, size, page);
+      if (comp.firmaY <= CARTA_FULL.yMax) return { size, items: comp.items, lh: comp.lh, firmaY: comp.firmaY, firmaW: comp.firmaW, fits: true, page };
     }
     const size = CARTA_FULL.sizes[CARTA_FULL.sizes.length - 1];
-    const comp = cartaFullCompose(c, size);
-    return { size, items: comp.items, lh: comp.lh, firmaY: comp.firmaY, fits: false };
+    const comp = cartaPageCompose(c, size, page);
+    return { size, items: comp.items, lh: comp.lh, firmaY: comp.firmaY, firmaW: comp.firmaW, fits: false, page };
   }
   // El fundido del fragmento en escena: entra suave
   // (CARTA_BAND_IN), se queda pleno lo que manda la regla
@@ -1674,6 +1744,30 @@
     if (!activa) return;
     const g = guiaViaje(id);
     if (g) drawCartaObjetivo(c, g);
+  }
+  // ---------- La guía del DEPA FINAL (pedido de Jose,
+  // 2026-11-23) ----------
+  // Al volver al departamento tras las praderas no había
+  // NINGUNA guía: el finale solo arranca al interactuar
+  // con el sofá, y el jugador podía quedarse sin saber
+  // qué hacer. La misma banda de papel de las demás
+  // instrucciones (sin emojis) cierra el recorrido con
+  // las palabras de Jose — corregidas solo en ortografía
+  // («sientate» → «siéntate») —: se muestra desde que se
+  // entra al depa final (su fase de casa, 'home', con la
+  // cinemática aún sin arrancar: cine en 'idle') hasta
+  // que el finale COMIENZA (al sentarse la pareja,
+  // startCine saca la cinemática de 'idle'); en curso o
+  // ya completado (cine en 'done', también al reentrar
+  // con la torta ya servida), la guía se retira.
+  const GUIA_SOFA = 'Ve a la sala y siéntate en el sofá';
+  // El selector del depa final: el texto de su guía, o
+  // null si no toca (el equivalente de instruccionCarta
+  // para esta escena, cuya fase no es 'depa' sino 'home').
+  function guiaDepaFinal(scene) {
+    if (!scene || scene.phase !== 'home') return null;
+    if (!scene.cine || scene.cine.st !== 'idle') return null;
+    return GUIA_SOFA;
   }
   // (El PANEL de papel que antes presentaba la apertura y
   // la lectura en pareja quedó retirado: esos textos ahora
@@ -4219,7 +4313,17 @@
     catPath: [[524, 304], [516, 238], [560, 200], [560, 146]],
     catServe: { x: 560, y: 146 }, // junto a la mesa, en el gesto de dejar la torta
     catProud: { x: 566, y: 162 }, // a un lado de la mesa, ya servida
-    torta: { x: 635, z: 124 }, // la torta, sobre la mesa de centro
+    // La torta SERVIDA, sobre la mesa de centro: desde el
+    // playtest de Jose (2026-11-23: «cuando Pollito deja
+    // la torta no se ve») va MÁS GRANDE y al BORDE
+    // IZQUIERDO — antes era la pieza central, a 30 u de
+    // lienzo en el centro de la mesa (x=635) —: 48 u
+    // (×1,6; su figura llena el lienzo — medido en el
+    // PNG —, así que la torta crece lo mismo) centrada en
+    // x=610, dentro del tercio izquierdo del tablero (la
+    // huella va de x=595 a x=675). La torta que Pollito
+    // CARGA en su bandeja no cambia: es otro PNG.
+    torta: { x: 610, z: 124, h: 48 },
     spawnXi: { x: 478, y: 534 }, spawnJose: { x: 540, y: 534 },
   };
   // Luz cálida y tenue de la noche de cita: ambiente bajo y
@@ -4707,7 +4811,7 @@
     // que más tiempo se queda —. Cada fase se salta si su
     // imagen no cargó (el precedente del castillo).
     startClosing() {
-      this.close = { step: 'cartaIn', t: 0, pile: null, pileIdx: 0 };
+      this.close = { step: 'cartaIn', t: 0, pile: null, pileIdx: 0, page: 0 };
       this.closeAct = false;
       this.nextCine('closing');
       this.advanceClosing(); // salta de entrada las fases sin imagen
@@ -4738,8 +4842,13 @@
       switch (cl.step) {
         case 'cartaIn': if (cl.t >= CLOSE_IN_T) { cl.step = 'carta'; cl.t = 0; } break;
         case 'carta':
-          // A ritmo del jugador: se queda hasta ESPACIO/clic.
-          if (act) this.enterAlbum();
+          // A ritmo del jugador: el avance pasa de la
+          // página 1 a la 2, y de la ÚLTIMA página, al
+          // álbum (la carta paginada del playtest móvil).
+          if (act) {
+            if ((cl.page || 0) < CARTA_PAGES.length - 1) { cl.page = (cl.page || 0) + 1; cl.t = 0; }
+            else this.enterAlbum();
+          }
           break;
         case 'album': {
           // Cada foto entra (ALBUM_ENTER_T), se contempla
@@ -4929,10 +5038,14 @@
     drawFinaleSprites() {
       const R = G.R;
       // la carta ya leída, sobre la mesa de centro (si la
-      // torta ya está puesta, se corre a un lado)
-      spriteHomeImg(cartaSobreImg, this.tortaOnTable ? 604 : FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, 14, false);
-      // la torta: la pieza central de la mesa
-      if (this.tortaOnTable) spriteHomeImg(tortaMesaImg, FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, 30, false);
+      // torta ya está puesta, se corre al OTRO lado: la
+      // torta grande ocupa ahora el borde izquierdo, y a
+      // la derecha queda sitio antes del candelabro de
+      // x=658 — la carta a 644 no se solapa con ella)
+      spriteHomeImg(cartaSobreImg, this.tortaOnTable ? 644 : FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, 14, false);
+      // la torta servida: grande y al borde izquierdo de
+      // la mesa (FINALE.torta), apoyada en su tablero
+      if (this.tortaOnTable) spriteHomeImg(tortaMesaImg, FINALE.torta.x, FINALE.ctable.top, FINALE.torta.z, FINALE.torta.h, false);
       // la pareja sentada: el compuesto de la lectura,
       // ANCLADO EN LOS ASIENTOS (el plano de los actores
       // ocultos, z = seatXi.y) y apoyado en los cojines
@@ -4984,6 +5097,13 @@
       }
       if (this.phase !== 'home') return;
       const cineOn = this.cine.st !== 'idle' && this.cine.st !== 'done';
+      // la guía del depa final (pedido de Jose): la banda
+      // de papel que dice ir a la sala y sentarse en el
+      // sofá; vive solo hasta que el finale arranca (el
+      // selector guiaDepaFinal manda: fase 'home' y
+      // cinemática en 'idle').
+      const gFin = guiaDepaFinal(this);
+      if (gFin) drawCartaObjetivo(c, gFin);
       // --- la puesta de la sala (los PNG del guion v2) ---
       // Ya NO se dibujan aquí: van en el pase GL con
       // profundidad de la casa (drawFinaleSprites, por el
@@ -5048,22 +5168,29 @@
           c.restore();
         } else { c.fillStyle = '#17101f'; c.fillRect(0, 0, 640, 360); }
         if (cl.step === 'carta') {
-          // La carta COMPLETA: todas las frases de todos
-          // los momentos, en orden (un párrafo por momento),
-          // con la firma al pie. cartaFullFit elige el mayor
-          // tamaño de los escalones con el que la composición
-          // cabe en la zona limpia del papel (si ni al mínimo
-          // cupiera, dibuja a ese mínimo: fits queda en
-          // falso en el cálculo, sin romper el dibujo).
-          const fit = cartaFullFit(c);
-          let y = CARTA_FULL.y0;
+          // La carta COMPLETA, PAGINADA (playtest de Jose
+          // en el móvil): todas las frases de todos los
+          // momentos, en orden (un párrafo por momento),
+          // repartidas en dos páginas que se componen por
+          // separado — cada una con su auto-ajuste
+          // (cartaPageFit), para no caer a la letra
+          // ilegible de la página única — y sin pisar el
+          // sello del arte: las líneas de su zona van
+          // angostas y la firma, al pie de la ÚLTIMA
+          // página, termina a la izquierda del corazón.
+          // Cada línea trae su y de la composición: el
+          // dibujo no recalcula nada. Abajo, la pista de
+          // siempre y el indicador discreto de página.
+          const page = Math.min(cl.page || 0, CARTA_PAGES.length - 1);
+          const fit = cartaPageFit(c, page);
           for (const it of fit.items) {
-            if (it.gap) { y += fit.lh * CARTA_FULL.gapK; continue; }
-            if (it.t) G.text(c, it.t, 320, y, { size: fit.size, bold: false, color: '#4a3423', stroke: false });
-            y += fit.lh;
+            if (it.t) G.text(c, it.t, 320, it.y, { size: fit.size, bold: false, color: '#4a3423', stroke: false });
           }
-          G.text(c, CARTA_TEXTOS.firma, 470, fit.firmaY, { size: fit.size + 0.5, color: '#7a4a2b', align: 'right', stroke: false });
+          if (page === CARTA_PAGES.length - 1) {
+            G.text(c, CARTA_TEXTOS.firma, CARTA_FULL.firmaX, fit.firmaY, { size: fit.size + 0.5, color: '#7a4a2b', align: 'right', stroke: false });
+          }
           G.text(c, 'ESPACIO: seguir', 320, 344, { size: 9, bold: false, color: '#8a6f4d', stroke: false });
+          G.text(c, `${page + 1}/${CARTA_PAGES.length}`, 606, 344, { size: 9, bold: false, color: '#8a6f4d', align: 'right', stroke: false });
         }
         return;
       }
@@ -5270,7 +5397,7 @@
       // cruzar la Puerta, la secuencia del cierre en el
       // sofá y el auto-ajuste de la carta fullscreen.
       cartaFrases, cartaPuntos, cartaDisparos, descartarFrasesEscena,
-      cierreFraseEn, cierreDurTotal, CARTA_FULL, cartaFullFit, CARTA_MOMENTOS,
+      cierreFraseEn, cierreDurTotal, CARTA_FULL, CARTA_PAGES, CARTA_SEAL, cartaPageFit, CARTA_MOMENTOS,
       // Ganchos de la presentación de los textos de la
       // carta en escena (sección W): el estilo display, el
       // fundido con su deriva, y los tres caminos de dibujo
@@ -5287,7 +5414,7 @@
       // Ganchos de la GUÍA DEL VIAJE (sección Z): el mapa
       // de guías por escena del paseo, sus piezas de texto
       // y el selector/dibujo de la banda en las escenas.
-      GUIA_VIAJE, GUIA_CASA, GUIA_OBSTACULOS, GUIAS_VIAJE, guiaViaje, drawGuiaViaje,
+      GUIA_VIAJE, GUIA_CASA, GUIA_OBSTACULOS, GUIAS_VIAJE, guiaViaje, drawGuiaViaje, GUIA_SOFA, guiaDepaFinal,
       // Ganchos de la proporción de las poses (sección V):
       // las fracciones de figura medidas en los PNG y los
       // altos de mundo corregidos de la pose de la carta y

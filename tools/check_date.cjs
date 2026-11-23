@@ -2179,7 +2179,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('la carta se queda a ritmo del jugador (no avanza sola hacia el álbum)',
     !!fT.close && fT.close.step === 'carta', 'step=' + (fT.close && fT.close.step));
   pressActT(fT); noteStepT();
-  check('al avanzar de la carta entra el ÁLBUM con la pila en el ORDEN DEL RECORRIDO (plaza → San Ángel → aeropuerto → praderas → sofá)',
+  check('la carta está PAGINADA (playtest de Jose en el móvil, 2026-11-23): el primer avance pasa a la página 2 SIN salir de la carta (la página única de letra pequeña quedó atrás)',
+    !!fT.close && fT.close.step === 'carta' && fT.close.page === 1,
+    'step=' + (fT.close && fT.close.step) + ' page=' + (fT.close && fT.close.page));
+  pressActT(fT); noteStepT();
+  check('al avanzar de la ÚLTIMA página entra el ÁLBUM con la pila en el ORDEN DEL RECORRIDO (plaza → San Ángel → aeropuerto → praderas → sofá)',
     !!fT.close && fT.close.step === 'album' && Array.isArray(fT.close.pile) &&
     fT.close.pile.map((p) => p.key).join(',') === 'plaza,sanangel,aero,castillo,sofa' && fT.close.pileIdx === 0,
     'pile=' + (fT.close && fT.close.pile ? fT.close.pile.map((p) => p.key).join(',') : '—'));
@@ -2240,7 +2244,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   setLoadedT(photoImgT('sanangel'), false);
   const fT2 = driveToClosingT();
   for (let i = 0; i < 30 && (!fT2.close || fT2.close.step !== 'carta'); i++) fT2.update(0.05);
-  pressActT(fT2);
+  pressActT(fT2); pressActT(fT2); // las dos páginas de la carta
   check('sin la foto de San Ángel, la pila la SALTA y conserva el orden del resto (plaza → aeropuerto → praderas → sofá)',
     !!fT2.close && fT2.close.step === 'album' &&
     fT2.close.pile.map((p) => p.key).join(',') === 'plaza,aero,castillo,sofa',
@@ -2254,7 +2258,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   setLoadedT(photoImgT('sofa'), false);
   const fT3 = driveToClosingT();
   for (let i = 0; i < 30 && (!fT3.close || fT3.close.step !== 'carta'); i++) fT3.update(0.05);
-  pressActT(fT3);
+  pressActT(fT3); pressActT(fT3); // las dos páginas de la carta
   check('sin la foto del sofá NO hay álbum: de la carta se va directo a la tarjeta de FIN (como antes del álbum)',
     !!fT3.close && fT3.close.step === 'fin', 'step=' + (fT3.close && fT3.close.step));
   pumpClosingT(fT3, 900);
@@ -2491,6 +2495,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('el alto viejo de sus lienzos (76 u) habría dejado su figura ~3× su actor: la regresión queda documentada',
     76 * DM.debug.POLLITO_FRAC.walk[0] / topW >= 2.5,
     'ratio viejo=' + (76 * DM.debug.POLLITO_FRAC.walk[0] / topW).toFixed(2));
+  // --- la torta SERVIDA: grande y al borde izquierdo
+  // (playtest de Jose en el móvil, 2026-11-23: «cuando
+  // Pollito deja la torta no se ve, para que sea
+  // apreciable haz un poco más grande la torta y que se
+  // vea en el borde izquierdo de la mesa») ---
+  fW.catVis = 'actor'; fW.tortaOnTable = true;
+  sprW.length = 0; fW.home.extraSprites();
+  const tortaRegW = sprW.find((s) => s.img === FIW.tortaMesa);
+  check('la torta servida se registra a 48 u de alto de lienzo (FINALE.torta.h): ×1,6 sobre las 30 u de antes — y su figura llena el lienzo (medido en el PNG: la figura ocupa las filas 8–251 de 252), así que la torta misma crece ×1,6 —',
+    !!tortaRegW && tortaRegW.o.h === FINW.torta.h && FINW.torta.h === 48 && FINW.torta.h >= 30 * 1.5,
+    tortaRegW ? `alto=${tortaRegW.o.h} u (antes 30 u)` : 'sin registro');
+  check('la torta queda en el TERCIO IZQUIERDO del tablero de la mesa de centro (su centro, dentro del primer tercio de la huella 595–675), apoyada EN el tablero (base = top = 16) y a la profundidad de la mesa — al norte de los asientos (z=188): la pareja sentada no la tapa —',
+    !!tortaRegW && tortaRegW.x === FINW.torta.x &&
+    tortaRegW.x >= FINW.ctable.x && tortaRegW.x <= FINW.ctable.x + FINW.ctable.w / 3 &&
+    tortaRegW.y === FINW.ctable.top &&
+    tortaRegW.z >= FINW.ctable.z && tortaRegW.z <= FINW.ctable.z + FINW.ctable.d && tortaRegW.z < FINW.seatXi.y,
+    tortaRegW ? `centro=(${tortaRegW.x}, base=${tortaRegW.y}, z=${tortaRegW.z}); mesa x ${FINW.ctable.x}–${FINW.ctable.x + FINW.ctable.w}, top=${FINW.ctable.top}` : 'sin registro');
+  const sobreRegW = sprW.find((s) => s.img === FIW.cartaSobre);
+  check('con la torta servida, la carta leída se corre al lado DERECHO de la mesa: su caja ya no se solapa con la de la torta grande (antes se corría a la izquierda, donde ahora va la torta)',
+    !!sobreRegW && !!tortaRegW && (sobreRegW.x - sobreRegW.o.w / 2) > (tortaRegW.x + tortaRegW.o.w / 2),
+    sobreRegW && tortaRegW ? `carta ${sobreRegW.x.toFixed(0)}±${(sobreRegW.o.w / 2).toFixed(1)}, torta ${tortaRegW.x.toFixed(0)}±${(tortaRegW.o.w / 2).toFixed(1)}` : 'sin registro');
+  fW.tortaOnTable = false;
   RW.sprite = origSpriteW;
   // --- y NADA de esto se dibuja ya en la capa 2D ---
   const ocW = G.ovCtx, diW = [];
@@ -2982,6 +3008,50 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('el dibujo de las PRADERAS no explota y su guía dice «volver a casa» con la frase de los obstáculos',
     dzPrad.ok && txtPradZ.includes('volver a casa') && txtPradZ.includes('Evita los obstáculos'),
     txtPradZ.slice(0, 120));
+  // --- la guía del DEPA FINAL (pedido de Jose,
+  // 2026-11-23): al volver a casa tras las praderas no
+  // había NINGUNA guía, y el finale solo arranca al
+  // interactuar con el sofá. La banda de papel de siempre
+  // indica ir a la sala y sentarse, desde la entrada
+  // hasta que el finale comienza; en curso o completado,
+  // se retira. (El dibujo del finale aparca su casa 3D,
+  // como en las secciones O y W.)
+  check('la guía del depa final es el texto de Jose, corregido solo en ortografía: «Ve a la sala y siéntate en el sofá»',
+    DM.debug.GUIA_SOFA === 'Ve a la sala y siéntate en el sofá', String(DM.debug.GUIA_SOFA));
+  check('su selector solo la ofrece en la fase de casa (home) y con la cinemática SIN arrancar (idle): ni en el fundido de entrada, ni en curso, ni completada',
+    DM.debug.guiaDepaFinal({ phase: 'home', cine: { st: 'idle' } }) === DM.debug.GUIA_SOFA &&
+    DM.debug.guiaDepaFinal({ phase: 'light', cine: { st: 'idle' } }) === null &&
+    DM.debug.guiaDepaFinal({ phase: 'home', cine: { st: 'seats' } }) === null &&
+    DM.debug.guiaDepaFinal({ phase: 'home', cine: { st: 'closing' } }) === null &&
+    DM.debug.guiaDepaFinal({ phase: 'home', cine: { st: 'done' } }) === null &&
+    DM.debug.guiaDepaFinal(null) === null);
+  DM.debug.travelTo('cita');
+  const fZ = DM.state.finaleScene;
+  for (let i = 0; i < 25 && fZ.phase !== 'home'; i++) fZ.update(0.05);
+  const drawRecFinZ = (scene) => {
+    const hd = scene.home.draw; scene.home.draw = () => {};
+    const r = drawRecZ(scene);
+    scene.home.draw = hd;
+    return r;
+  };
+  const dzFinZ = drawRecFinZ(fZ);
+  const txtFinZ = dzFinZ.rec.fillText.join(' ');
+  check('al entrar al DEPA FINAL la guía SE DIBUJA en su banda de papel (la escena está en casa, con el finale aún sin arrancar)',
+    dzFinZ.ok && dzFinZ.rec.roundRect >= 2 && txtFinZ.includes('Ve a la sala y siéntate en el sofá') &&
+    fZ.phase === 'home' && fZ.cine.st === 'idle',
+    txtFinZ.slice(0, 120));
+  fZ.startCine(); // el jugador se acerca al sofá y se sienta: el finale COMIENZA
+  const dzCineZ = drawRecFinZ(fZ);
+  check('en cuanto el finale COMIENZA (startCine: la pareja va a sentarse), la guía se RETIRA y ya no se dibuja',
+    dzCineZ.ok && !dzCineZ.rec.fillText.join(' ').includes('siéntate en el sofá'),
+    'cine=' + fZ.cine.st);
+  fZ.skipCine(); // el finale queda completado: la escena, en su estado posterior
+  for (let i = 0; i < 200 && fZ.cine.st !== 'done'; i++) fZ.update(0.05); // la subida de la pareja cierra el salto
+  const dzDoneZ = drawRecFinZ(fZ);
+  check('con el finale ya COMPLETADO la guía tampoco vuelve (ni con la torta servida y el control devuelto)',
+    dzDoneZ.ok && !dzDoneZ.rec.fillText.join(' ').includes('siéntate en el sofá') &&
+    fZ.cine.st === 'done' && fZ.tortaOnTable === true,
+    'cine=' + fZ.cine.st);
   DM.stop();
 
   console.log('\nAA) La carta por LISTAS de frases (pedido de Jose, 2026-11-22: «varias frases por escena y no solo una»)');
@@ -2995,8 +3065,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // en la cola sin perderse y se DESCARTAN al cruzar la
   // Puerta de su escena; las del cierre se suceden en el
   // sofá con la firma al final; y la carta fullscreen las
-  // compone TODAS con auto-ajuste de tamaño para caber en
-  // la zona limpia del papel (si ni al mínimo cupiera, el
+  // compone TODAS, PAGINADAS en dos (playtest del móvil,
+  // 2026-11-23), cada página con auto-ajuste de tamaño
+  // para caber en la zona limpia del papel sin pisar el
+  // sello del arte (si ni al mínimo cupiera una página, el
   // cálculo lo reporta: fits en falso).
   const CTA = DM.debug.CARTA_TEXTOS;
   const frasesA = DM.debug.cartaFrases;
@@ -3209,41 +3281,75 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('cumplida la suma (frases + firma + respiro), la cinemática pasa a la mirada', fA.cine.st === 'gaze', 'cine=' + fA.cine.st);
   DM.stop();
   // --- la carta fullscreen: todas las frases, en orden,
-  // con auto-ajuste para caber en la zona limpia ---
+  // PAGINADA en dos (playtest de Jose en el móvil,
+  // 2026-11-23), cada página con su auto-ajuste, y sin
+  // pisar el sello del arte ---
   // Un ctx con medición REALISTA (el FakeCtx del humo
   // mide todo a 42 px: no sirve para envolver). Aquí el
   // ancho crece con el tamaño de letra, como en el juego.
   const fitCtxA = { font: '', measureText(s) { const m = /([\d.]+)px/.exec(this.font); const sz = m ? parseFloat(m[1]) : 10.5; return { width: String(s).length * sz * 0.5 }; } };
   for (const id of DM.debug.CARTA_MOMENTOS) CTA[id] = origTextosA[id];
-  const fitDraftA = DM.debug.cartaFullFit(fitCtxA);
+  const SEALA = DM.debug.CARTA_SEAL, CFULLA = DM.debug.CARTA_FULL;
+  const fitP1A = DM.debug.cartaPageFit(fitCtxA, 0);
+  const fitP2A = DM.debug.cartaPageFit(fitCtxA, 1);
   const draftCharsA = DM.debug.CARTA_MOMENTOS.reduce((a, id) => a + frasesA(CTA[id]).join(' ').length, 0);
-  check('con el TEXTO FINAL de Jose (varias frases por momento), la carta fullscreen CABE en la zona limpia (auto-ajuste por escalones hasta 7,5, fits en verdadero)',
-    fitDraftA.fits === true && fitDraftA.size === 7.5 && fitDraftA.firmaY <= DM.debug.CARTA_FULL.yMax,
-    `chars=${draftCharsA} size=${fitDraftA.size} firmaY=${fitDraftA.firmaY.toFixed(0)}`);
-  check('la composición incluye las frases de los SEIS momentos, en el orden de la carta',
-    (() => { const j = fitDraftA.items.map((it) => it.t || '').join(' ');
-      const ord = ['Esta carta', 'La monotonía', 'En San Ángel', 'Porque un día', 'Y si la vida', 'Y cuando terminemos'];
-      return ord.every((s, i) => j.includes(s) && (i === 0 || j.indexOf(s) > j.indexOf(ord[i - 1]))); })());
+  check('la carta fullscreen está PAGINADA en dos: página 1 = apertura + plaza + San Ángel; página 2 = aeropuerto + praderas + cierre (el corte medido: el alternativo dejaba la página 2 bajo la meta de legibilidad)',
+    DM.debug.CARTA_PAGES.length === 2 &&
+    DM.debug.CARTA_PAGES[0].join(',') === 'apertura,plaza,sanangel' &&
+    DM.debug.CARTA_PAGES[1].join(',') === 'aero,castillo,cierre',
+    DM.debug.CARTA_PAGES.map((p) => p.join('+')).join(' | '));
+  check('con el TEXTO FINAL de Jose (varias frases por momento), CADA página CABE con letra legible en el móvil: auto-ajuste ≥ 9,5 px en ambas y la firma sobre el papel (la página única caía a 7,5 px)',
+    fitP1A.fits === true && fitP2A.fits === true && fitP1A.size >= 9.5 && fitP2A.size >= 9.5 &&
+    fitP1A.firmaY <= CFULLA.yMax && fitP2A.firmaY <= CFULLA.yMax,
+    `chars=${draftCharsA} p1=${fitP1A.size}px (firmaY ${fitP1A.firmaY.toFixed(0)}) p2=${fitP2A.size}px (firmaY ${fitP2A.firmaY.toFixed(0)})`);
+  check('cada página compone SOLO sus momentos, en el orden de la carta (la 1 no trae el aeropuerto; la 2 no repite la apertura)',
+    (() => { const j1 = fitP1A.items.map((it) => it.t || '').join(' '), j2 = fitP2A.items.map((it) => it.t || '').join(' ');
+      const ord1 = ['Esta carta', 'La monotonía', 'En San Ángel'], ord2 = ['Porque un día', 'Y si la vida', 'Y cuando terminemos'];
+      return ord1.every((s, i) => j1.includes(s) && (i === 0 || j1.indexOf(s) > j1.indexOf(ord1[i - 1]))) &&
+        ord2.every((s, i) => j2.includes(s) && (i === 0 || j2.indexOf(s) > j2.indexOf(ord2[i - 1]))) &&
+        !j1.includes('Porque un día') && !j2.includes('Esta carta'); })());
+  // Las cajas de texto contra la caja del sello: una
+  // línea (centrada en x=320, con el baseline en el
+  // medio) ocupa [320 − w/2, 320 + w/2] × [y − size/2,
+  // y + size/2]; la firma, [firmaX − firmaW, firmaX] por
+  // su tramo vertical. Intersectar = pisar el corazón.
+  const cajaLineaA = (it, size) => ({ x0: 320 - it.w / 2, x1: 320 + it.w / 2, y0: it.y - size / 2, y1: it.y + size / 2 });
+  const tocaA = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+  const lineasP1A = fitP1A.items.filter((it) => it.t), lineasP2A = fitP2A.items.filter((it) => it.t);
+  check('NINGUNA línea de ninguna página invade la caja del SELLO del arte (el corazón de cera que tapaba el final de la carta y la firma en la captura de Jose)',
+    lineasP1A.length > 0 && lineasP2A.length > 0 &&
+    lineasP1A.every((it) => !tocaA(cajaLineaA(it, fitP1A.size), SEALA)) &&
+    lineasP2A.every((it) => !tocaA(cajaLineaA(it, fitP2A.size), SEALA)),
+    `sello x${SEALA.x0}–${SEALA.x1} y${SEALA.y0}–${SEALA.y1}; líneas p1=${lineasP1A.length} p2=${lineasP2A.length}`);
+  check('y la ÚLTIMA línea de cada página — la que caía sobre el sello en la página única — queda fuera de su caja',
+    !tocaA(cajaLineaA(lineasP1A[lineasP1A.length - 1], fitP1A.size), SEALA) &&
+    !tocaA(cajaLineaA(lineasP2A[lineasP2A.length - 1], fitP2A.size), SEALA));
+  check('la FIRMA va a la IZQUIERDA del sello: su borde derecho es firmaX (antes de la caja del corazón, con margen; antes terminaba en x=470, encima) y su caja no lo toca',
+    CFULLA.firmaX < SEALA.x0 &&
+    !tocaA({ x0: CFULLA.firmaX - fitP2A.firmaW, x1: CFULLA.firmaX, y0: fitP2A.firmaY - (fitP2A.size + 0.5) / 2, y1: fitP2A.firmaY + (fitP2A.size + 0.5) / 2 }, SEALA),
+    `firmaX=${CFULLA.firmaX} selloX0=${SEALA.x0} firmaW=${fitP2A.firmaW.toFixed(0)}`);
   const fraseLargaA = 'El camino nos trajo hasta aquí, juntos y caminando. ';
   for (const id of DM.debug.CARTA_MOMENTOS) CTA[id] = [fraseLargaA.repeat(3), fraseLargaA.repeat(3)];
   const totalLargaA = DM.debug.CARTA_MOMENTOS.reduce((a, id) => a + frasesA(CTA[id]).join(' ').length, 0);
-  const fitLargaA = DM.debug.cartaFullFit(fitCtxA);
-  check('con una carta LARGA (~1800 caracteres, el presupuesto orientativo), el auto-ajuste baja por los escalones y la composición CABE en la zona (firma sobre el papel)',
-    totalLargaA >= 1700 && totalLargaA <= 1900 && fitLargaA.fits === true && fitLargaA.size < 10.5 &&
-    fitLargaA.size >= DM.debug.CARTA_FULL.sizes[DM.debug.CARTA_FULL.sizes.length - 1] && fitLargaA.firmaY <= DM.debug.CARTA_FULL.yMax,
-    `chars=${totalLargaA} size=${fitLargaA.size} firmaY=${fitLargaA.firmaY.toFixed(0)}`);
+  const fitLargaP1A = DM.debug.cartaPageFit(fitCtxA, 0), fitLargaP2A = DM.debug.cartaPageFit(fitCtxA, 1);
+  check('con una carta LARGA (~1800 caracteres, el presupuesto orientativo), la paginación hace su trabajo: CADA página baja por los escalones y CABE (su firma, sobre el papel)',
+    totalLargaA >= 1700 && totalLargaA <= 1900 && fitLargaP1A.fits === true && fitLargaP2A.fits === true &&
+    fitLargaP1A.size >= CFULLA.sizes[CFULLA.sizes.length - 1] && fitLargaP2A.size >= CFULLA.sizes[CFULLA.sizes.length - 1] &&
+    fitLargaP1A.firmaY <= CFULLA.yMax && fitLargaP2A.firmaY <= CFULLA.yMax,
+    `chars=${totalLargaA} p1=${fitLargaP1A.size}px (firmaY ${fitLargaP1A.firmaY.toFixed(0)}) p2=${fitLargaP2A.size}px (firmaY ${fitLargaP2A.firmaY.toFixed(0)})`);
   for (const id of DM.debug.CARTA_MOMENTOS) CTA[id] = [fraseLargaA.repeat(7), fraseLargaA.repeat(7)];
-  const fitHugeA = DM.debug.cartaFullFit(fitCtxA);
-  check('con una carta que EXCEDE el presupuesto (~4200 caracteres), el cálculo lo DETECTA: ni al mínimo legible cabe, y lo reporta con fits en falso (se dibujaría al mínimo)',
-    fitHugeA.fits === false && fitHugeA.size === DM.debug.CARTA_FULL.sizes[DM.debug.CARTA_FULL.sizes.length - 1] &&
-    fitHugeA.firmaY > DM.debug.CARTA_FULL.yMax,
-    `size=${fitHugeA.size} firmaY=${fitHugeA.firmaY.toFixed(0)}`);
+  const fitHugeP1A = DM.debug.cartaPageFit(fitCtxA, 0);
+  check('con una carta que EXCEDE el presupuesto (~4200 caracteres), el cálculo lo DETECTA en la página que no cabe: ni al mínimo legible, y lo reporta con fits en falso (se dibujaría al mínimo)',
+    fitHugeP1A.fits === false && fitHugeP1A.size === CFULLA.sizes[CFULLA.sizes.length - 1] &&
+    fitHugeP1A.firmaY > CFULLA.yMax,
+    `size=${fitHugeP1A.size} firmaY=${fitHugeP1A.firmaY.toFixed(0)}`);
   DM.debug.CARTA_MOMENTOS.forEach((id, i) => { CTA[id] = [`TK${i + 1}a`, `TK${i + 1}b`]; });
-  const compMarksA = DM.debug.cartaFullFit(fitCtxA);
-  check('la composición fullscreen encadena TODAS las frases en orden (apertura → plaza → San Ángel → aero → castillo → cierre), un párrafo por momento',
-    (() => { const j = compMarksA.items.map((it) => it.t || '').join(' ');
-      const toks = ['TK1a', 'TK1b', 'TK2a', 'TK2b', 'TK3a', 'TK3b', 'TK4a', 'TK4b', 'TK5a', 'TK5b', 'TK6a', 'TK6b'];
-      return toks.every((s, i) => j.includes(s) && (i === 0 || j.indexOf(s) > j.indexOf(toks[i - 1]))); })());
+  const compP1A = DM.debug.cartaPageFit(fitCtxA, 0), compP2A = DM.debug.cartaPageFit(fitCtxA, 1);
+  check('la composición fullscreen encadena TODAS las frases en orden, repartidas por página (página 1: apertura → plaza → San Ángel; página 2: aero → castillo → cierre), un párrafo por momento',
+    (() => { const j1 = compP1A.items.map((it) => it.t || '').join(' '), j2 = compP2A.items.map((it) => it.t || '').join(' ');
+      const t1 = ['TK1a', 'TK1b', 'TK2a', 'TK2b', 'TK3a', 'TK3b'], t2 = ['TK4a', 'TK4b', 'TK5a', 'TK5b', 'TK6a', 'TK6b'];
+      return t1.every((s, i) => j1.includes(s) && (i === 0 || j1.indexOf(s) > j1.indexOf(t1[i - 1]))) &&
+        t2.every((s, i) => j2.includes(s) && (i === 0 || j2.indexOf(s) > j2.indexOf(t2[i - 1]))); })());
   for (const id of DM.debug.CARTA_MOMENTOS) CTA[id] = origTextosA[id];
   CTA.firma = origFirmaA;
   check('los textos de la carta quedan RESTAURADOS al texto final de Jose al terminar la sección',
