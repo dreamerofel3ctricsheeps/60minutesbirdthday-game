@@ -364,3 +364,102 @@
   de derecha a izquierda (la pose ya mira a la izquierda: no
   se espeja, jamás se espeja a Teodora), con el bob de
   flotación por motor. Sin colisión ni interacción.
+
+## carta-sobre.png — El sobre cerrado de la carta (apertura, el depa)
+- **Arte original del juego** (no es foto ni material de
+  película): el sobre de papel crema con sello de cera rojo
+  en forma de corazoncito, generado para el juego como ítem
+  de la versión final de la cita (guion v2, «la carta»).
+- **Procesado:** fondo magenta retirado por clave de color,
+  limpieza del fleco por erosión de la máscara y borde
+  blanco Paper Mario re-horneado por dilatación, como en
+  los sprites definidos. Salida: 256 × 224.
+- **Uso:** la carta que espera sobre la mesa de centro
+  (`ctable`) de la sala: es la llave de la cita — sin
+  abrirla, la salida del depa no se activa.
+
+## lectura-sola.png — Ximena leyendo la carta (apertura, el depa)
+- **Arte original del juego**: pose compuesta de Ximena de
+  pie, leyendo — sostiene la hoja desplegada con las dos
+  manos y mira hacia abajo, a la hoja — generada usando
+  como referencia de identidad sus sprites definidos
+  (moño castaño alto, orejas de conejo moradas, lentes
+  redondos, abrigo blanco sobre polo morado, pantalón
+  oscuro), con el mismo patrón del sprite del abrazo.
+- **Procesado:** fondo magenta retirado por clave de
+  color, limpieza del fleco por erosión y borde blanco
+  re-horneado por dilatación. Salida: 320 × 384.
+- **Uso:** el Acto 1 del guion v2: Ximena abre la carta y
+  la lee sola en el depa, en silencio, a ritmo del
+  jugador (primer fragmento de `CARTA_TEXTOS`).
+
+## lectura-pareja.png — La pareja leyendo la carta junta (regreso, la sala)
+- **Arte original del juego**: pose compuesta de la pareja
+  SENTADA leyendo la misma hoja — Ximena la sostiene con
+  las dos manos y Jose, pegado a su lado, se inclina
+  mirando la misma hoja; ambos con la mirada baja sobre
+  el papel — generada desde los sprites definidos de
+  ambos (él: lentes redondos oscuros, audífono, camisa
+  verde a rayas sobre polo blanco, jeans claros), con el
+  mismo patrón del sprite del abrazo.
+- **Procesado:** fondo magenta retirado por clave de
+  color, limpieza del fleco por erosión y borde blanco
+  re-horneado por dilatación. Salida: 560 × 360.
+- **Uso:** el Acto 3 del guion v2: sentados en el sofá de
+  la sala, terminan de leer la carta juntos (fragmento de
+  cierre y firma de `CARTA_TEXTOS`).
+
+## pollito-torta.png — Pollito mesero con la torta (regreso, la sala)
+- **Arte original del juego**: Pollito erguido sobre sus
+  patas traseras, muy serio y orgulloso de mesero,
+  cargando una bandeja grande de plata con una torta de
+  dos pisos (crema blanca y rosa, con fresas) coronada
+  por UNA vela encendida. Generado desde su sprite
+  definido: gato BLANCO con manchas atigradas grisáceas —
+  casquete con rayas en la frente, mancha atigrada en SU
+  mejilla izquierda (sin espejar), mancha en el lomo y
+  cola anillada —, ojos verde menta y nariz rosa.
+- **Procesado:** fondo magenta retirado por clave de
+  color, limpieza del fleco por erosión y borde blanco
+  re-horneado por dilatación. Salida: 360 × 400.
+- **Uso:** la llegada de Pollito en el Acto 3 del guion
+  v2: la torta reemplaza al pastelito de la escena final
+  actual como pieza central de la mesa. La vela va en el
+  arte; el soplido interactivo es decisión pendiente.
+
+## carta-final.png — La carta en pixel art (cierre total, pantalla completa)
+- **Arte original del juego**: la carta completa como
+  pieza de arte pixel art — la hoja de papel crema abierta
+  sobre la mesa de madera, a luz de velas, con su sobre al
+  lado, el sello de cera de corazón, una florecita prensada
+  y la caligrafía apenas SUGERIDA (líneas onduladas tenues
+  en la parte alta y los márgenes, sin texto legible) con
+  su rúbrica al pie. Salida: 1280 × 720.
+- **Zona central limpia a propósito:** el papel queda
+  liso y de contraste suave en el centro porque el juego
+  renderiza el texto final de la carta ENCIMA (los textos
+  viven en `CARTA_TEXTOS`, en date.js), para poder
+  corregirlo sin rehacer el arte.
+- **Uso:** primera imagen del cierre total del guion v2,
+  a pantalla completa tras la cinemática del regreso.
+
+## foto-pareja.png — La «foto» del cierre: la pareja en la sala (cierre total)
+- **Arte original del juego**: la foto de cierre DENTRO
+  del juego — una escena pixel art con nivel de detalle y
+  sombreado claramente superior al de los sprites de
+  gameplay, pensada como la pieza «hero» del final, la
+  imagen que más tiempo se queda en pantalla. La pareja
+  posa junta y sonriendo en el sofá de la sala del depa
+  (ella con sus orejas de conejo moradas y su abrigo
+  blanco; él con sus lentes redondos, su audífono y su
+  camisa verde a rayas, con el brazo alrededor de ella),
+  a luz cálida de velas y lucecitas de fiesta; en la mesa
+  de centro, la carta abierta, dos velitas y la torta; al
+  fondo, desde el armario entreabierto, asoman los ojitos
+  verde menta de Pollito escondido. Salida: 1280 × 720.
+- **Decisión de Jose (2026-11-22):** la foto del cierre
+  es esta pieza en pixel art, parte del juego — no es un
+  marcador de posición para una foto real.
+- **Uso:** última imagen del cierre total del guion v2,
+  después de la imagen de la carta; tras ella, fundido y
+  tarjeta de fin.

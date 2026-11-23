@@ -140,6 +140,29 @@
   const SUCK_DUR = 1.8, DOOR_CALL_T = 5, DOOR_OPEN_T = 2, JOSE_LAG = 0.15;
   const MAIN_DOOR = { x: 510, y: 566 }; // puerta principal: borde sur del pasillo
 
+  // ---------- Los textos de la carta (guion v2, «la carta») ----------
+  // BORRADOR (2026-11-22): los fragmentos de la carta que la cita
+  // muestra por entregas. La apertura se lee a ritmo del jugador
+  // en el depa, en silencio; plaza, sanangel, aero y castillo
+  // caen en banda inferior mientras la pareja camina, sin pausar
+  // la caminata ni la canción; el cierre se lee juntos en la
+  // sala, con su firma. Son textos BASE (los del guion v2)
+  // puestos a pedido de Jose: su versión definitiva la escribe
+  // él y se cambia SOLO aquí. Todavía no los consume ninguna
+  // lógica: la mecánica (la carta como llave, la banda de
+  // fragmentos y el cierre con carta-final.png y
+  // foto-pareja.png) se implementa en la siguiente fase sobre
+  // estas constantes.
+  const CARTA_TEXTOS = {
+    apertura: 'Esta carta no se lee en un sillón: se lee caminando. Sal — yo voy contigo.',
+    plaza: 'Primer lugar: por donde todo el mundo pasa y nadie se detiene. Nosotros sí.',
+    sanangel: 'Aquí la gente se declara desde hace cien años. Yo solo te miro, y ya está declarado.',
+    aero: 'Porque un día volaremos a algún lado. Y el destino va a ser lo de menos.',
+    castillo: 'Y si la vida nos pone un castillo en el cielo, lo cruzamos igual: caminando, y juntos.',
+    cierre: '¿Ves? La carta terminaba donde empezó: en casa, contigo.',
+    firma: 'Feliz cumpleaños, mi amor.',
+  };
+
   // ---------- Estado propio del modo ----------
   const D = {
     active: false, state: 'idle', // idle|depa|door|plaza|plaza-arrived|sanangel|aero|castillo|cita|done
