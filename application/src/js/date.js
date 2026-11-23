@@ -565,6 +565,51 @@
   const pollitoOrgullosoImg = loadDateImg('assets/date/pollito-orgulloso.png');
   const cartaFinalImg = loadDateImg('assets/date/carta-final.png');
   const fotoParejaImg = loadDateImg('assets/date/foto-pareja.png');
+  // EL ÁLBUM DEL CIERRE (idea de Jose): tras la carta, las
+  // «fotos» del recorrido — una por escena, en el mismo
+  // pixel art detallado de foto-pareja.png — se colocan
+  // una encima de otra como una pila de fotos impresas, y
+  // la del sofá (foto-pareja.png) cierra la pila y se
+  // expande a pantalla completa. Como todo el arte de la
+  // cita, cada foto se usa SOLO si cargó (imgOk): la que
+  // falte se salta en la pila sin romper la secuencia, y
+  // si falta la del sofá no hay álbum (directo a la
+  // tarjeta de fin, como antes de que existiera el álbum).
+  const fotoPlazaImg = loadDateImg('assets/date/foto-plaza.png');
+  const fotoSanangelImg = loadDateImg('assets/date/foto-sanangel.png');
+  const fotoAeropuertoImg = loadDateImg('assets/date/foto-aeropuerto.png');
+  const fotoPraderasImg = loadDateImg('assets/date/foto-praderas.png');
+  // Las fotos del cierre EN EL ORDEN DEL RECORRIDO, con
+  // la del sofá como última (la de arriba de la pila).
+  const CLOSE_PHOTOS = [
+    { key: 'plaza', img: fotoPlazaImg },
+    { key: 'sanangel', img: fotoSanangelImg },
+    { key: 'aero', img: fotoAeropuertoImg },
+    { key: 'castillo', img: fotoPraderasImg },
+    { key: 'sofa', img: fotoParejaImg },
+  ];
+  // Los tiempos del álbum (s) y el tamaño de cada foto
+  // impresa en la pila (la imagen; el marco blanco y la
+  // sombra se dibujan por código en drawClosing).
+  const ALBUM_ENTER_T = 0.6;    // la caída con la que cada foto se coloca
+  const ALBUM_HOLD_MIN = 1.8;   // contemplación mínima asentada: antes, ESPACIO no avanza
+  const ALBUM_HOLD_AUTO = 3.4;  // asentada tanto tiempo, la siguiente entra sola
+  const ALBUM_SOFA_BEAT = 1.5;  // el beat de la foto del sofá arriba, antes de expandirse
+  const ALBUM_EXPAND_T = 0.8;   // la expansión de la foto del sofá a pantalla completa
+  const ALBUM_PHOTO_W = 400, ALBUM_PHOTO_H = 225;
+  // La pose FIJA de cada foto en la pila, por posición en
+  // la pila MOSTRADA (si una foto falta, las demás toman
+  // las poses desde la base): desplazamientos de pocos px
+  // y rotaciones de ±5° para que las de abajo asomen por
+  // los bordes, como una pila de fotos de verdad.
+  const ALBUM_POSES = [
+    { dx: -12, dy: 5, rot: -4 },
+    { dx: 10, dy: -4, rot: 3 },
+    { dx: -5, dy: 7, rot: -2 },
+    { dx: 11, dy: 1, rot: 4.5 },
+    { dx: 0, dy: -3, rot: -1.5 },
+  ];
+  const albumPose = (i) => ALBUM_POSES[Math.min(i, ALBUM_POSES.length - 1)];
 
   // Geometría y ciclos de los complementos. Las x de los elementos
   // fijos viven en el espacio de SU capa (pantalla con pan=0): la
@@ -3921,11 +3966,14 @@
     // Tras la cinemática y ANTES de devolver el control: la
     // carta completa a pantalla completa (el papel de
     // carta-final.png con el texto renderizado encima, ver
-    // drawClosing) y luego la «foto» de la pareja — la
-    // imagen que más tiempo se queda. Cada fase se salta si
-    // su imagen no cargó (el precedente del castillo).
+    // drawClosing) y luego EL ÁLBUM (idea de Jose): las
+    // fotos del recorrido se colocan una encima de otra
+    // como una pila de fotos impresas, la del sofá queda
+    // arriba y se expande a pantalla completa — la imagen
+    // que más tiempo se queda —. Cada fase se salta si su
+    // imagen no cargó (el precedente del castillo).
     startClosing() {
-      this.close = { step: 'cartaIn', t: 0 };
+      this.close = { step: 'cartaIn', t: 0, pile: null, pileIdx: 0 };
       this.closeAct = false;
       this.nextCine('closing');
       this.advanceClosing(); // salta de entrada las fases sin imagen
@@ -3933,8 +3981,20 @@
     advanceClosing() {
       const cl = this.close; if (!cl) return;
       cl.t = 0;
-      if (cl.step === 'cartaIn' && !imgOk(cartaFinalImg)) { cl.step = 'fotoIn'; this.advanceClosing(); }
-      else if (cl.step === 'fotoIn' && !imgOk(fotoParejaImg)) { cl.step = 'fin'; }
+      if (cl.step === 'cartaIn' && !imgOk(cartaFinalImg)) this.enterAlbum();
+    }
+    // El álbum arranca tras la carta: la pila son las
+    // fotos que SÍ cargaron, en el orden del recorrido
+    // (la del sofá, si cargó, siempre es la última: es la
+    // condición del álbum — sin ella se va directo a la
+    // tarjeta de fin, como antes de que existiera).
+    enterAlbum() {
+      const cl = this.close; if (!cl) return;
+      cl.t = 0;
+      if (!imgOk(fotoParejaImg)) { cl.step = 'fin'; cl.pile = null; return; }
+      cl.pile = CLOSE_PHOTOS.filter((p) => imgOk(p.img));
+      cl.pileIdx = 0;
+      cl.step = 'album';
     }
     updateClosing(dt) {
       const cl = this.close;
@@ -3945,9 +4005,25 @@
         case 'cartaIn': if (cl.t >= 0.8) { cl.step = 'carta'; cl.t = 0; } break;
         case 'carta':
           // A ritmo del jugador: se queda hasta ESPACIO/clic.
-          if (act) { cl.step = 'fotoIn'; this.advanceClosing(); }
+          if (act) this.enterAlbum();
           break;
-        case 'fotoIn': if (cl.t >= 0.8) { cl.step = 'foto'; cl.t = 0; } break;
+        case 'album': {
+          // Cada foto entra (ALBUM_ENTER_T), se contempla
+          // asentada un mínimo (ALBUM_HOLD_MIN) antes de
+          // que ESPACIO pueda traer la siguiente, y si el
+          // jugador no pulsa, la siguiente entra sola
+          // (ALBUM_HOLD_AUTO). La ÚLTIMA (la del sofá) no
+          // se avanza a mano: tras su beat se expande.
+          const last = cl.pileIdx >= cl.pile.length - 1;
+          if (last) {
+            if (cl.t >= ALBUM_ENTER_T + ALBUM_SOFA_BEAT) { cl.step = 'expand'; cl.t = 0; }
+          } else if (cl.t >= ALBUM_ENTER_T + ALBUM_HOLD_AUTO ||
+            (act && cl.t >= ALBUM_ENTER_T + ALBUM_HOLD_MIN)) {
+            cl.pileIdx++; cl.t = 0;
+          }
+          break;
+        }
+        case 'expand': if (cl.t >= ALBUM_EXPAND_T) { cl.step = 'foto'; cl.t = 0; } break;
         case 'foto':
           // Permanencia mínima breve; luego avanza el jugador.
           if (cl.t >= 2.5 && act) { cl.step = 'fin'; cl.t = 0; }
@@ -4058,9 +4134,11 @@
     // El cierre total a pantalla completa: la carta con su
     // texto COMPLETO renderizado encima (compuesto desde
     // CARTA_TEXTOS, en la zona limpia central del papel:
-    // corregir el texto no rehace el arte), la «foto» de la
-    // pareja y la tarjeta de fin. Sin emojis: es el cierre
-    // del regalo.
+    // corregir el texto no rehace el arte), el ÁLBUM de
+    // fotos impresas que se apilan (las del recorrido y,
+    // arriba, la del sofá, que se expande a pantalla
+    // completa) y la tarjeta de fin. Sin emojis: es el
+    // cierre del regalo.
     drawClosing(c) {
       const cl = this.close;
       const fade = (t, dur) => Math.max(0, Math.min(1, t / dur));
@@ -4087,15 +4165,79 @@
         }
         return;
       }
-      if (cl.step === 'fotoIn' || cl.step === 'foto') {
-        const a = cl.step === 'foto' ? 1 : fade(cl.t, 0.8);
+      // Una foto impresa de la pila: marco blanco (más
+      // ancho abajo, como las instantáneas) y sombra
+      // suave, rotada en su pose. (cx, cy) es el centro
+      // de la imagen y padK regula el marco (1 = marco
+      // completo; 0 = sin marco, la imagen a pelo).
+      const drawPrint = (img, cx, cy, w, h, rotDeg, alpha, padK) => {
+        c.save();
+        c.globalAlpha = alpha;
+        c.translate(cx, cy);
+        c.rotate(rotDeg * Math.PI / 180);
+        if (padK > 0) {
+          const padS = 10 * padK, padB = 28 * padK;
+          c.shadowColor = 'rgba(0,0,0,0.5)'; c.shadowBlur = 16; c.shadowOffsetY = 6;
+          c.fillStyle = '#f8f2e4';
+          c.fillRect(-w / 2 - padS, -h / 2 - padS, w + padS * 2, h + padS + padB);
+          c.shadowColor = 'transparent'; c.shadowBlur = 0; c.shadowOffsetY = 0;
+        }
+        c.drawImage(img, -w / 2, -h / 2, w, h);
+        c.restore();
+      };
+      if (cl.step === 'album') {
+        // La pila sobre el fondo cálido oscuro: las ya
+        // colocadas, quietas en su pose, y la de arriba
+        // cayendo desde arriba con rotación de más,
+        // asentándose con ease-out.
+        c.fillStyle = '#17101f'; c.fillRect(0, 0, 640, 360);
+        const pile = cl.pile || [];
+        for (let i = 0; i <= cl.pileIdx && i < pile.length; i++) {
+          const pose = albumPose(i);
+          if (i < cl.pileIdx) {
+            drawPrint(pile[i].img, 320 + pose.dx, 180 + pose.dy, ALBUM_PHOTO_W, ALBUM_PHOTO_H, pose.rot, 1, 1);
+          } else {
+            const k = Math.min(1, cl.t / ALBUM_ENTER_T);
+            const e = 1 - (1 - k) * (1 - k);
+            drawPrint(pile[i].img, 320 + pose.dx, 180 + pose.dy + (1 - e) * -330,
+              ALBUM_PHOTO_W, ALBUM_PHOTO_H, pose.rot + (1 - e) * 9, Math.min(1, k * 2), 1);
+          }
+        }
+        if (cl.pileIdx < pile.length - 1 && cl.t >= ALBUM_ENTER_T + ALBUM_HOLD_MIN) {
+          G.text(c, 'ESPACIO: seguir', 320, 344, { size: 9, bold: false, color: 'rgba(255,240,214,0.75)', stroke: false });
+        }
+        return;
+      }
+      if (cl.step === 'expand') {
+        // La foto del sofá crece hasta cubrir el cuadro:
+        // su centro y su tamaño se interpolan a pantalla
+        // completa, la rotación se endereza y el marco se
+        // desvanece (padK → 0); las de abajo se apagan.
+        // Al llegar a 1, el dibujo ES el de 'foto'.
+        c.fillStyle = '#17101f'; c.fillRect(0, 0, 640, 360);
+        const pile = cl.pile || [];
+        const top = pile.length - 1;
+        const k = Math.min(1, cl.t / ALBUM_EXPAND_T);
+        const e = k * k * (3 - 2 * k);
+        for (let i = 0; i < top; i++) {
+          const pose = albumPose(i);
+          drawPrint(pile[i].img, 320 + pose.dx, 180 + pose.dy, ALBUM_PHOTO_W, ALBUM_PHOTO_H, pose.rot, 1 - e, 1);
+        }
+        if (top >= 0) {
+          const pose = albumPose(top);
+          drawPrint(pile[top].img,
+            320 + pose.dx * (1 - e), 180 + pose.dy * (1 - e),
+            ALBUM_PHOTO_W + (640 - ALBUM_PHOTO_W) * e, ALBUM_PHOTO_H + (360 - ALBUM_PHOTO_H) * e,
+            pose.rot * (1 - e), 1, 1 - e);
+        }
+        return;
+      }
+      if (cl.step === 'foto') {
         c.fillStyle = '#0d0912'; c.fillRect(0, 0, 640, 360);
         if (imgOk(fotoParejaImg)) {
-          c.save(); c.globalAlpha = a;
           c.drawImage(fotoParejaImg, 0, 0, 640, 360);
-          c.restore();
         }
-        if (cl.step === 'foto' && cl.t >= 2.5) {
+        if (cl.t >= 2.5) {
           G.text(c, 'ESPACIO: seguir', 320, 344, { size: 9, bold: false, color: 'rgba(255,240,214,0.75)', stroke: false });
         }
         return;
@@ -4213,6 +4355,13 @@
       getDoorSfx: () => doorSfx, playDoorClose,
       // Ganchos de la carta (guion v2, secciones F/O/S): los
       // textos, la regla de lectura, la banda y su disparo.
-      CARTA_TEXTOS, cartaReadTime, cartaBand, showCartaBand, updateCartaBand },
+      CARTA_TEXTOS, cartaReadTime, cartaBand, showCartaBand, updateCartaBand,
+      // Ganchos del álbum del cierre (sección T): la lista
+      // de fotos en orden y la imagen de la carta (el humo
+      // marca sus FakeImage como «cargadas» poniendo
+      // naturalWidth, para ejercitar la pila con imágenes
+      // y su degradación sin ellas) y los tiempos de la
+      // animación.
+      CLOSE_PHOTOS, cartaFinalImg, ALBUM: { ENTER_T: ALBUM_ENTER_T, HOLD_MIN: ALBUM_HOLD_MIN, HOLD_AUTO: ALBUM_HOLD_AUTO, SOFA_BEAT: ALBUM_SOFA_BEAT, EXPAND_T: ALBUM_EXPAND_T } },
   };
 })();

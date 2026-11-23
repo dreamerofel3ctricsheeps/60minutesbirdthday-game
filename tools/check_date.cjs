@@ -152,6 +152,18 @@
      con el castillo en cuadro), la banda NO bloquea el
      movimiento ni detiene el reloj de la canción, y la
      regla de cola de la banda (una en espera) se respeta.
+   T) El álbum del cierre total (idea de Jose): tras la
+     carta, las fotos del recorrido se colocan una encima
+     de otra como una pila de fotos impresas (plaza → San
+     Ángel → aeropuerto → praderas → la del sofá), cada
+     una con su mínimo de contemplación antes de que
+     ESPACIO pueda traer la siguiente (y entrada sola si
+     no se pulsa), y la del sofá se expande a pantalla
+     completa antes del FIN. El humo marca las FakeImage
+     de la carta y las fotos como «cargadas» (naturalWidth)
+     para ejercitar la pila de verdad, y su degradación:
+     una foto intermedia que falta se salta en la pila y
+     sin la foto del sofá no hay álbum (directo a FIN).
    Uso: node tools/check_date.js   (exit 0 = todo OK)
    ============================================================ */
 'use strict';
@@ -2045,6 +2057,146 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   DM.debug.updateCartaBand(B.total + 0.1);
   check('al terminar la banda en curso entra la que esperaba', B.text === 'Segunda banda de prueba.' && B.pending === null);
   DM.stop();
+
+  console.log('\nT) El álbum del cierre total: la pila de fotos del recorrido (idea de Jose)');
+  // Con las imágenes «cargadas» (el humo marca las
+  // FakeImage de la carta y de las fotos con naturalWidth:
+  // imgOk pasa a ser verdad SOLO para ellas), el cierre
+  // corre completo: carta → la pila en el orden del
+  // recorrido → la foto del sofá se expande a pantalla
+  // completa → FIN → completada. Y su degradación: una
+  // foto intermedia que falta se salta en la pila, y sin
+  // la foto del sofá no hay álbum (directo a FIN).
+  const ALB = DM.debug.ALBUM;
+  const photoImgT = (k) => DM.debug.CLOSE_PHOTOS.find((p) => p.key === k).img;
+  const setLoadedT = (img, ok) => { img.naturalWidth = ok ? 720 : 0; img.naturalHeight = ok ? 405 : 0; };
+  const pressActT = (sc) => { key('Space', true); sc.update(0.016); key('Space', false); sc.update(0.016); sc.update(0.016); };
+  // Sesión nueva llevada hasta el cierre total (la
+  // cinemática corre sin input, como en la sección O).
+  const driveToClosingT = () => {
+    DM.start(() => {});
+    DM.debug.travelTo('cita');
+    const f = DM.state.finaleScene, FT = DM.debug.FINALE;
+    for (let i = 0; i < 25 && f.phase !== 'home'; i++) f.update(0.05);
+    f.xi.x = FT.sofa.cx; f.xi.y = 250; f.xi.vx = f.xi.vy = 0;
+    for (let i = 0; i < 40; i++) f.update(0.05);
+    pressActT(f);
+    for (let i = 0; i < 900 && f.cine.st !== 'closing'; i++) f.update(0.05);
+    return f;
+  };
+  // Bombeo genérico del cierre: avanza lo que es a ritmo
+  // del jugador (la carta, las fotos de la pila ya
+  // contempladas y la foto a pantalla completa cumplida)
+  // y deja correr lo automático (beats, expansión, fin).
+  const pumpClosingT = (f, cap) => {
+    for (let i = 0; i < cap && f.cine.st !== 'done'; i++) {
+      const cl = f.close;
+      if (cl && cl.step === 'carta') pressActT(f);
+      else if (cl && cl.step === 'album' && cl.pileIdx < cl.pile.length - 1 && cl.t >= ALB.ENTER_T + ALB.HOLD_MIN) pressActT(f);
+      else if (cl && cl.step === 'foto' && cl.t >= 2.5) pressActT(f);
+      else f.update(0.05);
+    }
+  };
+  // --- corrida 1: todas las fotos cargadas ---
+  setLoadedT(DM.debug.cartaFinalImg, true);
+  DM.debug.CLOSE_PHOTOS.forEach((p) => setLoadedT(p.img, true));
+  const fT = driveToClosingT();
+  const stepSeqT = [];
+  const noteStepT = () => { const s = fT.close ? fT.close.step : null; if (s && stepSeqT[stepSeqT.length - 1] !== s) stepSeqT.push(s); };
+  noteStepT();
+  check('con las imágenes cargadas, el cierre arranca por la CARTA (paso cartaIn)',
+    fT.cine.st === 'closing' && !!fT.close && fT.close.step === 'cartaIn',
+    'step=' + (fT.close && fT.close.step));
+  for (let i = 0; i < 30 && (!fT.close || fT.close.step !== 'carta'); i++) { fT.update(0.05); noteStepT(); }
+  for (let i = 0; i < 40; i++) fT.update(0.05); // 2 s más: la carta no avanza sola
+  check('la carta se queda a ritmo del jugador (no avanza sola hacia el álbum)',
+    !!fT.close && fT.close.step === 'carta', 'step=' + (fT.close && fT.close.step));
+  pressActT(fT); noteStepT();
+  check('al avanzar de la carta entra el ÁLBUM con la pila en el ORDEN DEL RECORRIDO (plaza → San Ángel → aeropuerto → praderas → sofá)',
+    !!fT.close && fT.close.step === 'album' && Array.isArray(fT.close.pile) &&
+    fT.close.pile.map((p) => p.key).join(',') === 'plaza,sanangel,aero,castillo,sofa' && fT.close.pileIdx === 0,
+    'pile=' + (fT.close && fT.close.pile ? fT.close.pile.map((p) => p.key).join(',') : '—'));
+  // El mínimo de contemplación manda: ESPACIO antes de
+  // tiempo no coloca la siguiente foto.
+  for (let i = 0; i < 20; i++) fT.update(0.05); // t ≈ 1 s: asentada (0,6) pero bajo el mínimo (2,4)
+  pressActT(fT);
+  check('ESPACIO antes del mínimo de contemplación NO coloca la siguiente foto (la de arriba se contempla asentada al menos ~1,8 s)',
+    fT.close.step === 'album' && fT.close.pileIdx === 0, 'pileIdx=' + fT.close.pileIdx);
+  for (let i = 0; i < 40 && fT.close.t < ALB.ENTER_T + ALB.HOLD_MIN + 0.05; i++) fT.update(0.05);
+  pressActT(fT);
+  check('cumplido el mínimo, ESPACIO coloca la siguiente foto (la segunda queda arriba de la pila)',
+    fT.close.pileIdx === 1, 'pileIdx=' + fT.close.pileIdx);
+  let autoT = 0;
+  for (let i = 0; i < 120 && fT.close.pileIdx === 1; i++) { fT.update(0.05); autoT += 0.05; }
+  check('sin input, la siguiente foto entra SOLA (tras la pausa automática de la pila)',
+    fT.close.pileIdx === 2 && autoT >= ALB.ENTER_T + ALB.HOLD_AUTO - 0.2,
+    `pileIdx=${fT.close.pileIdx} tras ${autoT.toFixed(1)} s`);
+  // El dibujo de la pila no explota (la casa 3D aparcada,
+  // como en la sección O).
+  const fhT = fT.home, homeDrawT = fhT.draw;
+  fhT.draw = () => {};
+  fT.nearSofa = false; fT.nearDoor = false;
+  let albumDrawOk = true;
+  try { fT.draw(0.016); } catch (e) { albumDrawOk = false; }
+  check('el dibujo del ÁLBUM (la pila de fotos impresas, con sus marcos y rotaciones) no explota', albumDrawOk);
+  // Las fotos que quedan, hasta dejar la del sofá arriba.
+  for (let g = 0; g < 6 && fT.close.pileIdx < fT.close.pile.length - 1; g++) {
+    for (let i = 0; i < 60 && fT.close.t < ALB.ENTER_T + ALB.HOLD_MIN + 0.05; i++) fT.update(0.05);
+    pressActT(fT);
+  }
+  check('la pila se completa con la foto del SOFÁ arriba (la quinta y última)',
+    fT.close.pileIdx === fT.close.pile.length - 1 && fT.close.pile[fT.close.pileIdx].key === 'sofa',
+    'pileIdx=' + fT.close.pileIdx);
+  for (let i = 0; i < 80 && fT.close && fT.close.step === 'album'; i++) { fT.update(0.05); noteStepT(); }
+  check('tras su beat (~1,5 s asentada), la foto del sofá se EXPANDE sola, sin input (paso «expand»)',
+    !!fT.close && fT.close.step === 'expand', 'step=' + (fT.close && fT.close.step));
+  let expandDrawOk = true;
+  try { fT.draw(0.016); } catch (e) { expandDrawOk = false; }
+  fhT.draw = homeDrawT;
+  check('el dibujo de la EXPANSIÓN (la foto del sofá creciendo a pantalla completa) no explota', expandDrawOk);
+  for (let i = 0; i < 40 && fT.close && fT.close.step === 'expand'; i++) { fT.update(0.05); noteStepT(); }
+  check('la expansión deja la foto del sofá a PANTALLA COMPLETA (paso «foto»)',
+    !!fT.close && fT.close.step === 'foto', 'step=' + (fT.close && fT.close.step));
+  pressActT(fT);
+  check('en la foto a pantalla completa, ESPACIO antes de la permanencia mínima (2,5 s) NO avanza',
+    !!fT.close && fT.close.step === 'foto', 'step=' + (fT.close && fT.close.step));
+  for (let i = 0; i < 60 && fT.close && fT.close.t < 2.55; i++) fT.update(0.05);
+  pressActT(fT); noteStepT();
+  check('cumplida la permanencia, ESPACIO pasa a la tarjeta de FIN',
+    !!fT.close && fT.close.step === 'fin', 'step=' + (fT.close && fT.close.step));
+  for (let i = 0; i < 900 && fT.cine.st !== 'done'; i++) fT.update(0.05);
+  check('el ORDEN del cierre fue carta → álbum → expansión → foto → FIN, y la cita quedó COMPLETADA',
+    stepSeqT.join(',') === 'cartaIn,carta,album,expand,foto,fin' && DM.state.completed === true && fT.close === null,
+    'orden: ' + stepSeqT.join(' → '));
+  DM.stop();
+  // --- corrida 2: falta una foto intermedia (San Ángel) ---
+  setLoadedT(photoImgT('sanangel'), false);
+  const fT2 = driveToClosingT();
+  for (let i = 0; i < 30 && (!fT2.close || fT2.close.step !== 'carta'); i++) fT2.update(0.05);
+  pressActT(fT2);
+  check('sin la foto de San Ángel, la pila la SALTA y conserva el orden del resto (plaza → aeropuerto → praderas → sofá)',
+    !!fT2.close && fT2.close.step === 'album' &&
+    fT2.close.pile.map((p) => p.key).join(',') === 'plaza,aero,castillo,sofa',
+    'pile=' + (fT2.close && fT2.close.pile ? fT2.close.pile.map((p) => p.key).join(',') : '—'));
+  pumpClosingT(fT2, 1500);
+  check('con una foto menos, la secuencia del cierre COMPLETA igual (expansión, foto, FIN y cita completada)',
+    fT2.cine.st === 'done' && DM.state.completed === true && fT2.close === null,
+    'cine=' + fT2.cine.st + ' completed=' + DM.state.completed);
+  DM.stop();
+  // --- corrida 3: falta la foto del sofá → no hay álbum ---
+  setLoadedT(photoImgT('sofa'), false);
+  const fT3 = driveToClosingT();
+  for (let i = 0; i < 30 && (!fT3.close || fT3.close.step !== 'carta'); i++) fT3.update(0.05);
+  pressActT(fT3);
+  check('sin la foto del sofá NO hay álbum: de la carta se va directo a la tarjeta de FIN (como antes del álbum)',
+    !!fT3.close && fT3.close.step === 'fin', 'step=' + (fT3.close && fT3.close.step));
+  pumpClosingT(fT3, 900);
+  check('y la cita se completa igual, sin álbum',
+    fT3.cine.st === 'done' && DM.state.completed === true, 'cine=' + fT3.cine.st);
+  DM.stop();
+  // El humo deja las imágenes como estaban: ninguna «carga».
+  setLoadedT(DM.debug.cartaFinalImg, false);
+  DM.debug.CLOSE_PHOTOS.forEach((p) => setLoadedT(p.img, false));
 
   DM.debug.setHash(realHash); // el hash real queda como estaba
   check('el hash real quedó restaurado tras las pruebas', DM.debug.getHash() === realHash);
