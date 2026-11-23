@@ -1439,7 +1439,9 @@
   //   - Carta abierta, aún en el depa: ir a la puerta y
   //     salir a la plaza (la guía pulsante «a la plaza →»
   //     sobre la puerta queda como refuerzo visual).
-  //   - Ya en la plaza (o en cualquier otra fase): ninguna.
+  //   - Ya fuera del depa: ninguna de estas dos — en el
+  //     paseo manda la GUÍA DEL VIAJE de cada escena (el
+  //     bloque que sigue a drawCartaObjetivo).
   const CARTA_OBJETIVO = 'Hay una carta para ti en la sala: búscala sobre la mesa de centro y ábrela';
   const CARTA_GUIA_PLAZA = 'Ve hacia la puerta y ve a la plaza';
   // La instrucción de BUSCAR la carta (la original): solo
@@ -1469,6 +1471,50 @@
       G.text(c, l, 320, y + 13 + i * 15, { size: 11.5, bold: false, color: '#3a2c22', stroke: false });
     });
     c.restore();
+  }
+  // ---------- La GUÍA DEL VIAJE ----------
+  // La continuación de la guía por momentos (pedidos de
+  // Jose en su playtest del 2026-11-22: «y cuando entra a
+  // la escena 1 de la plaza que indique que avance y entre
+  // a la puerta para seguir viajando» y «que indique que
+  // evite los obstáculos»). La misma banda de papel de las
+  // instrucciones, arriba, acompaña también el paseo: cada
+  // escena muestra la suya desde que se activa hasta que
+  // empieza el cruce de su Puerta (al cambiar de escena
+  // manda la guía de la siguiente; en el depa final no hay
+  // guía de viaje). La banda va arriba y el texto de la
+  // carta en su columna lateral: no se pisan.
+  // La frase de los obstáculos va SOLO en las escenas con
+  // obstáculos que FRENAN al personaje (la regla de la
+  // cita: chocar solo frena, nunca derrota):
+  //   - plaza: los autos con calaverita (PLAZA_TRAFICO).
+  //   - sanangel: las bolas de paja (SA_BOLAS).
+  //   - castillo (las praderas): los Calcifer de la vereda
+  //     (PRADERA.calcifer).
+  //   - aero: SIN la frase — no tiene obstáculos que
+  //     frenen: su cinta caminadora EMPUJA a favor
+  //     (+90 px/s, ayuda en vez de estorbar) y las maletas
+  //     y el carrito son decorado fijo de la franja.
+  // En las praderas la Puerta vuelve a CASA (al depa de la
+  // cita): su guía lo dice con las palabras de Jose.
+  const GUIA_VIAJE = 'Avanza y entra por la puerta para seguir viajando';
+  const GUIA_CASA = 'Avanza y entra por la puerta para volver a casa';
+  const GUIA_OBSTACULOS = 'Evita los obstáculos';
+  const GUIAS_VIAJE = {
+    plaza: GUIA_VIAJE + '. ' + GUIA_OBSTACULOS,
+    sanangel: GUIA_VIAJE + '. ' + GUIA_OBSTACULOS,
+    aero: GUIA_VIAJE,
+    castillo: GUIA_CASA + '. ' + GUIA_OBSTACULOS,
+  };
+  // La guía de una escena del paseo, por su id de la tabla
+  // DATE_SCENES; null fuera del paseo (apertura, cita…).
+  function guiaViaje(id) { return GUIAS_VIAJE[id] || null; }
+  // Cada escena decide su momento (activa): desde que se
+  // activa hasta que empieza el cruce de su Puerta.
+  function drawGuiaViaje(c, id, activa) {
+    if (!activa) return;
+    const g = guiaViaje(id);
+    if (g) drawCartaObjetivo(c, g);
   }
   // (El PANEL de papel que antes presentaba la apertura y
   // la lectura en pareja quedó retirado: esos textos ahora
@@ -2245,6 +2291,9 @@
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
       // la banda de la carta, sobre el paseo (guion v2)
       drawCartaBand(c);
+      // la guía del viaje de la plaza, en su banda (arriba):
+      // desde que la escena se activa hasta cruzar su Puerta
+      drawGuiaViaje(c, 'plaza', this.phase === 'plaza' || this.phase === 'free');
     }
     walkIdx(id, dist) { return walkIdxFor(id, dist); }
     drawChar2D(c, id, x, baseY, h, anim, idx, expr, flip, bobY) { drawChar2DAt(c, id, x, baseY, h, anim, idx, expr, flip, bobY); }
@@ -2725,6 +2774,8 @@
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
       // la banda de la carta, sobre el paseo (guion v2)
       drawCartaBand(c);
+      // la guía del viaje de San Ángel, en su banda (arriba)
+      drawGuiaViaje(c, 'sanangel', this.phase === 'light' || this.phase === 'free');
     }
     // Una bola de paja rodando: el recorte de foto gira sobre
     // el centro de la bola (en el PNG de 370×259 la bola ocupa
@@ -3084,6 +3135,8 @@
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
       // la banda de la carta, sobre el paseo (guion v2)
       drawCartaBand(c);
+      // la guía del viaje del aeropuerto, en su banda (arriba)
+      drawGuiaViaje(c, 'aero', this.phase === 'light' || this.phase === 'free');
     }
     // Una maleta con ruedas y asa, en el lenguaje plano con
     // borde de los props dibujados del juego.
@@ -3701,6 +3754,8 @@
       if (this.phase === 'exitdoor') { const a = Math.min(1, this.phaseT); c.fillStyle = `rgba(255,244,214,${(a * a).toFixed(3)})`; c.fillRect(0, 0, 640, 360); }
       // la banda de la carta, sobre el paseo (guion v2)
       drawCartaBand(c);
+      // la guía del viaje de las praderas, en su banda (arriba)
+      drawGuiaViaje(c, 'castillo', this.phase === 'light' || this.phase === 'free');
     }
     // El espantapájaros Cabeza de Nabo, DIBUJADO por código
     // (homenaje dibujado, sin usar la imagen de la película):
@@ -5009,6 +5064,10 @@
       // predicado, y la proyección analítica de la casa (para
       // fijar que coincide con la del motor, gl3d.js).
       CARTA_POS, CARTA_TOP, CARTA_OBJETIVO, CARTA_GUIA_PLAZA, objetivoCartaActivo, instruccionCarta, projectHomePoint, vpFromCam,
+      // Ganchos de la GUÍA DEL VIAJE (sección Z): el mapa
+      // de guías por escena del paseo, sus piezas de texto
+      // y el selector/dibujo de la banda en las escenas.
+      GUIA_VIAJE, GUIA_CASA, GUIA_OBSTACULOS, GUIAS_VIAJE, guiaViaje, drawGuiaViaje,
       // Ganchos de la proporción de las poses (sección V):
       // las fracciones de figura medidas en los PNG y los
       // altos de mundo corregidos de la pose de la carta y

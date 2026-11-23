@@ -2869,6 +2869,89 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   [DIY.tomaFront, DIY.leeFront, DIY.leeFront2, DIY.tomaBack, DIY.leeBack, DIY.leeBack2, DIY.tomaSide, DIY.leeSide, DIY.leeSide2, DIY.cartaSobre]
     .forEach((im) => setImgY(im, 0, 0));
 
+  console.log('\nZ) La GUÍA DEL VIAJE en las escenas del paseo (playtest de Jose, 2026-11-22)');
+  // La continuación de la guía por momentos de la sección
+  // U: la misma banda de papel acompaña el VIAJE. Los
+  // textos son las palabras de Jose: al entrar a la plaza,
+  // «que indique que avance y entre a la puerta para
+  // seguir viajando», y su añadido «que indique que evite
+  // los obstáculos». La frase de los obstáculos va SOLO
+  // donde hay obstáculos que FRENAN (la regla de la cita:
+  // chocar solo frena): la plaza (autos con calaverita),
+  // San Ángel (bolas de paja) y las praderas (los
+  // Calcifer). El aeropuerto NO la lleva: verificado en
+  // el código, no tiene ningún freno — su cinta
+  // caminadora empuja a favor (+90 px/s) y las maletas y
+  // el carrito son decorado. En las praderas la Puerta
+  // vuelve a casa y la guía lo dice.
+  const GVZ = DM.debug.guiaViaje;
+  check('la guía de la PLAZA es el texto exacto de Jose con la frase de los obstáculos (sus autos con calaverita frenan al personaje)',
+    GVZ('plaza') === 'Avanza y entra por la puerta para seguir viajando. Evita los obstáculos',
+    String(GVZ('plaza')));
+  check('la guía de SAN ÁNGEL es la misma que la de la plaza (sus bolas de paja también frenan)',
+    GVZ('sanangel') === 'Avanza y entra por la puerta para seguir viajando. Evita los obstáculos',
+    String(GVZ('sanangel')));
+  check('la guía del AEROPUERTO es el texto base de Jose y NO lleva la frase de los obstáculos (no tiene obstáculos que frenen)',
+    GVZ('aero') === 'Avanza y entra por la puerta para seguir viajando' && !GVZ('aero').includes(DM.debug.GUIA_OBSTACULOS),
+    String(GVZ('aero')));
+  check('la guía de las PRADERAS dice «volver a casa» y lleva la frase de los obstáculos (los Calcifer frenan)',
+    GVZ('castillo') === 'Avanza y entra por la puerta para volver a casa. Evita los obstáculos',
+    String(GVZ('castillo')));
+  check('la frase «Evita los obstáculos» está exactamente en las tres escenas con obstáculos que frenan (y en ninguna más del mapa)',
+    ['plaza', 'sanangel', 'castillo'].every((id) => GVZ(id).includes(DM.debug.GUIA_OBSTACULOS)) &&
+    Object.keys(DM.debug.GUIAS_VIAJE).filter((id) => GVZ(id).includes(DM.debug.GUIA_OBSTACULOS)).length === 3);
+  check('fuera del paseo no hay guía de viaje (la apertura, el depa final y los ids desconocidos dan null)',
+    GVZ('apertura') === null && GVZ('cita') === null && GVZ('depa') === null && GVZ(null) === null && GVZ('') === null);
+  // El dibujo en las escenas del paseo, con el ovCtx
+  // registrando textos y paneles (el FakeCtx del humo no
+  // registra llamadas; se le envuelven fillText/strokeText
+  // y roundRect sin cambiar su comportamiento).
+  const drawRecZ = (scene) => {
+    const oc = G.ovCtx, rec = { fillText: [], roundRect: 0 };
+    const of = oc.fillText, os = oc.strokeText, orr = oc.roundRect;
+    oc.fillText = function (t) { rec.fillText.push(String(t)); };
+    oc.strokeText = function (t) { rec.fillText.push(String(t)); };
+    oc.roundRect = function () { rec.roundRect++; };
+    let ok = true;
+    try { scene.draw(0.016); } catch (e) { ok = false; }
+    oc.fillText = of; oc.strokeText = os; oc.roundRect = orr;
+    return { ok, rec };
+  };
+  DM.start(() => {});
+  DM.debug.travelTo('plaza'); // la vuelta a la plaza deja la escena en modo libre
+  const pzZ = DM.state.plazaScene;
+  check('al entrar a la plaza la escena queda en modo libre, con su guía lista para dibujarse',
+    !!pzZ && pzZ.phase === 'free' && DM.state.state === 'plaza-arrived', 'phase=' + (pzZ && pzZ.phase));
+  // Un fragmento en curso a la vez que la guía: las dos
+  // capas (la columna lateral de la carta y la banda de
+  // papel de arriba) se dibujan juntas, sin explotar.
+  DM.debug.showCartaBand('Fragmento de prueba junto a la guía.');
+  DM.debug.updateCartaBand(2.0); // permanencia plena del fragmento
+  const dzPlaza = drawRecZ(pzZ);
+  const txtPlazaZ = dzPlaza.rec.fillText.join(' ');
+  check('el dibujo de la plaza con la GUÍA ACTIVA no explota y la banda de papel se dibuja (el recuadro de la instrucción)',
+    dzPlaza.ok && dzPlaza.rec.roundRect >= 2, 'roundRect=' + dzPlaza.rec.roundRect);
+  check('la guía dibujada en la plaza dice lo de Jose: avanzar, entrar por la puerta y EVITAR LOS OBSTÁCULOS',
+    txtPlazaZ.includes('Avanza y entra por la puerta') && txtPlazaZ.includes('Evita los obstáculos'),
+    txtPlazaZ.slice(0, 120));
+  check('y el FRAGMENTO de la carta se dibuja A LA VEZ en su columna (ambas capas conviven: la guía no tapa ni pelea con la carta)',
+    txtPlazaZ.includes('Fragmento de prueba junto a la guía.'), txtPlazaZ.slice(0, 120));
+  // Al empezar el cruce de la Puerta, la guía se retira.
+  pzZ.phase = 'exitdoor'; pzZ.phaseT = 0.2;
+  const dzCruce = drawRecZ(pzZ);
+  check('al cruzar la Puerta de la plaza la guía se RETIRA (durante el cruce ya no se dibuja)',
+    dzCruce.ok && !dzCruce.rec.fillText.join(' ').includes('Avanza y entra por la puerta'));
+  DM.debug.updateCartaBand(99); // la banda de prueba se disuelve del todo
+  // Las praderas: su guía es la de volver a casa.
+  DM.debug.travelTo('castillo');
+  const prZ = DM.state.praderaScene;
+  const dzPrad = drawRecZ(prZ);
+  const txtPradZ = dzPrad.rec.fillText.join(' ');
+  check('el dibujo de las PRADERAS no explota y su guía dice «volver a casa» con la frase de los obstáculos',
+    dzPrad.ok && txtPradZ.includes('volver a casa') && txtPradZ.includes('Evita los obstáculos'),
+    txtPradZ.slice(0, 120));
+  DM.stop();
+
   console.log(`\n${failures ? '✘' : '✔'} check_date: ${checks - failures}/${checks} checks`);
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error('ERROR en check_date:', e); process.exit(1); });
